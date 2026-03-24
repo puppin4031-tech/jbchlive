@@ -13,6 +13,7 @@ import SearchPage from "./pages/SearchPage.tsx";
 import LoginPage from "./pages/LoginPage.tsx";
 import AdminPage from "./pages/AdminPage.tsx";
 import CreateChannelPage from "./pages/CreateChannelPage.tsx";
+import ChannelSettingsPage from "./pages/ChannelSettingsPage.tsx";
 import FavoritesPage from "./pages/FavoritesPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
