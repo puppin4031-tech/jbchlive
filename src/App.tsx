@@ -12,6 +12,7 @@ import ChannelPage from "./pages/ChannelPage.tsx";
 import SearchPage from "./pages/SearchPage.tsx";
 import LoginPage from "./pages/LoginPage.tsx";
 import AdminPage from "./pages/AdminPage.tsx";
+import CreateChannelPage from "./pages/CreateChannelPage.tsx";
 import FavoritesPage from "./pages/FavoritesPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -33,6 +34,7 @@ const App = () => (
             <Route path="/search" element={<SearchPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/admin" element={<AdminPage />} />
+            <Route path="/create-channel" element={<CreateChannelPage />} />
             <Route path="/favorites" element={<FavoritesPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

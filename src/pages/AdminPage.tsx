@@ -140,6 +140,7 @@ const AdminPage = () => {
 
   const totalViews = sermons.reduce((sum, s) => sum + s.view_count, 0);
   const liveChannels = channels.filter(c => c.is_live).length;
+  const pendingChannels = channels.filter(c => !c.is_approved);
 
   return (
     <div className="min-h-screen bg-background">
@@ -151,8 +152,8 @@ const AdminPage = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: '총 채널', value: channels.length },
+            { label: '승인 대기', value: pendingChannels.length },
             { label: '라이브 중', value: liveChannels },
-            { label: '총 말씀', value: sermons.length },
             { label: '총 조회수', value: totalViews.toLocaleString() },
           ].map(stat => (
             <Card key={stat.label} className="p-4 text-center">
@@ -162,11 +163,36 @@ const AdminPage = () => {
           ))}
         </div>
 
-        <Tabs defaultValue="channels">
+        <Tabs defaultValue={pendingChannels.length > 0 ? "pending" : "channels"}>
           <TabsList>
-            <TabsTrigger value="channels">채널 관리</TabsTrigger>
+            <TabsTrigger value="pending">
+              승인 대기 {pendingChannels.length > 0 && <Badge variant="destructive" className="ml-1 text-xs">{pendingChannels.length}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="channels">전체 채널</TabsTrigger>
             <TabsTrigger value="new">새 채널</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="pending" className="space-y-3 mt-4">
+            {pendingChannels.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">승인 대기 중인 채널이 없습니다.</p>
+            ) : pendingChannels.map(ch => (
+              <Card key={ch.id} className="p-4 flex items-center gap-3 border-amber-200 bg-amber-50/30">
+                {ch.logo_url && <img src={ch.logo_url} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-foreground">{ch.name}</span>
+                  <p className="text-xs text-muted-foreground truncate">{ch.description || '설명 없음'}</p>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <Button size="sm" onClick={() => toggleApproval.mutate({ id: ch.id, approved: true })}>
+                    <Check className="w-4 h-4 mr-1" /> 승인
+                  </Button>
+                  <Button size="icon" variant="ghost" onClick={() => deleteChannel.mutate(ch.id)}>
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </TabsContent>
 
           <TabsContent value="channels" className="space-y-3 mt-4">
             {channels.map(ch => {
