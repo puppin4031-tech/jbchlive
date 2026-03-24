@@ -13,10 +13,12 @@ const categories = ['전체', '주일말씀', '수요말씀', '특별집회'];
 
 const ChannelPage = () => {
   const { channelId } = useParams();
+  const { user, isAdmin } = useAuth();
   const channel = getChannelById(channelId || '');
   const allSermons = getSermonsByChannel(channelId || '');
   const [activeCategory, setActiveCategory] = useState('전체');
   const [subscribed, setSubscribed] = useState(false);
+  const canEdit = channel && user && ((channel as any).ownerId === user.id || isAdmin);
 
   const filtered = allSermons.filter(s => {
     if (activeCategory === '전체') return true;
