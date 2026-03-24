@@ -206,6 +206,45 @@ async function getHLSUrl(channelId: string) {
   };
 }
 
+// --- In-memory Rate Limiter ---
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+const RATE_LIMITS: Record<string, { max: number; windowSec: number }> = {
+  createInput:   { max: 3, windowSec: 60 },
+  createChannel: { max: 3, windowSec: 60 },
+  startChannel:  { max: 5, windowSec: 60 },
+  stopChannel:   { max: 5, windowSec: 60 },
+  getStatus:     { max: 30, windowSec: 60 },
+  getHLSUrl:     { max: 30, windowSec: 60 },
+};
+
+function checkRateLimit(userId: string, action: string) {
+  const limit = RATE_LIMITS[action] || { max: 10, windowSec: 60 };
+  const key = `${userId}:${action}`;
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + limit.windowSec * 1000 });
+    return;
+  }
+
+  if (entry.count >= limit.max) {
+    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    throw new Error(`Rate limit exceeded. Retry after ${retryAfter}s`);
+  }
+
+  entry.count++;
+}
+
+// Cleanup stale entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitMap) {
+    if (now > entry.resetAt) rateLimitMap.delete(key);
+  }
+}, 5 * 60 * 1000);
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -213,9 +252,13 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("authorization");
-    await verifyAdmin(authHeader);
+    const adminUser = await verifyAdmin(authHeader);
 
     const { action, inputId, channelId } = await req.json();
+
+    // Rate limit check
+    checkRateLimit(adminUser.id, action);
+
     let result: unknown;
 
     switch (action) {
@@ -252,7 +295,10 @@ serve(async (req) => {
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    const status = msg.includes("Unauthorized") ? 401 : msg.includes("Forbidden") ? 403 : 500;
+    const status = msg.includes("Unauthorized") ? 401
+      : msg.includes("Forbidden") ? 403
+      : msg.includes("Rate limit") ? 429
+      : 500;
     return new Response(JSON.stringify({ error: msg }), {
       status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
