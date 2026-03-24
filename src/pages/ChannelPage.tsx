@@ -67,6 +67,13 @@ const ChannelPage = () => {
           <Button variant="outline" onClick={() => { toast.info('즐겨찾기는 로그인 후 사용 가능합니다.'); }}>
             <Heart className="w-4 h-4 mr-1" /> 즐겨찾기
           </Button>
+          {canEdit && (
+            <Link to={`/channel/${channelId}/settings`}>
+              <Button variant="outline" size="icon">
+                <Settings className="w-4 h-4" />
+              </Button>
+            </Link>
+          )}
         </div>
 
         {/* Sermons */}
