@@ -43,6 +43,7 @@ const AdminPage = () => {
         stream_url: newChannel.stream_url,
         logo_url: newChannel.logo_url,
         is_approved: true,
+        owner_id: user?.id,
       });
       if (error) throw error;
     },
