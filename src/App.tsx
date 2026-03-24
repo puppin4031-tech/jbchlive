@@ -34,6 +34,7 @@ const App = () => (
             <Route path="/search" element={<SearchPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/admin" element={<AdminPage />} />
+            <Route path="/create-channel" element={<CreateChannelPage />} />
             <Route path="/favorites" element={<FavoritesPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
