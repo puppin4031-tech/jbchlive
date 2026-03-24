@@ -9,13 +9,15 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Check, X, Trash2, BarChart3 } from 'lucide-react';
+import { Plus, Check, X, Trash2, Radio, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import * as liveApi from '@/lib/liveStreamApi';
 
 const AdminPage = () => {
   const { isAdmin, loading } = useAuth();
   const queryClient = useQueryClient();
   const [newChannel, setNewChannel] = useState({ name: '', description: '', stream_url: '', logo_url: '' });
+  const [streamSetup, setStreamSetup] = useState<Record<string, { inputId: string; gcpChannelId: string }>>({});
 
   const { data: channels = [] } = useQuery({
     queryKey: ['admin-channels'],
@@ -59,11 +61,57 @@ const AdminPage = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-channels'] }),
   });
 
-  const toggleLive = useMutation({
-    mutationFn: async ({ id, isLive }: { id: string; isLive: boolean }) => {
-      await supabase.from('channels').update({ is_live: isLive }).eq('id', id);
+  const setupAndStartLive = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const sanitized = name.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase().slice(0, 50);
+      const inputId = `input-${sanitized}-${Date.now()}`;
+      const gcpChannelId = `ch-${sanitized}-${Date.now()}`;
+
+      toast.info('RTMP 입력을 생성하는 중...');
+      const inputResult = await liveApi.createInput(inputId);
+
+      toast.info('라이브 채널을 생성하는 중...');
+      await liveApi.createChannel(gcpChannelId, inputId);
+
+      toast.info('라이브를 시작하는 중...');
+      await liveApi.startChannel(gcpChannelId);
+
+      // Get HLS URL and save to DB
+      const hlsInfo = await liveApi.getHLSUrl(gcpChannelId);
+      await supabase.from('channels').update({
+        is_live: true,
+        stream_url: hlsInfo.hlsUrl || '',
+      }).eq('id', id);
+
+      setStreamSetup(prev => ({ ...prev, [id]: { inputId, gcpChannelId } }));
+
+      // Extract RTMP URL from input result
+      const rtmpUri = inputResult?.inputStreamProperty?.rtmpPushUri ||
+        inputResult?.metadata?.inputStreamProperty?.rtmpPushUri ||
+        '(RTMP URL 확인 필요)';
+
+      return { rtmpUri, hlsUrl: hlsInfo.hlsUrl };
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-channels'] }),
+    onSuccess: (data) => {
+      toast.success(`라이브 시작됨!\nRTMP: ${data.rtmpUri}`, { duration: 10000 });
+      queryClient.invalidateQueries({ queryKey: ['admin-channels'] });
+    },
+    onError: (e: Error) => toast.error(`라이브 시작 실패: ${e.message}`),
+  });
+
+  const stopLive = useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const setup = streamSetup[id];
+      if (setup?.gcpChannelId) {
+        await liveApi.stopChannel(setup.gcpChannelId);
+      }
+      await supabase.from('channels').update({ is_live: false }).eq('id', id);
+    },
+    onSuccess: () => {
+      toast.success('라이브가 종료되었습니다');
+      queryClient.invalidateQueries({ queryKey: ['admin-channels'] });
+    },
+    onError: (e: Error) => toast.error(`라이브 종료 실패: ${e.message}`),
   });
 
   const deleteChannel = useMutation({
@@ -110,42 +158,61 @@ const AdminPage = () => {
           </TabsList>
 
           <TabsContent value="channels" className="space-y-3 mt-4">
-            {channels.map(ch => (
-              <Card key={ch.id} className="p-4 flex items-center justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-foreground truncate">{ch.name}</span>
-                    {ch.is_approved ? (
-                      <Badge variant="secondary" className="text-xs">승인됨</Badge>
-                    ) : (
-                      <Badge variant="destructive" className="text-xs">미승인</Badge>
-                    )}
-                    {ch.is_live && <Badge className="bg-live text-live-foreground text-xs">LIVE</Badge>}
+            {channels.map(ch => {
+              const isStarting = setupAndStartLive.isPending && setupAndStartLive.variables?.id === ch.id;
+              const isStopping = stopLive.isPending && stopLive.variables?.id === ch.id;
+
+              return (
+                <Card key={ch.id} className="p-4 flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-foreground truncate">{ch.name}</span>
+                      {ch.is_approved ? (
+                        <Badge variant="secondary" className="text-xs">승인됨</Badge>
+                      ) : (
+                        <Badge variant="destructive" className="text-xs">미승인</Badge>
+                      )}
+                      {ch.is_live && <Badge className="bg-live text-live-foreground text-xs">LIVE</Badge>}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate mt-1">{ch.stream_url || '스트림 URL 없음'}</p>
                   </div>
-                  <p className="text-xs text-muted-foreground truncate mt-1">{ch.stream_url || '스트림 URL 없음'}</p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => toggleApproval.mutate({ id: ch.id, approved: !ch.is_approved })}
-                    title={ch.is_approved ? '승인 취소' : '승인'}
-                  >
-                    {ch.is_approved ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={ch.is_live ? 'destructive' : 'default'}
-                    onClick={() => toggleLive.mutate({ id: ch.id, isLive: !ch.is_live })}
-                  >
-                    {ch.is_live ? '라이브 종료' : '라이브 시작'}
-                  </Button>
-                  <Button size="icon" variant="ghost" onClick={() => deleteChannel.mutate(ch.id)}>
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
-                </div>
-              </Card>
-            ))}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => toggleApproval.mutate({ id: ch.id, approved: !ch.is_approved })}
+                      title={ch.is_approved ? '승인 취소' : '승인'}
+                    >
+                      {ch.is_approved ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                    </Button>
+                    {ch.is_live ? (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => stopLive.mutate({ id: ch.id })}
+                        disabled={isStopping}
+                      >
+                        {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                        라이브 종료
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => setupAndStartLive.mutate({ id: ch.id, name: ch.name })}
+                        disabled={isStarting}
+                      >
+                        {isStarting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Radio className="w-4 h-4 mr-1" />}
+                        라이브 시작
+                      </Button>
+                    )}
+                    <Button size="icon" variant="ghost" onClick={() => deleteChannel.mutate(ch.id)}>
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </div>
+                </Card>
+              );
+            })}
             {channels.length === 0 && (
               <p className="text-center text-muted-foreground py-8">등록된 채널이 없습니다.</p>
             )}
@@ -155,7 +222,7 @@ const AdminPage = () => {
             <Card className="p-4 space-y-3">
               <Input placeholder="교회명" value={newChannel.name} onChange={e => setNewChannel(p => ({ ...p, name: e.target.value }))} />
               <Input placeholder="설명" value={newChannel.description} onChange={e => setNewChannel(p => ({ ...p, description: e.target.value }))} />
-              <Input placeholder="스트림 URL (HLS)" value={newChannel.stream_url} onChange={e => setNewChannel(p => ({ ...p, stream_url: e.target.value }))} />
+              <Input placeholder="스트림 URL (HLS) - 자동 설정됨" value={newChannel.stream_url} onChange={e => setNewChannel(p => ({ ...p, stream_url: e.target.value }))} />
               <Input placeholder="로고 URL" value={newChannel.logo_url} onChange={e => setNewChannel(p => ({ ...p, logo_url: e.target.value }))} />
               <Button onClick={() => createChannel.mutate()} disabled={!newChannel.name} className="w-full">
                 <Plus className="w-4 h-4 mr-1" /> 채널 생성
