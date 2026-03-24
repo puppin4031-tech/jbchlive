@@ -37,11 +37,21 @@ const AdminPage = () => {
 
   const createChannel = useMutation({
     mutationFn: async () => {
+      const name = newChannel.name.trim();
+      if (!name || name.length > 100) throw new Error('채널명은 1~100자여야 합니다');
+      const description = (newChannel.description || '').trim().slice(0, 500);
+      const stream_url = (newChannel.stream_url || '').trim();
+      const logo_url = (newChannel.logo_url || '').trim();
+
+      // Validate URLs if provided
+      if (stream_url && !/^https?:\/\/.+/.test(stream_url)) throw new Error('유효한 스트림 URL을 입력하세요');
+      if (logo_url && !/^https?:\/\/.+/.test(logo_url)) throw new Error('유효한 로고 URL을 입력하세요');
+
       const { error } = await supabase.from('channels').insert({
-        name: newChannel.name,
-        description: newChannel.description,
-        stream_url: newChannel.stream_url,
-        logo_url: newChannel.logo_url,
+        name,
+        description: description || null,
+        stream_url: stream_url || null,
+        logo_url: logo_url || null,
         is_approved: true,
         owner_id: user?.id,
       });

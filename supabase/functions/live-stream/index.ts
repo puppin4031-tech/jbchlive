@@ -95,26 +95,34 @@ async function gcpFetch(url: string, options: RequestInit = {}) {
 // --- Verify admin role ---
 
 async function verifyAdmin(authHeader: string | null) {
-  if (!authHeader) throw new Error("Unauthorized");
-  const supabase = createClient(
+  if (!authHeader?.startsWith("Bearer ")) throw new Error("Unauthorized");
+
+  // Verify user identity via anon key client
+  const anonClient = createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
     { global: { headers: { Authorization: authHeader } } }
   );
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) throw new Error("Unauthorized");
 
-  const { data: roles } = await createClient(
+  const token = authHeader.replace("Bearer ", "");
+  const { data: claimsData, error: claimsError } = await anonClient.auth.getClaims(token);
+  if (claimsError || !claimsData?.claims?.sub) throw new Error("Unauthorized");
+
+  const userId = claimsData.claims.sub as string;
+
+  // Check admin role via service role client (bypasses RLS)
+  const serviceClient = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  )
+  );
+  const { data: roles } = await serviceClient
     .from("user_roles")
     .select("role")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .eq("role", "admin");
 
   if (!roles || roles.length === 0) throw new Error("Forbidden: admin only");
-  return user;
+  return { id: userId };
 }
 
 // --- API Handlers ---
