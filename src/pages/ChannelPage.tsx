@@ -1,12 +1,13 @@
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useState } from 'react';
 import Header from '@/components/Header';
 import SermonCard from '@/components/SermonCard';
 import CategoryTabs from '@/components/CategoryTabs';
 import { getChannelById, getSermonsByChannel } from '@/data/mockData';
-import { Users, Heart, Radio } from 'lucide-react';
+import { Users, Heart, Radio, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 const categories = ['전체', '주일말씀', '수요말씀', '특별집회'];
 
