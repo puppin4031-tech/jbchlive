@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import * as liveApi from '@/lib/liveStreamApi';
 
 const AdminPage = () => {
-  const { isAdmin, loading } = useAuth();
+  const { isAdmin, loading, user } = useAuth();
   const queryClient = useQueryClient();
   const [newChannel, setNewChannel] = useState({ name: '', description: '', stream_url: '', logo_url: '' });
   const [streamSetup, setStreamSetup] = useState<Record<string, { inputId: string; gcpChannelId: string }>>({});
@@ -43,6 +43,7 @@ const AdminPage = () => {
         stream_url: newChannel.stream_url,
         logo_url: newChannel.logo_url,
         is_approved: true,
+        owner_id: user?.id,
       });
       if (error) throw error;
     },
