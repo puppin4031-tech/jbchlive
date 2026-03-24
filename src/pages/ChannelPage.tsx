@@ -1,21 +1,24 @@
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useState } from 'react';
 import Header from '@/components/Header';
 import SermonCard from '@/components/SermonCard';
 import CategoryTabs from '@/components/CategoryTabs';
 import { getChannelById, getSermonsByChannel } from '@/data/mockData';
-import { Users, Heart, Radio } from 'lucide-react';
+import { Users, Heart, Radio, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 const categories = ['전체', '주일말씀', '수요말씀', '특별집회'];
 
 const ChannelPage = () => {
   const { channelId } = useParams();
+  const { user, isAdmin } = useAuth();
   const channel = getChannelById(channelId || '');
   const allSermons = getSermonsByChannel(channelId || '');
   const [activeCategory, setActiveCategory] = useState('전체');
   const [subscribed, setSubscribed] = useState(false);
+  const canEdit = channel && user && ((channel as any).ownerId === user.id || isAdmin);
 
   const filtered = allSermons.filter(s => {
     if (activeCategory === '전체') return true;
@@ -66,6 +69,13 @@ const ChannelPage = () => {
           <Button variant="outline" onClick={() => { toast.info('즐겨찾기는 로그인 후 사용 가능합니다.'); }}>
             <Heart className="w-4 h-4 mr-1" /> 즐겨찾기
           </Button>
+          {canEdit && (
+            <Link to={`/channel/${channelId}/settings`}>
+              <Button variant="outline" size="icon">
+                <Settings className="w-4 h-4" />
+              </Button>
+            </Link>
+          )}
         </div>
 
         {/* Sermons */}
