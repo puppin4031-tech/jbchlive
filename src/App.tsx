@@ -15,6 +15,7 @@ import AdminPage from "./pages/AdminPage.tsx";
 import CreateChannelPage from "./pages/CreateChannelPage.tsx";
 import ChannelSettingsPage from "./pages/ChannelSettingsPage.tsx";
 import FavoritesPage from "./pages/FavoritesPage.tsx";
+import MyChannelPage from "./pages/MyChannelPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
