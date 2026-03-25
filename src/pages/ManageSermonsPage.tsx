@@ -151,6 +151,10 @@ const ManageSermonsPage = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!clientRateLimit('sermon-upsert', 5)) {
+      toast.error('너무 많은 요청입니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
     const error = validateForm(form);
     if (error) { toast.error(error); return; }
     upsertMutation.mutate(editingId ? { ...form, id: editingId } : form);
