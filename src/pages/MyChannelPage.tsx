@@ -160,7 +160,7 @@ const MyChannelPage = () => {
                       viewCount: s.view_count,
                       channelId: s.channel_id,
                       channelName: channel.name,
-                      category: s.category,
+                      category: s.category as '주일말씀' | '수요말씀' | '특별집회',
                       isLive: s.is_live,
                     }} />
                   ))}
