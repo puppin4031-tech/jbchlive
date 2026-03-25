@@ -6,7 +6,7 @@ import Header from '@/components/Header';
 import SermonCard from '@/components/SermonCard';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Settings, Radio, Users, PlusCircle, Clock, CheckCircle2 } from 'lucide-react';
+import { Settings, Radio, Users, PlusCircle, Clock, CheckCircle2, Video } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const MyChannelPage = () => {
@@ -118,6 +118,13 @@ const MyChannelPage = () => {
                     <Settings className="w-4 h-4 mr-1" /> 채널 설정
                   </Button>
                 </Link>
+                {channel.is_approved && (
+                  <Link to={`/channel/${channel.id}/sermons`}>
+                    <Button variant="outline" size="sm">
+                      <Video className="w-4 h-4 mr-1" /> 영상 관리
+                    </Button>
+                  </Link>
+                )}
                 <Link to={`/channel/${channel.id}`}>
                   <Button variant="ghost" size="sm">
                     채널 페이지 보기

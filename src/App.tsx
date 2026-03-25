@@ -14,6 +14,7 @@ import LoginPage from "./pages/LoginPage.tsx";
 import AdminPage from "./pages/AdminPage.tsx";
 import CreateChannelPage from "./pages/CreateChannelPage.tsx";
 import ChannelSettingsPage from "./pages/ChannelSettingsPage.tsx";
+import ManageSermonsPage from "./pages/ManageSermonsPage.tsx";
 import FavoritesPage from "./pages/FavoritesPage.tsx";
 import MyChannelPage from "./pages/MyChannelPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
@@ -38,6 +39,7 @@ const App = () => (
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/create-channel" element={<CreateChannelPage />} />
             <Route path="/channel/:channelId/settings" element={<ChannelSettingsPage />} />
+            <Route path="/channel/:channelId/sermons" element={<ManageSermonsPage />} />
             <Route path="/favorites" element={<FavoritesPage />} />
             <Route path="/my-channel" element={<MyChannelPage />} />
             <Route path="*" element={<NotFound />} />

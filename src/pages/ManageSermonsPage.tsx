@@ -1,0 +1,306 @@
+import { useState } from 'react';
+import { useParams, Navigate, Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import Header from '@/components/Header';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import { Plus, Pencil, Trash2, Video, ArrowLeft, ExternalLink } from 'lucide-react';
+
+interface SermonForm {
+  title: string;
+  preacher: string;
+  sermon_date: string;
+  category: string;
+  description: string;
+  video_url: string;
+  thumbnail_url: string;
+}
+
+const emptyForm: SermonForm = {
+  title: '',
+  preacher: '',
+  sermon_date: new Date().toISOString().slice(0, 10),
+  category: '주일말씀',
+  description: '',
+  video_url: '',
+  thumbnail_url: '',
+};
+
+const ManageSermonsPage = () => {
+  const { channelId } = useParams();
+  const { user, loading: authLoading } = useAuth();
+  const queryClient = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<SermonForm>(emptyForm);
+
+  // Verify ownership
+  const { data: channel, isLoading: channelLoading } = useQuery({
+    queryKey: ['channel', channelId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('channels')
+        .select('*')
+        .eq('id', channelId!)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!channelId,
+  });
+
+  const { data: sermons, isLoading: sermonsLoading } = useQuery({
+    queryKey: ['manage-sermons', channelId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sermons')
+        .select('*')
+        .eq('channel_id', channelId!)
+        .order('sermon_date', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!channelId,
+  });
+
+  const upsertMutation = useMutation({
+    mutationFn: async (data: SermonForm & { id?: string }) => {
+      const payload = {
+        channel_id: channelId!,
+        title: data.title.trim(),
+        preacher: data.preacher.trim() || null,
+        sermon_date: data.sermon_date,
+        category: data.category,
+        description: data.description.trim() || null,
+        video_url: data.video_url.trim() || null,
+        thumbnail_url: data.thumbnail_url.trim() || null,
+        is_live: false,
+      };
+
+      if (data.id) {
+        const { error } = await supabase.from('sermons').update(payload).eq('id', data.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('sermons').insert(payload);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['manage-sermons', channelId] });
+      setDialogOpen(false);
+      setEditingId(null);
+      setForm(emptyForm);
+      toast.success(editingId ? '영상이 수정되었습니다.' : '영상이 등록되었습니다.');
+    },
+    onError: () => toast.error('오류가 발생했습니다.'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('sermons').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['manage-sermons', channelId] });
+      toast.success('영상이 삭제되었습니다.');
+    },
+    onError: () => toast.error('삭제 중 오류가 발생했습니다.'),
+  });
+
+  const openEdit = (sermon: any) => {
+    setEditingId(sermon.id);
+    setForm({
+      title: sermon.title,
+      preacher: sermon.preacher || '',
+      sermon_date: sermon.sermon_date?.slice(0, 10) || '',
+      category: sermon.category,
+      description: sermon.description || '',
+      video_url: sermon.video_url || '',
+      thumbnail_url: sermon.thumbnail_url || '',
+    });
+    setDialogOpen(true);
+  };
+
+  const openNew = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setDialogOpen(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim()) { toast.error('제목을 입력해주세요.'); return; }
+    upsertMutation.mutate(editingId ? { ...form, id: editingId } : form);
+  };
+
+  if (authLoading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+
+  const isOwner = channel?.owner_id === user.id;
+
+  if (channelLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container px-4 py-6 max-w-2xl mx-auto">
+          <Skeleton className="h-8 w-40 mb-4" />
+          <Skeleton className="h-20 w-full" />
+        </main>
+      </div>
+    );
+  }
+
+  if (!channel || !isOwner) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center h-[60vh] text-muted-foreground">
+          접근 권한이 없습니다.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Header />
+      <main className="container px-4 py-6 max-w-2xl mx-auto space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Link to="/my-channel">
+              <Button variant="ghost" size="icon"><ArrowLeft className="w-4 h-4" /></Button>
+            </Link>
+            <h1 className="text-xl font-bold text-foreground">영상 관리</h1>
+          </div>
+          <Button size="sm" onClick={openNew}>
+            <Plus className="w-4 h-4 mr-1" /> 영상 등록
+          </Button>
+        </div>
+
+        {/* Sermon List */}
+        {sermonsLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-lg" />)}
+          </div>
+        ) : !sermons || sermons.length === 0 ? (
+          <Card className="p-8 text-center space-y-3">
+            <Video className="w-10 h-10 mx-auto text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">등록된 영상이 없습니다.</p>
+            <Button size="sm" onClick={openNew}>
+              <Plus className="w-4 h-4 mr-1" /> 첫 영상 등록하기
+            </Button>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {sermons.map(s => (
+              <Card key={s.id} className="p-3 flex items-center gap-3">
+                <div className="w-20 h-12 rounded bg-muted overflow-hidden shrink-0">
+                  {s.thumbnail_url ? (
+                    <img src={s.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Video className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{s.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {s.preacher && `${s.preacher} · `}{s.category} · {s.sermon_date?.slice(0, 10)}
+                  </p>
+                  {s.video_url && (
+                    <p className="text-xs text-primary flex items-center gap-1 mt-0.5 truncate">
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{s.video_url}</span>
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}>
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive hover:text-destructive"
+                    onClick={() => {
+                      if (confirm('이 영상을 삭제하시겠습니까?')) deleteMutation.mutate(s.id);
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Create/Edit Dialog */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingId ? '영상 수정' : '영상 등록'}</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <Label>제목 *</Label>
+                <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="설교 제목" maxLength={200} />
+              </div>
+              <div>
+                <Label>설교자</Label>
+                <Input value={form.preacher} onChange={e => setForm(f => ({ ...f, preacher: e.target.value }))} placeholder="설교자 이름" maxLength={100} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>날짜</Label>
+                  <Input type="date" value={form.sermon_date} onChange={e => setForm(f => ({ ...f, sermon_date: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>카테고리</Label>
+                  <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="주일말씀">주일말씀</SelectItem>
+                      <SelectItem value="수요말씀">수요말씀</SelectItem>
+                      <SelectItem value="특별집회">특별집회</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <Label>영상 URL</Label>
+                <Input value={form.video_url} onChange={e => setForm(f => ({ ...f, video_url: e.target.value }))} placeholder="https://storage.googleapis.com/... 또는 NAS URL" maxLength={2000} />
+                <p className="text-xs text-muted-foreground mt-1">GCS, NAS, 자체 서버 등 외부 영상 URL을 입력하세요 (HLS, MP4 지원)</p>
+              </div>
+              <div>
+                <Label>썸네일 URL</Label>
+                <Input value={form.thumbnail_url} onChange={e => setForm(f => ({ ...f, thumbnail_url: e.target.value }))} placeholder="https://... 썸네일 이미지 URL" maxLength={2000} />
+              </div>
+              <div>
+                <Label>설명</Label>
+                <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="설교 내용 요약" maxLength={2000} rows={3} />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>취소</Button>
+                <Button type="submit" disabled={upsertMutation.isPending}>
+                  {upsertMutation.isPending ? '저장 중...' : (editingId ? '수정' : '등록')}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </main>
+    </div>
+  );
+};
+
+export default ManageSermonsPage;
