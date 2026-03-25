@@ -173,6 +173,13 @@ export type Database = {
             referencedRelation: "channels"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "sermons_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       user_roles: {
@@ -195,7 +202,48 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      channels_public: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string | null
+          is_approved: boolean | null
+          is_live: boolean | null
+          logo_url: string | null
+          name: string | null
+          owner_id: string | null
+          stream_url: string | null
+          subscriber_count: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          is_approved?: boolean | null
+          is_live?: boolean | null
+          logo_url?: string | null
+          name?: string | null
+          owner_id?: string | null
+          stream_url?: string | null
+          subscriber_count?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          is_approved?: boolean | null
+          is_live?: boolean | null
+          logo_url?: string | null
+          name?: string | null
+          owner_id?: string | null
+          stream_url?: string | null
+          subscriber_count?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {
