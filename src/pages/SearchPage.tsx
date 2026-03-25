@@ -1,27 +1,61 @@
 import { useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
-import SermonCard from '@/components/SermonCard';
+import SermonCard, { type SermonCardData } from '@/components/SermonCard';
 import ChannelCard from '@/components/ChannelCard';
-import { sermons, channels } from '@/data/mockData';
 import { Search } from 'lucide-react';
 
 const SearchPage = () => {
   const [searchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
-  const q = query.toLowerCase();
 
-  const matchedSermons = sermons.filter(s =>
-    s.title.toLowerCase().includes(q) ||
-    s.preacher.toLowerCase().includes(q) ||
-    s.category.toLowerCase().includes(q)
-  );
+  const { data: matchedSermons } = useQuery({
+    queryKey: ['search-sermons', query],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sermons')
+        .select('*, channels!inner(name, logo_url)')
+        .or(`title.ilike.%${query}%,preacher.ilike.%${query}%,category.ilike.%${query}%`)
+        .order('sermon_date', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return data;
+    },
+    enabled: query.length > 0,
+  });
 
-  const matchedChannels = channels.filter(c =>
-    c.name.toLowerCase().includes(q) ||
-    c.description.toLowerCase().includes(q)
-  );
+  const { data: matchedChannels } = useQuery({
+    queryKey: ['search-channels', query],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('channels')
+        .select('*')
+        .eq('is_approved', true)
+        .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
+        .limit(10);
+      if (error) throw error;
+      return data;
+    },
+    enabled: query.length > 0,
+  });
 
-  const noResults = matchedSermons.length === 0 && matchedChannels.length === 0;
+  const sermonCards: SermonCardData[] = (matchedSermons || []).map((s: any) => ({
+    id: s.id,
+    title: s.title,
+    preacher: s.preacher || '',
+    category: s.category,
+    thumbnailUrl: s.thumbnail_url || '/placeholder.svg',
+    date: s.sermon_date,
+    views: s.view_count,
+    isLive: s.is_live,
+    duration: s.duration || undefined,
+    channelId: s.channel_id,
+    channelName: s.channels?.name,
+    channelLogoUrl: s.channels?.logo_url,
+  }));
+
+  const noResults = sermonCards.length === 0 && (!matchedChannels || matchedChannels.length === 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -32,11 +66,11 @@ const SearchPage = () => {
           <h1 className="font-semibold text-lg">"{query}" 검색 결과</h1>
         </div>
 
-        {noResults && (
+        {noResults && query && (
           <p className="text-center text-muted-foreground py-12 text-sm">검색 결과가 없습니다.</p>
         )}
 
-        {matchedChannels.length > 0 && (
+        {matchedChannels && matchedChannels.length > 0 && (
           <section>
             <h2 className="font-semibold text-sm mb-2 text-foreground">채널</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -45,11 +79,11 @@ const SearchPage = () => {
           </section>
         )}
 
-        {matchedSermons.length > 0 && (
+        {sermonCards.length > 0 && (
           <section>
             <h2 className="font-semibold text-sm mb-2 text-foreground">말씀</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {matchedSermons.map(s => <SermonCard key={s.id} sermon={s} />)}
+              {sermonCards.map(s => <SermonCard key={s.id} sermon={s} />)}
             </div>
           </section>
         )}
