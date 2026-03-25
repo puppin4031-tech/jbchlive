@@ -128,6 +128,7 @@ const LivePage = () => {
 
   const isLive = channel.is_live;
   const streamUrl = channel.stream_url;
+  const viewerCount = useViewerCount(channelId, isLive);
 
   return (
     <div className="min-h-screen bg-background">
