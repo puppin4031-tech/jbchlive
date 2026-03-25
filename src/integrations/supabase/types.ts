@@ -24,6 +24,7 @@ export type Database = {
           logo_url: string | null
           name: string
           owner_id: string | null
+          stream_key: string | null
           stream_url: string | null
           subscriber_count: number
           updated_at: string
@@ -37,6 +38,7 @@ export type Database = {
           logo_url?: string | null
           name: string
           owner_id?: string | null
+          stream_key?: string | null
           stream_url?: string | null
           subscriber_count?: number
           updated_at?: string
@@ -50,6 +52,7 @@ export type Database = {
           logo_url?: string | null
           name?: string
           owner_id?: string | null
+          stream_key?: string | null
           stream_url?: string | null
           subscriber_count?: number
           updated_at?: string
