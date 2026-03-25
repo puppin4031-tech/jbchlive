@@ -1,0 +1,1 @@
+ALTER TABLE public.channels ADD COLUMN stream_key text DEFAULT NULL;
