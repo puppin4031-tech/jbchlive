@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, Radio, X, Heart, LogIn, LogOut, Shield, User, PlusCircle } from 'lucide-react';
+import { Search, Radio, X, Heart, LogIn, LogOut, Shield, User, PlusCircle, Tv } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -80,6 +80,9 @@ const Header = () => {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate('/favorites')}>
                   <Heart className="w-4 h-4 mr-2" /> 즐겨찾기
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/my-channel')}>
+                  <Tv className="w-4 h-4 mr-2" /> 내 채널
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate('/create-channel')}>
                   <PlusCircle className="w-4 h-4 mr-2" /> 채널 개설
