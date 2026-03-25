@@ -39,6 +39,7 @@ const App = () => (
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/create-channel" element={<CreateChannelPage />} />
             <Route path="/channel/:channelId/settings" element={<ChannelSettingsPage />} />
+            <Route path="/channel/:channelId/sermons" element={<ManageSermonsPage />} />
             <Route path="/favorites" element={<FavoritesPage />} />
             <Route path="/my-channel" element={<MyChannelPage />} />
             <Route path="*" element={<NotFound />} />
