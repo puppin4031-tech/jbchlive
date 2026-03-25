@@ -101,7 +101,7 @@ const Index = () => {
 
       <main className="container px-4 py-4 max-w-5xl mx-auto space-y-6">
         {/* Live Now Section */}
-        {currentLiveChannel && (
+        {currentLiveChannel && currentLiveChannel.stream_url && (
           <section>
             <Link to={`/live/${currentLiveChannel.id}`}>
               <div className="flex items-center gap-2 mb-3">
