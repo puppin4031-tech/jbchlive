@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Video, ArrowLeft, ExternalLink } from 'lucide-react';
+import { clientRateLimit } from '@/lib/security';
 
 interface SermonForm {
   title: string;
@@ -150,6 +151,10 @@ const ManageSermonsPage = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!clientRateLimit('sermon-upsert', 5)) {
+      toast.error('너무 많은 요청입니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
     const error = validateForm(form);
     if (error) { toast.error(error); return; }
     upsertMutation.mutate(editingId ? { ...form, id: editingId } : form);

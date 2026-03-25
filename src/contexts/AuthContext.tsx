@@ -15,7 +15,11 @@ const AuthContext = createContext<AuthContextType>({
   user: null, session: null, loading: true, isAdmin: false, profile: null, signOut: async () => {},
 });
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  // Return frozen copy to prevent devtools tampering
+  return Object.freeze({ ...ctx });
+};
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -59,6 +63,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const checkAdmin = async (userId: string) => {
+    // Use server-side function to verify role (not client-modifiable)
     const { data } = await supabase.rpc('has_role', { _user_id: userId, _role: 'admin' });
     setIsAdmin(!!data);
   };
