@@ -6,13 +6,20 @@ import SermonCard, { type SermonCardData } from '@/components/SermonCard';
 import ChannelCard from '@/components/ChannelCard';
 import { Search } from 'lucide-react';
 
+const sanitizeSearchQuery = (q: string): string => {
+  // Remove special SQL/regex characters to prevent injection
+  return q.replace(/[%_\\'";\(\)]/g, '').trim().slice(0, 100);
+};
+
 const SearchPage = () => {
   const [searchParams] = useSearchParams();
-  const query = searchParams.get('q') || '';
+  const rawQuery = searchParams.get('q') || '';
+  const query = sanitizeSearchQuery(rawQuery);
 
   const { data: matchedSermons } = useQuery({
     queryKey: ['search-sermons', query],
     queryFn: async () => {
+      if (!query) return [];
       const { data, error } = await supabase
         .from('sermons')
         .select('*, channels!inner(name, logo_url)')
@@ -28,6 +35,7 @@ const SearchPage = () => {
   const { data: matchedChannels } = useQuery({
     queryKey: ['search-channels', query],
     queryFn: async () => {
+      if (!query) return [];
       const { data, error } = await supabase
         .from('channels')
         .select('*')
@@ -63,7 +71,7 @@ const SearchPage = () => {
       <main className="container px-4 py-4 max-w-4xl mx-auto space-y-5">
         <div className="flex items-center gap-2 text-foreground">
           <Search className="w-5 h-5 text-muted-foreground" />
-          <h1 className="font-semibold text-lg">"{query}" 검색 결과</h1>
+          <h1 className="font-semibold text-lg">"{rawQuery}" 검색 결과</h1>
         </div>
 
         {noResults && query && (

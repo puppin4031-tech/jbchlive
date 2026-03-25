@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Video, ArrowLeft, ExternalLink } from 'lucide-react';
 
@@ -35,6 +35,19 @@ const emptyForm: SermonForm = {
   thumbnail_url: '',
 };
 
+const URL_REGEX = /^https?:\/\/.{3,}$/;
+
+const validateForm = (form: SermonForm): string | null => {
+  const title = form.title.trim();
+  if (!title) return '제목을 입력해주세요.';
+  if (title.length > 200) return '제목은 200자 이하여야 합니다.';
+  if (form.preacher.trim().length > 100) return '설교자 이름은 100자 이하여야 합니다.';
+  if (form.video_url.trim() && !URL_REGEX.test(form.video_url.trim())) return '유효한 영상 URL을 입력해주세요 (http:// 또는 https://)';
+  if (form.thumbnail_url.trim() && !URL_REGEX.test(form.thumbnail_url.trim())) return '유효한 썸네일 URL을 입력해주세요 (http:// 또는 https://)';
+  if (form.description.trim().length > 2000) return '설명은 2000자 이하여야 합니다.';
+  return null;
+};
+
 const ManageSermonsPage = () => {
   const { channelId } = useParams();
   const { user, loading: authLoading } = useAuth();
@@ -43,7 +56,6 @@ const ManageSermonsPage = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SermonForm>(emptyForm);
 
-  // Verify ownership
   const { data: channel, isLoading: channelLoading } = useQuery({
     queryKey: ['channel', channelId],
     queryFn: async () => {
@@ -138,7 +150,8 @@ const ManageSermonsPage = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.title.trim()) { toast.error('제목을 입력해주세요.'); return; }
+    const error = validateForm(form);
+    if (error) { toast.error(error); return; }
     upsertMutation.mutate(editingId ? { ...form, id: editingId } : form);
   };
 
@@ -186,7 +199,6 @@ const ManageSermonsPage = () => {
           </Button>
         </div>
 
-        {/* Sermon List */}
         {sermonsLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-lg" />)}
@@ -244,7 +256,6 @@ const ManageSermonsPage = () => {
           </div>
         )}
 
-        {/* Create/Edit Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
