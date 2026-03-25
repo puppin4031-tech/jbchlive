@@ -81,6 +81,9 @@ const Header = () => {
                 <DropdownMenuItem onClick={() => navigate('/favorites')}>
                   <Heart className="w-4 h-4 mr-2" /> 즐겨찾기
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/my-channel')}>
+                  <Tv className="w-4 h-4 mr-2" /> 내 채널
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate('/create-channel')}>
                   <PlusCircle className="w-4 h-4 mr-2" /> 채널 개설
                 </DropdownMenuItem>
