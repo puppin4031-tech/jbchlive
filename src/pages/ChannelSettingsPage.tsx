@@ -41,6 +41,21 @@ const ChannelSettingsPage = () => {
     enabled: !!channelId,
   });
 
+  // Fetch stream key from separate secure table
+  const { data: streamKeyData } = useQuery({
+    queryKey: ['stream-key', channelId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('channel_stream_keys')
+        .select('stream_key')
+        .eq('channel_id', channelId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!channelId && !!user,
+  });
+
   useEffect(() => {
     if (channel) {
       setName(channel.name);
@@ -111,7 +126,6 @@ const ChannelSettingsPage = () => {
     onSuccess: () => {
       toast.success('채널 정보가 수정되었습니다');
       queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
-      queryClient.invalidateQueries({ queryKey: ['admin-channels'] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -120,14 +134,17 @@ const ChannelSettingsPage = () => {
     mutationFn: async () => {
       if (!channelId) throw new Error('채널 ID가 없습니다');
       const newKey = crypto.randomUUID();
-      const { error } = await supabase.from('channels').update({
+
+      // Upsert into channel_stream_keys
+      const { error } = await supabase.from('channel_stream_keys').upsert({
+        channel_id: channelId,
         stream_key: newKey,
-      }).eq('id', channelId);
+      }, { onConflict: 'channel_id' });
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success('스트림 키가 생성되었습니다');
-      queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
+      queryClient.invalidateQueries({ queryKey: ['stream-key', channelId] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -137,7 +154,7 @@ const ChannelSettingsPage = () => {
   if (channel && !canEdit) return <Navigate to="/" replace />;
 
   const rtmpUrl = 'rtmp://live-stream.googleapis.com:1935/live';
-  const streamKey = channel?.stream_key || null;
+  const streamKey = streamKeyData?.stream_key || null;
   const maskedKey = streamKey ? streamKey.slice(0, 4) + '-****-****-' + streamKey.slice(-4) : null;
 
   return (
@@ -164,13 +181,7 @@ const ChannelSettingsPage = () => {
                 <ImagePlus className="w-8 h-8 text-muted-foreground" />
               )}
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
             <p className="text-xs text-muted-foreground">클릭하여 로고 변경 (5MB 이하)</p>
           </div>
 
@@ -201,13 +212,10 @@ const ChannelSettingsPage = () => {
             <div className="rounded-lg bg-muted p-4 text-center space-y-2">
               <div className="text-2xl">⏳</div>
               <p className="text-sm font-medium text-foreground">관리자 승인 대기 중...</p>
-              <p className="text-xs text-muted-foreground">
-                채널이 승인되면 스트림 키를 생성할 수 있습니다.
-              </p>
+              <p className="text-xs text-muted-foreground">채널이 승인되면 스트림 키를 생성할 수 있습니다.</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Live status */}
               {channel?.is_live && (
                 <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3">
                   <span className="relative flex h-3 w-3">
@@ -218,25 +226,18 @@ const ChannelSettingsPage = () => {
                 </div>
               )}
 
-              {/* RTMP URL */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">RTMP 서버 URL</label>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 rounded-md border border-border bg-muted/50 px-3 py-2.5">
                     <code className="text-sm font-mono text-foreground break-all">{rtmpUrl}</code>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => handleCopy(rtmpUrl, 'rtmp')}
-                    className="shrink-0 h-10 w-10"
-                  >
+                  <Button variant="outline" size="icon" onClick={() => handleCopy(rtmpUrl, 'rtmp')} className="shrink-0 h-10 w-10">
                     {copiedField === 'rtmp' ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
                   </Button>
                 </div>
               </div>
 
-              {/* Stream Key */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">스트림 키</label>
                 {streamKey && (isOwner || isAdmin) ? (
@@ -247,47 +248,25 @@ const ChannelSettingsPage = () => {
                           {showStreamKey ? streamKey : maskedKey}
                         </code>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => setShowStreamKey(!showStreamKey)}
-                        className="shrink-0 h-10 w-10"
-                      >
+                      <Button variant="outline" size="icon" onClick={() => setShowStreamKey(!showStreamKey)} className="shrink-0 h-10 w-10">
                         {showStreamKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => handleCopy(streamKey, 'key')}
-                        className="shrink-0 h-10 w-10"
-                      >
+                      <Button variant="outline" size="icon" onClick={() => handleCopy(streamKey, 'key')} className="shrink-0 h-10 w-10">
                         {copiedField === 'key' ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
                       </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => generateStreamKey.mutate()}
-                      disabled={generateStreamKey.isPending}
-                      className="text-xs text-muted-foreground"
-                    >
-                      <RefreshCw className="w-3 h-3 mr-1" />
-                      스트림 키 재생성
+                    <Button variant="ghost" size="sm" onClick={() => generateStreamKey.mutate()} disabled={generateStreamKey.isPending} className="text-xs text-muted-foreground">
+                      <RefreshCw className="w-3 h-3 mr-1" /> 스트림 키 재생성
                     </Button>
                   </div>
                 ) : (
-                  <Button
-                    onClick={() => generateStreamKey.mutate()}
-                    disabled={generateStreamKey.isPending}
-                    className="w-full"
-                  >
+                  <Button onClick={() => generateStreamKey.mutate()} disabled={generateStreamKey.isPending} className="w-full">
                     {generateStreamKey.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
                     스트림 키 생성
                   </Button>
                 )}
               </div>
 
-              {/* OBS Guide */}
               <Collapsible open={guideOpen} onOpenChange={setGuideOpen}>
                 <CollapsibleTrigger className="flex items-center justify-between w-full rounded-md border border-border px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
                   <span>📖 OBS 설정 가이드</span>
@@ -295,19 +274,16 @@ const ChannelSettingsPage = () => {
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-2">
                   <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 text-sm text-foreground">
-                    <div className="space-y-2">
-                      <p className="font-medium">OBS Studio에서 라이브 방송 시작하기:</p>
-                      <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground">
-                        <li><span className="text-foreground font-medium">OBS Studio</span>를 실행합니다</li>
-                        <li>상단 메뉴에서 <span className="text-foreground font-medium">설정</span>을 클릭합니다</li>
-                        <li>왼쪽 메뉴에서 <span className="text-foreground font-medium">방송</span>을 선택합니다</li>
-                        <li>서비스를 <span className="text-foreground font-medium">"사용자 정의..."</span>로 변경합니다</li>
-                        <li>서버에 위의 <span className="text-foreground font-medium">RTMP 서버 URL</span>을 붙여넣습니다</li>
-                        <li>스트림 키에 위의 <span className="text-foreground font-medium">스트림 키</span>를 붙여넣습니다</li>
-                        <li><span className="text-foreground font-medium">확인</span>을 클릭합니다</li>
-                        <li>메인 화면에서 <span className="text-foreground font-medium">"방송 시작"</span>을 클릭합니다</li>
-                      </ol>
-                    </div>
+                    <p className="font-medium">OBS Studio에서 라이브 방송 시작하기:</p>
+                    <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground">
+                      <li><span className="text-foreground font-medium">OBS Studio</span>를 실행합니다</li>
+                      <li>상단 메뉴에서 <span className="text-foreground font-medium">설정</span>을 클릭합니다</li>
+                      <li>왼쪽 메뉴에서 <span className="text-foreground font-medium">방송</span>을 선택합니다</li>
+                      <li>서비스를 <span className="text-foreground font-medium">"사용자 정의..."</span>로 변경합니다</li>
+                      <li>서버에 위의 <span className="text-foreground font-medium">RTMP 서버 URL</span>을 붙여넣습니다</li>
+                      <li>스트림 키에 위의 <span className="text-foreground font-medium">스트림 키</span>를 붙여넣습니다</li>
+                      <li><span className="text-foreground font-medium">확인</span> → <span className="text-foreground font-medium">"방송 시작"</span>을 클릭합니다</li>
+                    </ol>
                     <div className="rounded-md bg-accent/50 p-2.5 text-xs text-muted-foreground">
                       💡 <strong>팁:</strong> OBS가 없다면 <a href="https://obsproject.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">obsproject.com</a>에서 무료로 다운로드할 수 있습니다.
                     </div>
