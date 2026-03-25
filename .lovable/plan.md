@@ -1,37 +1,42 @@
 
 
-## 고유 라이브 링크 시스템
-
-### 현재 문제
-- `/live/:channelId` 라우트가 이미 존재하지만, mockData에서 라이브 상태를 가져오고 있어 실제 DB 연동이 안 됨
-- 라이브가 아닐 때 "라이브 중인 말씀이 없습니다"만 표시되고 채널 정보가 없음
+## 외부 스토리지 영상 관리 시스템
 
 ### 목표
-트위치처럼 `/live/{channelId}` 링크가 **영구 고유 링크**로 동작하도록 개선:
-- 라이브 중 → 영상 스트리밍 + 채널 정보 표시
-- 라이브 아닐 때 → 채널 정보 + "현재 라이브가 아닙니다" + 최근 VOD 목록 표시
-- 링크는 항상 동일하므로 한 번 공유하면 매번 재사용 가능
+채널 소유자가 기존 영상(NAS, Google Cloud Storage, 기타 외부 URL)을 등록하고 관리할 수 있는 설교 영상 관리 기능 추가.
 
 ### 변경 사항
 
-**1. `src/pages/LivePage.tsx` 전면 리팩터링**
-- mockData 의존 제거 → Supabase `channels` 테이블에서 채널 정보 조회
-- `channels.is_live` 상태에 따라 두 가지 뷰 분기:
-  - **라이브 중**: HLS 플레이어 + 제목/설교자 + 시청자 수 + 공유 버튼
-  - **오프라인**: 채널 로고/이름 + "현재 라이브가 아닙니다. 라이브가 시작되면 여기서 시청할 수 있습니다." 메시지 + 해당 채널 최근 설교(VOD) 목록
-- `channels.stream_url`에서 HLS URL을 가져와 재생
-- Supabase Realtime 구독으로 `is_live` 변경 시 자동 전환 (라이브 시작되면 새로고침 없이 플레이어 등장)
+**1. 설교(영상) 관리 페이지 생성 — `src/pages/ManageSermonsPage.tsx`**
+- 내 채널의 설교 목록 조회 (CRUD)
+- **영상 등록 폼**:
+  - 제목, 설교자, 날짜, 카테고리(주일말씀/수요말씀/특별집회), 설명
+  - **영상 URL 입력**: 외부 URL 직접 입력 (GCS, NAS, YouTube, 자체 서버 등 아무 URL)
+  - **썸네일 URL 입력**: 외부 이미지 URL 직접 입력
+- 등록된 영상 목록에서 수정/삭제 가능
+- `sermons` 테이블의 `video_url` 필드에 외부 URL 저장
 
-**2. 공유 기능 개선**
-- 공유 버튼 클릭 시 항상 `/live/{channelId}` 형태의 고정 URL 복사
-- 오프라인 상태에서도 공유 버튼 노출 (미리 링크 배포 가능)
+**2. RLS 정책 추가 — DB 마이그레이션**
+- 현재 `sermons` 테이블은 admin만 INSERT/UPDATE/DELETE 가능
+- 채널 소유자도 자기 채널의 설교를 관리할 수 있도록 RLS 정책 추가:
+  - `Owners can insert sermons`: channel_id가 본인 소유 채널인 경우 INSERT 허용
+  - `Owners can update own sermons`: 동일 조건으로 UPDATE 허용
+  - `Owners can delete own sermons`: 동일 조건으로 DELETE 허용
 
-**3. 라우팅** — 변경 없음
-- 이미 `/live/:channelId`가 등록되어 있으므로 추가 라우트 불필요
+**3. VodPage 수정 — `src/pages/VodPage.tsx`**
+- mockData 의존 제거 → Supabase `sermons` + `channels` 테이블에서 데이터 조회
+- `video_url` 필드의 외부 URL을 VideoPlayer에 전달
+
+**4. MyChannelPage에 영상 관리 버튼 추가**
+- "영상 관리" 버튼 → `/channel/:channelId/sermons` 으로 이동
+
+**5. 라우팅 추가 — `src/App.tsx`**
+- `/channel/:channelId/sermons` → ManageSermonsPage
 
 ### 기술 세부사항
-- `useQuery`로 채널 데이터 fetch: `supabase.from('channels').select('*').eq('id', channelId)`
-- `useQuery`로 최근 VOD fetch: `supabase.from('sermons').select('*').eq('channel_id', channelId).eq('is_live', false).order('sermon_date', { ascending: false }).limit(6)`
-- Realtime: `supabase.channel('live-status').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'channels', filter: \`id=eq.${channelId}\` }, callback).subscribe()`
-- DB 변경 불필요 (기존 `channels` 테이블에 `is_live`, `stream_url` 이미 존재)
+
+- 외부 URL은 별도 업로드 없이 `sermons.video_url`에 직접 저장
+- HLS(.m3u8), MP4 등 다양한 형식을 VideoPlayer가 이미 지원
+- RLS 정책에서 소유자 확인: `EXISTS (SELECT 1 FROM channels WHERE id = sermons.channel_id AND owner_id = auth.uid())`
+- DB 마이그레이션 1건 필요 (소유자용 RLS 정책 3개 추가)
 
