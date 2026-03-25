@@ -188,7 +188,20 @@ const LivePage = () => {
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {recentVods.map(s => (
-                <SermonCard key={s.id} sermon={s as any} />
+                <SermonCard key={s.id} sermon={{
+                  id: s.id,
+                  title: s.title,
+                  preacher: s.preacher || '',
+                  category: s.category,
+                  thumbnailUrl: s.thumbnail_url || '/placeholder.svg',
+                  date: s.sermon_date,
+                  views: s.view_count,
+                  isLive: s.is_live,
+                  duration: s.duration || undefined,
+                  channelId: s.channel_id,
+                  channelName: channel.name,
+                  channelLogoUrl: channel.logo_url,
+                }} />
               ))}
             </div>
           </section>

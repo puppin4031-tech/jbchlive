@@ -166,10 +166,13 @@ const MyChannelPage = () => {
                       duration: s.duration || undefined,
                       views: s.view_count,
                       channelId: s.channel_id,
-                      category: s.category as '주일말씀' | '수요말씀' | '특별집회',
+                      category: s.category,
                       isLive: s.is_live,
+                      channelName: channel.name,
+                      channelLogoUrl: channel.logo_url,
                     }} />
                   ))}
+
                 </div>
               </section>
             )}
