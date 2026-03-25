@@ -6,7 +6,7 @@ import Header from '@/components/Header';
 import SermonCard from '@/components/SermonCard';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Settings, Radio, Users, PlusCircle, Clock, CheckCircle2 } from 'lucide-react';
+import { Settings, Radio, Users, PlusCircle, Clock, CheckCircle2, Video } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const MyChannelPage = () => {
