@@ -231,7 +231,7 @@ const ChannelSettingsPage = () => {
                     onClick={() => handleCopy(rtmpUrl, 'rtmp')}
                     className="shrink-0 h-10 w-10"
                   >
-                    {copiedField === 'rtmp' ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                    {copiedField === 'rtmp' ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
                   </Button>
                 </div>
               </div>
