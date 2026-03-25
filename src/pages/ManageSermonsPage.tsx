@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Video, ArrowLeft, ExternalLink } from 'lucide-react';
+import { clientRateLimit } from '@/lib/security';
 
 interface SermonForm {
   title: string;
