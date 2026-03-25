@@ -261,7 +261,7 @@ const ChannelSettingsPage = () => {
                         onClick={() => handleCopy(streamKey, 'key')}
                         className="shrink-0 h-10 w-10"
                       >
-                        {copiedField === 'key' ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                        {copiedField === 'key' ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
                       </Button>
                     </div>
                     <Button
