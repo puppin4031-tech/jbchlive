@@ -32,7 +32,7 @@ const Header = () => {
       <div className="container flex items-center justify-between h-14 px-4">
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <Radio className="w-6 h-6 text-primary-foreground" />
-          <span className="font-bold text-lg text-foreground">Live Word</span>
+          <span className="font-bold text-lg text-foreground">Live Word Mission</span>
         </Link>
 
         {/* Desktop search */}
