@@ -1,20 +1,33 @@
 import { Link } from 'react-router-dom';
 import { Radio, Eye, Clock } from 'lucide-react';
-import { type Sermon, getChannelById } from '@/data/mockData';
+
+export interface SermonCardData {
+  id: string;
+  title: string;
+  preacher?: string;
+  category: string;
+  thumbnailUrl?: string;
+  date?: string;
+  views?: number;
+  isLive?: boolean;
+  duration?: string;
+  channelId: string;
+  channelName?: string;
+  channelLogoUrl?: string;
+}
 
 interface SermonCardProps {
-  sermon: Sermon;
+  sermon: SermonCardData;
 }
 
 const SermonCard = ({ sermon }: SermonCardProps) => {
-  const channel = getChannelById(sermon.channelId);
   const link = sermon.isLive ? `/live/${sermon.channelId}` : `/vod/${sermon.id}`;
 
   return (
     <Link to={link} className="group block">
       <div className="relative aspect-video rounded-xl overflow-hidden bg-muted">
         <img
-          src={sermon.thumbnailUrl}
+          src={sermon.thumbnailUrl || '/placeholder.svg'}
           alt={sermon.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           loading="lazy"
@@ -30,14 +43,16 @@ const SermonCard = ({ sermon }: SermonCardProps) => {
         ) : null}
       </div>
       <div className="mt-2 flex gap-2">
-        {channel && (
-          <img src={channel.logoUrl} alt={channel.name} className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5" />
+        {sermon.channelLogoUrl && (
+          <img src={sermon.channelLogoUrl} alt={sermon.channelName || ''} className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5" />
         )}
         <div className="min-w-0">
           <h3 className="font-medium text-sm text-foreground line-clamp-2 leading-snug">{sermon.title}</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">{channel?.name} · {sermon.preacher}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {sermon.channelName}{sermon.preacher && ` · ${sermon.preacher}`}
+          </p>
           <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-            <Eye className="w-3 h-3" /> {sermon.views.toLocaleString()}회 · {sermon.date}
+            <Eye className="w-3 h-3" /> {(sermon.views || 0).toLocaleString()}회 · {sermon.date?.slice(0, 10)}
           </p>
         </div>
       </div>
