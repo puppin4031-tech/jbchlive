@@ -1,12 +1,30 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- TODO: Set the document title to the name of your application -->
     <title>Live Word Mission - 교회 말씀 스트리밍</title>
     <meta name="description" content="Live Word Mission - 모든 세대를 위한 교회 말씀 라이브 스트리밍 플랫폼" />
     <meta name="author" content="Live Word Mission" />
+
+    <!-- Security Headers via Meta Tags -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com;
+      img-src 'self' data: blob: https: http:;
+      media-src 'self' blob: https: http:;
+      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://accounts.google.com https://oauth2.googleapis.com https://*.googleapis.com;
+      frame-src https://accounts.google.com;
+      frame-ancestors 'none';
+      base-uri 'self';
+      form-action 'self' https://accounts.google.com;
+    " />
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
 
     <meta property="og:title" content="Live Word Mission" />
     <meta property="og:description" content="모든 세대를 위한 교회 말씀 라이브 스트리밍 플랫폼" />
