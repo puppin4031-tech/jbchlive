@@ -256,7 +256,11 @@ serve(async (req) => {
 
     const { action, inputId, channelId } = await req.json();
 
-    // Rate limit check
+    // Validate input IDs to prevent injection
+    const ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
+    if (inputId && !ID_REGEX.test(inputId)) throw new Error("Invalid inputId format");
+    if (channelId && !ID_REGEX.test(channelId)) throw new Error("Invalid channelId format");
+    if (action && !ID_REGEX.test(action)) throw new Error("Invalid action format");
     checkRateLimit(adminUser.id, action);
 
     let result: unknown;
