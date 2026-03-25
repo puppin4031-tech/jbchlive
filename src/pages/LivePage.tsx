@@ -5,6 +5,7 @@ import Header from '@/components/Header';
 import VideoPlayer from '@/components/VideoPlayer';
 import SermonCard from '@/components/SermonCard';
 import { supabase } from '@/integrations/supabase/client';
+import { useViewerCount } from '@/hooks/useViewerCount';
 import { Share2, Users, Radio, VideoOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -127,6 +128,7 @@ const LivePage = () => {
 
   const isLive = channel.is_live;
   const streamUrl = channel.stream_url;
+  const viewerCount = useViewerCount(channelId, isLive);
 
   return (
     <div className="min-h-screen bg-background">
@@ -166,9 +168,9 @@ const LivePage = () => {
                 {channel.name}
                 {liveSermon?.preacher && ` · ${liveSermon.preacher}`}
               </p>
-              {isLive && liveSermon && (
+              {isLive && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                  <Users className="w-3 h-3" /> {liveSermon.view_count.toLocaleString()}명 시청 중
+                  <Users className="w-3 h-3" /> {viewerCount.toLocaleString()}명 시청 중
                 </p>
               )}
             </div>
