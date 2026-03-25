@@ -168,9 +168,9 @@ const LivePage = () => {
                 {channel.name}
                 {liveSermon?.preacher && ` · ${liveSermon.preacher}`}
               </p>
-              {isLive && liveSermon && (
+              {isLive && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                  <Users className="w-3 h-3" /> {liveSermon.view_count.toLocaleString()}명 시청 중
+                  <Users className="w-3 h-3" /> {viewerCount.toLocaleString()}명 시청 중
                 </p>
               )}
             </div>
