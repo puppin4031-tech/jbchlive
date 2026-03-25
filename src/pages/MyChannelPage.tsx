@@ -156,10 +156,9 @@ const MyChannelPage = () => {
                       preacher: s.preacher || '',
                       date: s.sermon_date,
                       thumbnailUrl: s.thumbnail_url || '/placeholder.svg',
-                      duration: s.duration || '',
-                      viewCount: s.view_count,
+                      duration: s.duration || undefined,
+                      views: s.view_count,
                       channelId: s.channel_id,
-                      channelName: channel.name,
                       category: s.category as '주일말씀' | '수요말씀' | '특별집회',
                       isLive: s.is_live,
                     }} />
