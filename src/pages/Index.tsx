@@ -106,16 +106,16 @@ const Index = () => {
           <section>
             <Link to={`/live/${currentLiveChannel.id}`}>
               <div className="flex items-center gap-2 mb-3">
-                <span className="flex items-center gap-1 bg-live text-live-foreground text-xs font-bold px-2.5 py-1 rounded-md">
-                  <Radio className="w-3.5 h-3.5 animate-pulse" /> LIVE NOW
+                <span className="flex items-center gap-1 bg-live text-live-foreground text-base md:text-xs font-bold px-3 py-1.5 md:px-2.5 md:py-1 rounded-md">
+                  <Radio className="w-5 h-5 md:w-3.5 md:h-3.5 animate-pulse" /> LIVE NOW
                 </span>
               </div>
               <VideoPlayer src={currentLiveChannel.stream_url || ''} />
               <div className="mt-3 flex items-start gap-3">
-                <img src={currentLiveChannel.logo_url || '/placeholder.svg'} alt={currentLiveChannel.name} className="w-10 h-10 rounded-full object-cover" />
+                <img src={currentLiveChannel.logo_url || '/placeholder.svg'} alt={currentLiveChannel.name} className="w-12 h-12 md:w-10 md:h-10 rounded-full object-cover" />
                 <div>
-                  <h2 className="font-semibold text-base text-foreground">{currentLiveSermon?.title || currentLiveChannel.name}</h2>
-                  <p className="text-sm text-muted-foreground">{currentLiveChannel.name}{currentLiveSermon?.preacher && ` · ${currentLiveSermon.preacher}`}</p>
+                  <h2 className="font-semibold text-lg md:text-base text-foreground">{currentLiveSermon?.title || currentLiveChannel.name}</h2>
+                  <p className="text-base md:text-sm text-muted-foreground">{currentLiveChannel.name}{currentLiveSermon?.preacher && ` · ${currentLiveSermon.preacher}`}</p>
                 </div>
               </div>
             </Link>
@@ -125,7 +125,7 @@ const Index = () => {
         {/* Other Live */}
         {liveChannels && liveChannels.length > 1 && (
           <section>
-            <h2 className="font-semibold text-lg md:text-base mb-3 text-foreground">다른 라이브</h2>
+            <h2 className="font-semibold text-xl md:text-base mb-3 text-foreground">다른 라이브</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {liveChannels.slice(1).map(ch => {
                 const sermon = liveSermons?.find(s => s.channel_id === ch.id);
@@ -137,7 +137,7 @@ const Index = () => {
 
         {/* Popular / Recent Sermons */}
         <section>
-          <h2 className="font-semibold text-lg md:text-base mb-3 text-foreground">말씀 다시보기</h2>
+          <h2 className="font-semibold text-xl md:text-base mb-3 text-foreground">말씀 다시보기</h2>
           <CategoryTabs categories={categories} active={activeCategory} onSelect={setActiveCategory} />
           {vodsLoading ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3">
@@ -149,14 +149,14 @@ const Index = () => {
             </div>
           )}
           {vodSermons?.length === 0 && (
-            <p className="text-center text-muted-foreground py-8 text-sm">등록된 말씀이 없습니다.</p>
+            <p className="text-center text-muted-foreground py-8 text-base md:text-sm">등록된 말씀이 없습니다.</p>
           )}
         </section>
 
         {/* Channels */}
         {channels && channels.length > 0 && (
           <section>
-            <h2 className="font-semibold text-lg md:text-base mb-3 text-foreground">교회 채널</h2>
+            <h2 className="font-semibold text-xl md:text-base mb-3 text-foreground">교회 채널</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {channels.map(ch => <ChannelCard key={ch.id} channel={ch} />)}
             </div>
