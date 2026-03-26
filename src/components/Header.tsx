@@ -65,11 +65,11 @@ const Header = () => {
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 md:w-9 md:h-9">
+                <Button variant="ghost" size="icon" className="rounded-full w-12 h-12 md:w-9 md:h-9">
                   {profile?.avatar_url ? (
-                    <img src={profile.avatar_url} alt="" className="w-9 h-9 md:w-7 md:h-7 rounded-full object-cover" />
+                    <img src={profile.avatar_url} alt="" className="w-10 h-10 md:w-7 md:h-7 rounded-full object-cover" />
                   ) : (
-                    <User className="w-7 h-7 md:w-5 md:h-5" />
+                    <User className="w-8 h-8 md:w-5 md:h-5" />
                   )}
                 </Button>
               </DropdownMenuTrigger>
