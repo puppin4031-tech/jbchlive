@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Radio, Eye, Clock } from 'lucide-react';
+import { extractYouTubeId } from '@/lib/thumbnailUtils';
 
 export interface SermonCardData {
   id: string;
