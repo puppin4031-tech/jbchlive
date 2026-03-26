@@ -56,8 +56,8 @@ const Header = () => {
           </Button>
 
           <Link to="/live">
-            <Button size="sm" className="bg-live text-live-foreground hover:bg-live/90 text-xs font-semibold px-3">
-              <Radio className="w-3.5 h-3.5 mr-1" />
+            <Button size="sm" className="bg-live text-live-foreground hover:bg-live/90 text-sm md:text-xs font-semibold px-4 md:px-3">
+              <Radio className="w-4 h-4 md:w-3.5 md:h-3.5 mr-1" />
               LIVE
             </Button>
           </Link>
