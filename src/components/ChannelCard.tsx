@@ -19,7 +19,7 @@ const ChannelCard = ({ channel }: ChannelCardProps) => {
   return (
     <Link to={`/channel/${channel.id}`} className="flex items-center gap-3 p-3 rounded-xl bg-card hover:bg-accent/50 transition-colors">
       <div className="relative shrink-0">
-        <img src={channel.logo_url || '/placeholder.svg'} alt={channel.name} className="w-12 h-12 rounded-full object-cover" />
+        <img src={channel.logo_url || '/placeholder.svg'} alt={channel.name} className="w-14 h-14 md:w-12 md:h-12 rounded-full object-cover" />
         {channel.is_live && (
           <span className="absolute -top-1 -right-1 w-4 h-4 bg-live rounded-full flex items-center justify-center">
             <Radio className="w-2.5 h-2.5 text-live-foreground" />
