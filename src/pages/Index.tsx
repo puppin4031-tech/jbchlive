@@ -106,8 +106,8 @@ const Index = () => {
           <section>
             <Link to={`/live/${currentLiveChannel.id}`}>
               <div className="flex items-center gap-2 mb-3">
-                <span className="flex items-center gap-1 bg-live text-live-foreground text-xs font-bold px-2.5 py-1 rounded-md">
-                  <Radio className="w-3.5 h-3.5 animate-pulse" /> LIVE NOW
+                <span className="flex items-center gap-1 bg-live text-live-foreground text-base md:text-xs font-bold px-3 py-1.5 md:px-2.5 md:py-1 rounded-md">
+                  <Radio className="w-5 h-5 md:w-3.5 md:h-3.5 animate-pulse" /> LIVE NOW
                 </span>
               </div>
               <VideoPlayer src={currentLiveChannel.stream_url || ''} />
