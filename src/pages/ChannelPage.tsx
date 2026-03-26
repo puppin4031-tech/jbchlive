@@ -16,8 +16,18 @@ const categories = ['전체', '주일말씀', '수요말씀', '특별집회'];
 const ChannelPage = () => {
   const { channelId } = useParams();
   const { user, isAdmin } = useAuth();
+  const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState('전체');
   const [subscribed, setSubscribed] = useState(false);
+
+  const requireLogin = (action: string) => {
+    if (!user) {
+      toast.info(`${action}은(는) 로그인 후 사용 가능합니다.`);
+      navigate('/login');
+      return true;
+    }
+    return false;
+  };
 
   const { data: channel, isLoading: channelLoading } = useQuery({
     queryKey: ['channel', channelId],
