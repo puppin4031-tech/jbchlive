@@ -42,12 +42,12 @@ const SermonCard = ({ sermon }: SermonCardProps) => {
           loading="lazy"
         />
         {sermon.isLive ? (
-          <span className="absolute top-2 left-2 flex items-center gap-1 bg-live text-live-foreground text-sm md:text-xs font-bold px-2 py-0.5 rounded-md">
-            <Radio className="w-4 h-4 md:w-3 md:h-3 animate-pulse" /> LIVE
+          <span className="absolute top-2 left-2 flex items-center gap-1 bg-live text-live-foreground text-base md:text-xs font-bold px-2.5 py-1 rounded-md">
+            <Radio className="w-5 h-5 md:w-3 md:h-3 animate-pulse" /> LIVE
           </span>
         ) : sermon.duration ? (
-          <span className="absolute bottom-2 right-2 flex items-center gap-1 bg-foreground/80 text-background text-sm md:text-xs px-1.5 py-0.5 rounded">
-            <Clock className="w-4 h-4 md:w-3 md:h-3" /> {sermon.duration}
+          <span className="absolute bottom-2 right-2 flex items-center gap-1 bg-foreground/80 text-background text-base md:text-xs px-2 py-1 rounded">
+            <Clock className="w-5 h-5 md:w-3 md:h-3" /> {sermon.duration}
           </span>
         ) : null}
       </div>
