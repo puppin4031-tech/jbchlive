@@ -27,8 +27,8 @@ const ChannelCard = ({ channel }: ChannelCardProps) => {
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <h3 className="font-semibold text-sm text-foreground truncate">{channel.name}</h3>
-        <p className="text-xs text-muted-foreground flex items-center gap-1">
+        <h3 className="font-semibold text-base md:text-sm text-foreground truncate">{channel.name}</h3>
+        <p className="text-sm md:text-xs text-muted-foreground flex items-center gap-1">
           <Users className="w-3 h-3" /> {channel.subscriber_count.toLocaleString()}명
         </p>
       </div>
