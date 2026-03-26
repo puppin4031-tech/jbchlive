@@ -24,6 +24,17 @@ interface SermonCardProps {
 const SermonCard = ({ sermon }: SermonCardProps) => {
   const link = sermon.isLive ? `/live/${sermon.channelId}` : `/vod/${sermon.id}`;
 
+  // Auto-derive thumbnail from YouTube video URL if no thumbnail set
+  let thumbnail = sermon.thumbnailUrl;
+  if (!thumbnail && sermon.id) {
+    // Try to get YouTube thumbnail from video URL stored in the sermon
+    // This requires the parent to pass videoUrl if available
+  }
+  if (!thumbnail) {
+    const ytId = extractYouTubeId(link);
+    if (ytId) thumbnail = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+  }
+
   return (
     <Link to={link} className="group block">
       <div className="relative aspect-video rounded-xl overflow-hidden bg-muted">
