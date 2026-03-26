@@ -1,5 +1,6 @@
 import { useEffect, useRef, useMemo } from 'react';
 import Hls from 'hls.js';
+import { ExternalLink } from 'lucide-react';
 
 interface VideoPlayerProps {
   src?: string;
@@ -10,6 +11,7 @@ interface VideoPlayerProps {
 type VideoSource =
   | { type: 'youtube'; embedUrl: string }
   | { type: 'google-drive'; embedUrl: string }
+  | { type: 'external-only'; url: string; label: string }
   | { type: 'direct'; url: string }
   | { type: 'none' };
 
@@ -30,9 +32,9 @@ function parseVideoSource(src?: string): VideoSource {
     return { type: 'google-drive', embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview` };
   }
 
-  // GoFile: gofile.me or gofile.io links
+  // GoFile: cannot be embedded, open externally
   if (src.match(/gofile\.(me|io)\//)) {
-    return { type: 'google-drive', embedUrl: src };
+    return { type: 'external-only', url: src, label: 'GoFile에서 보기' };
   }
 
   // Direct video URL (MP4, HLS, etc.)
@@ -73,6 +75,19 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
           allowFullScreen
           title="Video player"
         />
+      ) : source.type === 'external-only' ? (
+        <div className="flex flex-col items-center justify-center h-full gap-4 bg-muted/50">
+          <p className="text-muted-foreground text-sm">이 영상은 외부 사이트에서만 재생할 수 있습니다.</p>
+          <a
+            href={source.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+          >
+            <ExternalLink className="w-5 h-5" />
+            {source.label}
+          </a>
+        </div>
       ) : source.type === 'direct' ? (
         <video
           ref={videoRef}
