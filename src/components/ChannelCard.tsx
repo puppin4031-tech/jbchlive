@@ -27,9 +27,9 @@ const ChannelCard = ({ channel }: ChannelCardProps) => {
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <h3 className="font-semibold text-base md:text-sm text-foreground truncate">{channel.name}</h3>
-        <p className="text-sm md:text-xs text-muted-foreground flex items-center gap-1">
-          <Users className="w-3 h-3" /> {channel.subscriber_count.toLocaleString()}명
+        <h3 className="font-semibold text-lg md:text-sm text-foreground truncate">{channel.name}</h3>
+        <p className="text-base md:text-xs text-muted-foreground flex items-center gap-1">
+          <Users className="w-4 h-4 md:w-3 md:h-3" /> {channel.subscriber_count.toLocaleString()}명
         </p>
       </div>
       <Button variant="outline" className="shrink-0 text-sm md:text-xs h-10 md:h-8 px-5 md:px-3" onClick={e => e.preventDefault()}>
