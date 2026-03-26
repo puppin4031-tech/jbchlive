@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Video, ArrowLeft, ExternalLink } from 'lucide-react';
 import { clientRateLimit } from '@/lib/security';
+import ThumbnailPicker from '@/components/ThumbnailPicker';
 
 interface SermonForm {
   title: string;
@@ -44,7 +45,7 @@ const validateForm = (form: SermonForm): string | null => {
   if (title.length > 200) return '제목은 200자 이하여야 합니다.';
   if (form.preacher.trim().length > 100) return '설교자 이름은 100자 이하여야 합니다.';
   if (form.video_url.trim() && !URL_REGEX.test(form.video_url.trim())) return '유효한 영상 URL을 입력해주세요 (http:// 또는 https://)';
-  if (form.thumbnail_url.trim() && !URL_REGEX.test(form.thumbnail_url.trim())) return '유효한 썸네일 URL을 입력해주세요 (http:// 또는 https://)';
+  
   if (form.description.trim().length > 2000) return '설명은 2000자 이하여야 합니다.';
   return null;
 };
@@ -298,8 +299,12 @@ const ManageSermonsPage = () => {
                 <p className="text-xs text-muted-foreground mt-1">GCS, NAS, 자체 서버 등 외부 영상 URL을 입력하세요 (HLS, MP4 지원)</p>
               </div>
               <div>
-                <Label>썸네일 URL</Label>
-                <Input value={form.thumbnail_url} onChange={e => setForm(f => ({ ...f, thumbnail_url: e.target.value }))} placeholder="https://... 썸네일 이미지 URL" maxLength={2000} />
+                <Label>썸네일</Label>
+                <ThumbnailPicker
+                  videoUrl={form.video_url}
+                  value={form.thumbnail_url}
+                  onChange={(url) => setForm(f => ({ ...f, thumbnail_url: url }))}
+                />
               </div>
               <div>
                 <Label>설명</Label>

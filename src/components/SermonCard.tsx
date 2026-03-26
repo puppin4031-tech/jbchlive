@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Radio, Eye, Clock } from 'lucide-react';
+import { extractYouTubeId } from '@/lib/thumbnailUtils';
 
 export interface SermonCardData {
   id: string;
@@ -7,6 +8,7 @@ export interface SermonCardData {
   preacher?: string;
   category: string;
   thumbnailUrl?: string;
+  videoUrl?: string;
   date?: string;
   views?: number;
   isLive?: boolean;
@@ -23,11 +25,18 @@ interface SermonCardProps {
 const SermonCard = ({ sermon }: SermonCardProps) => {
   const link = sermon.isLive ? `/live/${sermon.channelId}` : `/vod/${sermon.id}`;
 
+  // Auto-derive thumbnail: stored → YouTube video URL → placeholder
+  let thumbnail = sermon.thumbnailUrl;
+  if (!thumbnail && sermon.videoUrl) {
+    const ytId = extractYouTubeId(sermon.videoUrl);
+    if (ytId) thumbnail = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+  }
+
   return (
     <Link to={link} className="group block">
       <div className="relative aspect-video rounded-xl overflow-hidden bg-muted">
         <img
-          src={sermon.thumbnailUrl || '/placeholder.svg'}
+          src={thumbnail || '/placeholder.svg'}
           alt={sermon.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           loading="lazy"
