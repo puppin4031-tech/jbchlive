@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,8 +16,18 @@ const categories = ['전체', '주일말씀', '수요말씀', '특별집회'];
 const ChannelPage = () => {
   const { channelId } = useParams();
   const { user, isAdmin } = useAuth();
+  const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState('전체');
   const [subscribed, setSubscribed] = useState(false);
+
+  const requireLogin = (action: string) => {
+    if (!user) {
+      toast.info(`${action}은(는) 로그인 후 사용 가능합니다.`);
+      navigate('/login');
+      return true;
+    }
+    return false;
+  };
 
   const { data: channel, isLoading: channelLoading } = useQuery({
     queryKey: ['channel', channelId],
@@ -117,11 +127,18 @@ const ChannelPage = () => {
         <div className="flex gap-2">
           <Button
             className={subscribed ? 'bg-muted text-muted-foreground hover:bg-muted/80' : ''}
-            onClick={() => { setSubscribed(!subscribed); toast.success(subscribed ? '구독이 취소되었습니다.' : '구독되었습니다!'); }}
+            onClick={() => {
+              if (requireLogin('구독')) return;
+              setSubscribed(!subscribed);
+              toast.success(subscribed ? '구독이 취소되었습니다.' : '구독되었습니다!');
+            }}
           >
             {subscribed ? '구독중' : '구독'}
           </Button>
-          <Button variant="outline" onClick={() => { toast.info('즐겨찾기는 로그인 후 사용 가능합니다.'); }}>
+          <Button variant="outline" onClick={() => {
+            if (requireLogin('즐겨찾기')) return;
+            toast.info('즐겨찾기 기능 준비 중입니다.');
+          }}>
             <Heart className="w-4 h-4 mr-1" /> 즐겨찾기
           </Button>
           {canEdit && (
