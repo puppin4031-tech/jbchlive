@@ -30,9 +30,9 @@ const Header = () => {
 
   return (
     <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
-      <div className="container flex items-center justify-between h-16 md:h-14 px-4">
+       <div className="container flex items-center justify-between h-[4.5rem] md:h-14 px-4">
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <img src={logoImage} alt="Live Word Mission" className="w-10 h-10 md:w-8 md:h-8 object-contain" />
+          <img src={logoImage} alt="Live Word Mission" className="w-12 h-12 md:w-8 md:h-8 object-contain" />
           <span className="font-bold text-lg text-foreground hidden sm:inline">Live Word Mission</span>
         </Link>
 
