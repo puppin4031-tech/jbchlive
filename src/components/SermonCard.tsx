@@ -56,12 +56,12 @@ const SermonCard = ({ sermon }: SermonCardProps) => {
           <img src={sermon.channelLogoUrl} alt={sermon.channelName || ''} className="w-10 h-10 md:w-8 md:h-8 rounded-full object-cover shrink-0 mt-0.5" />
         )}
         <div className="min-w-0">
-          <h3 className="font-medium text-sm text-foreground line-clamp-2 leading-snug">{sermon.title}</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <h3 className="font-medium text-base md:text-sm text-foreground line-clamp-2 leading-snug">{sermon.title}</h3>
+          <p className="text-sm md:text-xs text-muted-foreground mt-0.5">
             {sermon.channelName}{sermon.preacher && ` · ${sermon.preacher}`}
           </p>
-          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-            <Eye className="w-3 h-3" /> {(sermon.views || 0).toLocaleString()}회 · {sermon.date?.slice(0, 10)}
+          <p className="text-sm md:text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+            <Eye className="w-4 h-4 md:w-3 md:h-3" /> {(sermon.views || 0).toLocaleString()}회 · {sermon.date?.slice(0, 10)}
           </p>
         </div>
       </div>

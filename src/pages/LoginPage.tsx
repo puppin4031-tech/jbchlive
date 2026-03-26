@@ -42,7 +42,7 @@ const LoginPage = () => {
           Google로 로그인
         </Button>
 
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm md:text-xs text-muted-foreground">
           로그인 시 즐겨찾기 저장 및 개인화된 추천을 받을 수 있습니다.
         </p>
       </div>

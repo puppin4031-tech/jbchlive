@@ -32,7 +32,7 @@ const ChannelCard = ({ channel }: ChannelCardProps) => {
           <Users className="w-3 h-3" /> {channel.subscriber_count.toLocaleString()}명
         </p>
       </div>
-      <Button size="sm" variant="outline" className="shrink-0 text-xs" onClick={e => e.preventDefault()}>
+      <Button size="sm" variant="outline" className="shrink-0 text-sm md:text-xs" onClick={e => e.preventDefault()}>
         구독
       </Button>
     </Link>

@@ -156,7 +156,7 @@ const Index = () => {
         {/* Channels */}
         {channels && channels.length > 0 && (
           <section>
-            <h2 className="font-semibold text-base mb-3 text-foreground">교회 채널</h2>
+            <h2 className="font-semibold text-lg md:text-base mb-3 text-foreground">교회 채널</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {channels.map(ch => <ChannelCard key={ch.id} channel={ch} />)}
             </div>
