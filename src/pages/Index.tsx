@@ -125,7 +125,7 @@ const Index = () => {
         {/* Other Live */}
         {liveChannels && liveChannels.length > 1 && (
           <section>
-            <h2 className="font-semibold text-base mb-3 text-foreground">다른 라이브</h2>
+            <h2 className="font-semibold text-lg md:text-base mb-3 text-foreground">다른 라이브</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {liveChannels.slice(1).map(ch => {
                 const sermon = liveSermons?.find(s => s.channel_id === ch.id);
@@ -137,7 +137,7 @@ const Index = () => {
 
         {/* Popular / Recent Sermons */}
         <section>
-          <h2 className="font-semibold text-base mb-3 text-foreground">말씀 다시보기</h2>
+          <h2 className="font-semibold text-lg md:text-base mb-3 text-foreground">말씀 다시보기</h2>
           <CategoryTabs categories={categories} active={activeCategory} onSelect={setActiveCategory} />
           {vodsLoading ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3">
@@ -156,7 +156,7 @@ const Index = () => {
         {/* Channels */}
         {channels && channels.length > 0 && (
           <section>
-            <h2 className="font-semibold text-base mb-3 text-foreground">교회 채널</h2>
+            <h2 className="font-semibold text-lg md:text-base mb-3 text-foreground">교회 채널</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {channels.map(ch => <ChannelCard key={ch.id} channel={ch} />)}
             </div>

@@ -14,7 +14,7 @@ const CategoryTabs = ({ categories, active, onSelect }: CategoryTabsProps) => {
           key={cat}
           size="sm"
           variant={active === cat ? 'default' : 'outline'}
-          className={`shrink-0 text-xs rounded-full ${active === cat ? 'bg-foreground text-background hover:bg-foreground/90' : ''}`}
+          className={`shrink-0 text-sm md:text-xs rounded-full ${active === cat ? 'bg-foreground text-background hover:bg-foreground/90' : ''}`}
           onClick={() => onSelect(cat)}
         >
           {cat}

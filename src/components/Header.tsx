@@ -32,7 +32,7 @@ const Header = () => {
     <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
       <div className="container flex items-center justify-between h-14 px-4">
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <img src={logoImage} alt="Live Word Mission" className="w-8 h-8 object-contain" />
+          <img src={logoImage} alt="Live Word Mission" className="w-10 h-10 md:w-8 md:h-8 object-contain" />
           <span className="font-bold text-lg text-foreground hidden sm:inline">Live Word Mission</span>
         </Link>
 
@@ -52,12 +52,12 @@ const Header = () => {
         <div className="flex items-center gap-1">
           {/* Mobile search toggle */}
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSearchOpen(!searchOpen)}>
-            {searchOpen ? <X className="w-5 h-5" /> : <Search className="w-5 h-5" />}
+            {searchOpen ? <X className="w-6 h-6" /> : <Search className="w-6 h-6" />}
           </Button>
 
           <Link to="/live">
-            <Button size="sm" className="bg-live text-live-foreground hover:bg-live/90 text-xs font-semibold px-3">
-              <Radio className="w-3.5 h-3.5 mr-1" />
+            <Button size="sm" className="bg-live text-live-foreground hover:bg-live/90 text-sm md:text-xs font-semibold px-4 md:px-3">
+              <Radio className="w-4 h-4 md:w-3.5 md:h-3.5 mr-1" />
               LIVE
             </Button>
           </Link>
@@ -69,7 +69,7 @@ const Header = () => {
                   {profile?.avatar_url ? (
                     <img src={profile.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
                   ) : (
-                    <User className="w-5 h-5" />
+                    <User className="w-6 h-6" />
                   )}
                 </Button>
               </DropdownMenuTrigger>
@@ -102,7 +102,7 @@ const Header = () => {
           ) : (
             <Link to="/login">
               <Button variant="ghost" size="icon">
-                <LogIn className="w-5 h-5" />
+                <LogIn className="w-6 h-6" />
               </Button>
             </Link>
           )}
