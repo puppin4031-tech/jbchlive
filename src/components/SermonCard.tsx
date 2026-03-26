@@ -53,7 +53,7 @@ const SermonCard = ({ sermon }: SermonCardProps) => {
       </div>
       <div className="mt-2 flex gap-2">
         {sermon.channelLogoUrl && (
-          <img src={sermon.channelLogoUrl} alt={sermon.channelName || ''} className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5" />
+          <img src={sermon.channelLogoUrl} alt={sermon.channelName || ''} className="w-10 h-10 md:w-8 md:h-8 rounded-full object-cover shrink-0 mt-0.5" />
         )}
         <div className="min-w-0">
           <h3 className="font-medium text-sm text-foreground line-clamp-2 leading-snug">{sermon.title}</h3>
