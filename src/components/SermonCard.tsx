@@ -8,6 +8,7 @@ export interface SermonCardData {
   preacher?: string;
   category: string;
   thumbnailUrl?: string;
+  videoUrl?: string;
   date?: string;
   views?: number;
   isLive?: boolean;
@@ -24,14 +25,10 @@ interface SermonCardProps {
 const SermonCard = ({ sermon }: SermonCardProps) => {
   const link = sermon.isLive ? `/live/${sermon.channelId}` : `/vod/${sermon.id}`;
 
-  // Auto-derive thumbnail from YouTube video URL if no thumbnail set
+  // Auto-derive thumbnail: stored → YouTube video URL → placeholder
   let thumbnail = sermon.thumbnailUrl;
-  if (!thumbnail && sermon.id) {
-    // Try to get YouTube thumbnail from video URL stored in the sermon
-    // This requires the parent to pass videoUrl if available
-  }
-  if (!thumbnail) {
-    const ytId = extractYouTubeId(link);
+  if (!thumbnail && sermon.videoUrl) {
+    const ytId = extractYouTubeId(sermon.videoUrl);
     if (ytId) thumbnail = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
   }
 
