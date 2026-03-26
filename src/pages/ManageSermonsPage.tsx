@@ -45,7 +45,7 @@ const validateForm = (form: SermonForm): string | null => {
   if (title.length > 200) return '제목은 200자 이하여야 합니다.';
   if (form.preacher.trim().length > 100) return '설교자 이름은 100자 이하여야 합니다.';
   if (form.video_url.trim() && !URL_REGEX.test(form.video_url.trim())) return '유효한 영상 URL을 입력해주세요 (http:// 또는 https://)';
-  if (form.thumbnail_url.trim() && !URL_REGEX.test(form.thumbnail_url.trim())) return '유효한 썸네일 URL을 입력해주세요 (http:// 또는 https://)';
+  
   if (form.description.trim().length > 2000) return '설명은 2000자 이하여야 합니다.';
   return null;
 };
