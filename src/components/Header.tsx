@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Search, Radio, X, Heart, LogIn, LogOut, Shield, User, PlusCircle, Tv } from 'lucide-react';
+import logoImage from '@/assets/logo.png';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,8 +32,8 @@ const Header = () => {
     <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
       <div className="container flex items-center justify-between h-14 px-4">
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <Radio className="w-6 h-6 text-primary-foreground" />
-          <span className="font-bold text-lg text-foreground">Live Word Mission</span>
+          <img src={logoImage} alt="Live Word Mission" className="w-8 h-8 object-contain" />
+          <span className="font-bold text-lg text-foreground hidden sm:inline">Live Word Mission</span>
         </Link>
 
         {/* Desktop search */}
