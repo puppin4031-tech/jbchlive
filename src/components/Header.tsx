@@ -101,8 +101,8 @@ const Header = () => {
             </DropdownMenu>
           ) : (
             <Link to="/login">
-              <Button variant="ghost" size="icon" className="w-11 h-11 md:w-9 md:h-9">
-                <LogIn className="w-7 h-7 md:w-5 md:h-5" />
+              <Button variant="ghost" size="icon" className="w-12 h-12 md:w-9 md:h-9">
+                <LogIn className="w-8 h-8 md:w-5 md:h-5" />
               </Button>
             </Link>
           )}
