@@ -299,8 +299,12 @@ const ManageSermonsPage = () => {
                 <p className="text-xs text-muted-foreground mt-1">GCS, NAS, 자체 서버 등 외부 영상 URL을 입력하세요 (HLS, MP4 지원)</p>
               </div>
               <div>
-                <Label>썸네일 URL</Label>
-                <Input value={form.thumbnail_url} onChange={e => setForm(f => ({ ...f, thumbnail_url: e.target.value }))} placeholder="https://... 썸네일 이미지 URL" maxLength={2000} />
+                <Label>썸네일</Label>
+                <ThumbnailPicker
+                  videoUrl={form.video_url}
+                  value={form.thumbnail_url}
+                  onChange={(url) => setForm(f => ({ ...f, thumbnail_url: url }))}
+                />
               </div>
               <div>
                 <Label>설명</Label>

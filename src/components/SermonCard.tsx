@@ -39,7 +39,7 @@ const SermonCard = ({ sermon }: SermonCardProps) => {
     <Link to={link} className="group block">
       <div className="relative aspect-video rounded-xl overflow-hidden bg-muted">
         <img
-          src={sermon.thumbnailUrl || '/placeholder.svg'}
+          src={thumbnail || '/placeholder.svg'}
           alt={sermon.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           loading="lazy"
