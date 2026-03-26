@@ -24,9 +24,9 @@ const LoginPage = () => {
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-8 text-center">
         <div className="flex flex-col items-center gap-3">
-          <Radio className="w-12 h-12 text-primary-foreground" />
-          <h1 className="text-2xl font-bold text-foreground">Live Word</h1>
-          <p className="text-muted-foreground text-sm">교회 말씀 스트리밍 플랫폼</p>
+          <Radio className="w-16 h-16 md:w-12 md:h-12 text-primary-foreground" />
+          <h1 className="text-3xl md:text-2xl font-bold text-foreground">Live Word</h1>
+          <p className="text-muted-foreground text-base md:text-sm">교회 말씀 스트리밍 플랫폼</p>
         </div>
 
         <Button
