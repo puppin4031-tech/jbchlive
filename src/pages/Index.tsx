@@ -112,10 +112,10 @@ const Index = () => {
               </div>
               <VideoPlayer src={currentLiveChannel.stream_url || ''} />
               <div className="mt-3 flex items-start gap-3">
-                <img src={currentLiveChannel.logo_url || '/placeholder.svg'} alt={currentLiveChannel.name} className="w-10 h-10 rounded-full object-cover" />
+                <img src={currentLiveChannel.logo_url || '/placeholder.svg'} alt={currentLiveChannel.name} className="w-12 h-12 md:w-10 md:h-10 rounded-full object-cover" />
                 <div>
-                  <h2 className="font-semibold text-base text-foreground">{currentLiveSermon?.title || currentLiveChannel.name}</h2>
-                  <p className="text-sm text-muted-foreground">{currentLiveChannel.name}{currentLiveSermon?.preacher && ` · ${currentLiveSermon.preacher}`}</p>
+                  <h2 className="font-semibold text-lg md:text-base text-foreground">{currentLiveSermon?.title || currentLiveChannel.name}</h2>
+                  <p className="text-base md:text-sm text-muted-foreground">{currentLiveChannel.name}{currentLiveSermon?.preacher && ` · ${currentLiveSermon.preacher}`}</p>
                 </div>
               </div>
             </Link>
