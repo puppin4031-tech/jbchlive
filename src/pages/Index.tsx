@@ -149,7 +149,7 @@ const Index = () => {
             </div>
           )}
           {vodSermons?.length === 0 && (
-            <p className="text-center text-muted-foreground py-8 text-sm">등록된 말씀이 없습니다.</p>
+            <p className="text-center text-muted-foreground py-8 text-base md:text-sm">등록된 말씀이 없습니다.</p>
           )}
         </section>
 
