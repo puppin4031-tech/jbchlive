@@ -69,7 +69,7 @@ const Header = () => {
                   {profile?.avatar_url ? (
                     <img src={profile.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
                   ) : (
-                    <User className="w-5 h-5" />
+                    <User className="w-6 h-6" />
                   )}
                 </Button>
               </DropdownMenuTrigger>
