@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Video, ArrowLeft, ExternalLink } from 'lucide-react';
 import { clientRateLimit } from '@/lib/security';
+import ThumbnailPicker from '@/components/ThumbnailPicker';
 
 interface SermonForm {
   title: string;
