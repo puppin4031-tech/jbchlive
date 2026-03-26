@@ -46,8 +46,8 @@ const SermonCard = ({ sermon }: SermonCardProps) => {
             <Radio className="w-4 h-4 md:w-3 md:h-3 animate-pulse" /> LIVE
           </span>
         ) : sermon.duration ? (
-          <span className="absolute bottom-2 right-2 flex items-center gap-1 bg-foreground/80 text-background text-xs px-1.5 py-0.5 rounded">
-            <Clock className="w-3 h-3" /> {sermon.duration}
+          <span className="absolute bottom-2 right-2 flex items-center gap-1 bg-foreground/80 text-background text-sm md:text-xs px-1.5 py-0.5 rounded">
+            <Clock className="w-4 h-4 md:w-3 md:h-3" /> {sermon.duration}
           </span>
         ) : null}
       </div>
