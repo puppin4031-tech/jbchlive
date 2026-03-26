@@ -49,7 +49,7 @@ const Header = () => {
           </div>
         </form>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2 md:gap-1">
           {/* Mobile search toggle */}
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSearchOpen(!searchOpen)}>
             {searchOpen ? <X className="w-6 h-6" /> : <Search className="w-6 h-6" />}
