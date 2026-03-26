@@ -125,7 +125,7 @@ const Index = () => {
         {/* Other Live */}
         {liveChannels && liveChannels.length > 1 && (
           <section>
-            <h2 className="font-semibold text-lg md:text-base mb-3 text-foreground">다른 라이브</h2>
+            <h2 className="font-semibold text-xl md:text-base mb-3 text-foreground">다른 라이브</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {liveChannels.slice(1).map(ch => {
                 const sermon = liveSermons?.find(s => s.channel_id === ch.id);
