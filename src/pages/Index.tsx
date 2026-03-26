@@ -137,7 +137,7 @@ const Index = () => {
 
         {/* Popular / Recent Sermons */}
         <section>
-          <h2 className="font-semibold text-lg md:text-base mb-3 text-foreground">말씀 다시보기</h2>
+          <h2 className="font-semibold text-xl md:text-base mb-3 text-foreground">말씀 다시보기</h2>
           <CategoryTabs categories={categories} active={activeCategory} onSelect={setActiveCategory} />
           {vodsLoading ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3">
