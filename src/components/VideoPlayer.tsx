@@ -30,6 +30,11 @@ function parseVideoSource(src?: string): VideoSource {
     return { type: 'google-drive', embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview` };
   }
 
+  // GoFile: gofile.me or gofile.io links
+  if (src.match(/gofile\.(me|io)\//)) {
+    return { type: 'google-drive', embedUrl: src };
+  }
+
   // Direct video URL (MP4, HLS, etc.)
   return { type: 'direct', url: src };
 }
