@@ -113,12 +113,12 @@ const Header = () => {
       {searchOpen && (
         <form onSubmit={handleSearch} className="md:hidden px-4 pb-3">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="말씀, 교회, 설교자 검색..."
-              className="pl-9 bg-muted border-none"
+              className="pl-10 bg-muted border-none h-12 text-base"
               autoFocus
             />
           </div>
