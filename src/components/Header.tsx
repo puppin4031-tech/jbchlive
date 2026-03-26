@@ -73,10 +73,10 @@ const Header = () => {
                   )}
                 </Button>
               </DropdownMenuTrigger>
-               <DropdownMenuContent align="end" className="w-56 md:w-48">
-                <div className="px-3 py-2 md:px-2 md:py-1.5">
-                  <p className="text-base md:text-sm font-medium text-foreground">{profile?.display_name || '사용자'}</p>
-                  <p className="text-sm md:text-xs text-muted-foreground truncate">{user.email}</p>
+               <DropdownMenuContent align="end" className="w-64 md:w-48">
+                <div className="px-4 py-3 md:px-2 md:py-1.5">
+                  <p className="text-lg md:text-sm font-medium text-foreground">{profile?.display_name || '사용자'}</p>
+                  <p className="text-base md:text-xs text-muted-foreground truncate">{user.email}</p>
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="py-3 md:py-2 text-base md:text-sm" onClick={() => navigate('/favorites')}>
