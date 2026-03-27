@@ -1,19 +1,66 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import SermonCard, { type SermonCardData } from '@/components/SermonCard';
 import ChannelCard from '@/components/ChannelCard';
 import CategoryTabs from '@/components/CategoryTabs';
 import VideoPlayer from '@/components/VideoPlayer';
-import { Radio } from 'lucide-react';
+import { Radio, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 
 const categories = ['전체', '주일말씀', '수요말씀', '특별집회'];
 
 const Index = () => {
   const [activeCategory, setActiveCategory] = useState('전체');
+  const [liveAlert, setLiveAlert] = useState<{ id: string; name: string; logoUrl: string | null } | null>(null);
+  const queryClient = useQueryClient();
+  const alertTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Realtime: listen for channels going live
+  useEffect(() => {
+    const channel = supabase
+      .channel('home-live-alerts')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'channels',
+          filter: 'is_approved=eq.true',
+        },
+        (payload) => {
+          const newRow = payload.new as any;
+          const oldRow = payload.old as any;
+          // Only show alert when is_live changes from false to true
+          if (newRow.is_live && !oldRow.is_live) {
+            setLiveAlert({
+              id: newRow.id,
+              name: newRow.name,
+              logoUrl: newRow.logo_url,
+            });
+            // Auto-dismiss after 10 seconds
+            if (alertTimeoutRef.current) clearTimeout(alertTimeoutRef.current);
+            alertTimeoutRef.current = setTimeout(() => setLiveAlert(null), 10000);
+            // Refresh live channels query
+            queryClient.invalidateQueries({ queryKey: ['live-channels'] });
+            queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+          }
+          if (!newRow.is_live && oldRow.is_live) {
+            queryClient.invalidateQueries({ queryKey: ['live-channels'] });
+            queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (alertTimeoutRef.current) clearTimeout(alertTimeoutRef.current);
+    };
+  }, [queryClient]);
 
   // Fetch live channels
   const { data: liveChannels } = useQuery({
@@ -99,6 +146,43 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
+
+      {/* Live Alert Banner */}
+      {liveAlert && (
+        <div className="fixed top-16 md:top-14 left-0 right-0 z-50 animate-in slide-in-from-top duration-300">
+          <Link
+            to={`/live/${liveAlert.id}`}
+            className="block"
+            onClick={() => setLiveAlert(null)}
+          >
+            <div className="bg-destructive text-destructive-foreground px-4 py-3 flex items-center gap-3 shadow-lg">
+              <span className="relative flex h-3 w-3 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive-foreground opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive-foreground"></span>
+              </span>
+              {liveAlert.logoUrl && (
+                <img src={liveAlert.logoUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
+              )}
+              <span className="font-semibold text-sm md:text-base truncate">
+                🔴 {liveAlert.name} 라이브가 시작되었습니다!
+              </span>
+              <span className="ml-auto text-xs opacity-80 shrink-0">시청하기 →</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0 text-destructive-foreground hover:bg-destructive-foreground/20"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setLiveAlert(null);
+                }}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </Link>
+        </div>
+      )}
 
       <main className="container px-4 py-4 max-w-5xl mx-auto space-y-6">
         {/* Live Now Section */}
