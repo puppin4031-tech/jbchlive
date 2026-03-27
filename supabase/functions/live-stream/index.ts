@@ -266,7 +266,7 @@ serve(async (req) => {
     const authHeader = req.headers.get("authorization");
     const user = await verifyUser(authHeader);
 
-    const { action, inputId, channelId } = await req.json();
+    const { action, inputId, channelId, vodTitle, vodCategory, vodPreacher } = await req.json();
 
     // Validate input IDs to prevent injection
     const ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
@@ -310,12 +310,56 @@ serve(async (req) => {
       }
       case "stopChannel": {
         if (!channelId) throw new Error("channelId required");
+        
+        // Get HLS URL before stopping (for VOD recording)
+        let recordingUrl: string | null = null;
+        try {
+          const hlsInfo = await getHLSUrl(channelId);
+          if (hlsInfo.hlsUrl) {
+            recordingUrl = hlsInfo.hlsUrl;
+          }
+        } catch {
+          // Channel may not have output yet, continue
+        }
+
         result = await stopChannelGCP(channelId);
+
         // Update is_live in DB
         await user.serviceClient
           .from("channels")
           .update({ is_live: false })
           .eq("id", channelId);
+
+        // Auto-save as VOD sermon
+        const title = (typeof vodTitle === "string" && vodTitle.trim())
+          ? vodTitle.trim()
+          : `라이브 녹화 ${new Date().toLocaleDateString("ko-KR")}`;
+        const category = (typeof vodCategory === "string" && vodCategory.trim())
+          ? vodCategory.trim()
+          : "주일말씀";
+        const preacher = (typeof vodPreacher === "string" && vodPreacher.trim())
+          ? vodPreacher.trim()
+          : null;
+
+        const { data: vodData, error: vodError } = await user.serviceClient
+          .from("sermons")
+          .insert({
+            channel_id: channelId,
+            title,
+            category,
+            preacher,
+            video_url: recordingUrl,
+            is_live: false,
+            sermon_date: new Date().toISOString(),
+          })
+          .select("id")
+          .single();
+
+        if (vodError) {
+          console.error("VOD auto-save error:", vodError);
+        }
+
+        result = { ...result as object, vod: vodData || null };
         break;
       }
       case "getStatus":

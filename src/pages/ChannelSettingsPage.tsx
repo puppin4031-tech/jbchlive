@@ -9,6 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { ImagePlus, Loader2, ArrowLeft, Copy, Check, ChevronDown, Radio, RefreshCw, Eye, EyeOff, Play, Square } from 'lucide-react';
 import { toast } from 'sonner';
 import { startChannel as apiStartChannel, stopChannel as apiStopChannel } from '@/lib/liveStreamApi';
@@ -27,6 +30,10 @@ const ChannelSettingsPage = () => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showStreamKey, setShowStreamKey] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [vodTitle, setVodTitle] = useState('');
+  const [vodCategory, setVodCategory] = useState('주일말씀');
+  const [vodPreacher, setVodPreacher] = useState('');
 
   const { data: channel, isLoading } = useQuery({
     queryKey: ['channel-settings', channelId],
@@ -148,21 +155,35 @@ const ChannelSettingsPage = () => {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const toggleLive = useMutation({
+  const startLive = useMutation({
     mutationFn: async () => {
       if (!channelId) throw new Error('채널 ID가 없습니다');
-      if (channel?.is_live) {
-        await apiStopChannel(channelId);
-      } else {
-        await apiStartChannel(channelId);
-      }
+      await apiStartChannel(channelId);
     },
     onSuccess: () => {
-      const msg = channel?.is_live ? '라이브가 종료되었습니다' : '라이브가 시작되었습니다';
-      toast.success(msg);
+      toast.success('라이브가 시작되었습니다');
       queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
     },
-    onError: (e: Error) => toast.error('라이브 전환 실패: ' + e.message),
+    onError: (e: Error) => toast.error('라이브 시작 실패: ' + e.message),
+  });
+
+  const stopLive = useMutation({
+    mutationFn: async () => {
+      if (!channelId) throw new Error('채널 ID가 없습니다');
+      await apiStopChannel(channelId, {
+        vodTitle: vodTitle.trim() || undefined,
+        vodCategory: vodCategory || undefined,
+        vodPreacher: vodPreacher.trim() || undefined,
+      });
+    },
+    onSuccess: () => {
+      toast.success('라이브가 종료되고 VOD로 저장되었습니다');
+      setStopDialogOpen(false);
+      setVodTitle('');
+      setVodPreacher('');
+      queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
+    },
+    onError: (e: Error) => toast.error('라이브 종료 실패: ' + e.message),
   });
 
   if (authLoading || isLoading) return null;
@@ -245,19 +266,25 @@ const ChannelSettingsPage = () => {
               {/* Live Start/Stop Button */}
               {streamKey && (
                 <Button
-                  onClick={() => toggleLive.mutate()}
-                  disabled={toggleLive.isPending}
+                  onClick={() => {
+                    if (channel?.is_live) {
+                      setStopDialogOpen(true);
+                    } else {
+                      startLive.mutate();
+                    }
+                  }}
+                  disabled={startLive.isPending || stopLive.isPending}
                   variant={channel?.is_live ? "destructive" : "default"}
                   className="w-full h-12 text-base font-semibold gap-2"
                 >
-                  {toggleLive.isPending ? (
+                  {(startLive.isPending || stopLive.isPending) ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : channel?.is_live ? (
                     <Square className="w-5 h-5" />
                   ) : (
                     <Play className="w-5 h-5" />
                   )}
-                  {toggleLive.isPending
+                  {(startLive.isPending || stopLive.isPending)
                     ? '처리 중...'
                     : channel?.is_live
                       ? '라이브 종료'
@@ -333,6 +360,65 @@ const ChannelSettingsPage = () => {
           )}
         </Card>
       </main>
+
+      {/* Stop Live & Save VOD Dialog */}
+      <Dialog open={stopDialogOpen} onOpenChange={setStopDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>라이브 종료 및 VOD 저장</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              라이브를 종료하면 녹화 영상이 자동으로 VOD로 저장됩니다.
+            </p>
+            <div className="space-y-2">
+              <Label>VOD 제목</Label>
+              <Input
+                value={vodTitle}
+                onChange={e => setVodTitle(e.target.value)}
+                placeholder={`라이브 녹화 ${new Date().toLocaleDateString('ko-KR')}`}
+                maxLength={200}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>카테고리</Label>
+              <Select value={vodCategory} onValueChange={setVodCategory}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="주일말씀">주일말씀</SelectItem>
+                  <SelectItem value="수요말씀">수요말씀</SelectItem>
+                  <SelectItem value="특별집회">특별집회</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>설교자</Label>
+              <Input
+                value={vodPreacher}
+                onChange={e => setVodPreacher(e.target.value)}
+                placeholder="설교자 이름 (선택)"
+                maxLength={100}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setStopDialogOpen(false)}>
+              취소
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => stopLive.mutate()}
+              disabled={stopLive.isPending}
+              className="gap-2"
+            >
+              {stopLive.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              종료 및 저장
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
