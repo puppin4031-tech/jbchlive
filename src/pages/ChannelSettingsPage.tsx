@@ -135,8 +135,6 @@ const ChannelSettingsPage = () => {
     mutationFn: async () => {
       if (!channelId) throw new Error('채널 ID가 없습니다');
       const newKey = crypto.randomUUID();
-
-      // Upsert into channel_stream_keys
       const { error } = await supabase.from('channel_stream_keys').upsert({
         channel_id: channelId,
         stream_key: newKey,
@@ -148,6 +146,23 @@ const ChannelSettingsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['stream-key', channelId] });
     },
     onError: (e: Error) => toast.error(e.message),
+  });
+
+  const toggleLive = useMutation({
+    mutationFn: async () => {
+      if (!channelId) throw new Error('채널 ID가 없습니다');
+      if (channel?.is_live) {
+        await apiStopChannel(channelId);
+      } else {
+        await apiStartChannel(channelId);
+      }
+    },
+    onSuccess: () => {
+      const msg = channel?.is_live ? '라이브가 종료되었습니다' : '라이브가 시작되었습니다';
+      toast.success(msg);
+      queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
+    },
+    onError: (e: Error) => toast.error('라이브 전환 실패: ' + e.message),
   });
 
   if (authLoading || isLoading) return null;
