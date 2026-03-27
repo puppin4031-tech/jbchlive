@@ -242,6 +242,29 @@ const ChannelSettingsPage = () => {
                 </div>
               )}
 
+              {/* Live Start/Stop Button */}
+              {streamKey && (
+                <Button
+                  onClick={() => toggleLive.mutate()}
+                  disabled={toggleLive.isPending}
+                  variant={channel?.is_live ? "destructive" : "default"}
+                  className="w-full h-12 text-base font-semibold gap-2"
+                >
+                  {toggleLive.isPending ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : channel?.is_live ? (
+                    <Square className="w-5 h-5" />
+                  ) : (
+                    <Play className="w-5 h-5" />
+                  )}
+                  {toggleLive.isPending
+                    ? '처리 중...'
+                    : channel?.is_live
+                      ? '라이브 종료'
+                      : '라이브 시작'}
+                </Button>
+              )}
+
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">RTMP 서버 URL</label>
                 <div className="flex items-center gap-2">
