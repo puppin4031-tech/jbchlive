@@ -9,8 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ImagePlus, Loader2, ArrowLeft, Copy, Check, ChevronDown, Radio, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { ImagePlus, Loader2, ArrowLeft, Copy, Check, ChevronDown, Radio, RefreshCw, Eye, EyeOff, Play, Square } from 'lucide-react';
 import { toast } from 'sonner';
+import { startChannel as apiStartChannel, stopChannel as apiStopChannel } from '@/lib/liveStreamApi';
 
 const ChannelSettingsPage = () => {
   const { channelId } = useParams();
