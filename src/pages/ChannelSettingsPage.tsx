@@ -266,19 +266,25 @@ const ChannelSettingsPage = () => {
               {/* Live Start/Stop Button */}
               {streamKey && (
                 <Button
-                  onClick={() => toggleLive.mutate()}
-                  disabled={toggleLive.isPending}
+                  onClick={() => {
+                    if (channel?.is_live) {
+                      setStopDialogOpen(true);
+                    } else {
+                      startLive.mutate();
+                    }
+                  }}
+                  disabled={startLive.isPending || stopLive.isPending}
                   variant={channel?.is_live ? "destructive" : "default"}
                   className="w-full h-12 text-base font-semibold gap-2"
                 >
-                  {toggleLive.isPending ? (
+                  {(startLive.isPending || stopLive.isPending) ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : channel?.is_live ? (
                     <Square className="w-5 h-5" />
                   ) : (
                     <Play className="w-5 h-5" />
                   )}
-                  {toggleLive.isPending
+                  {(startLive.isPending || stopLive.isPending)
                     ? '처리 중...'
                     : channel?.is_live
                       ? '라이브 종료'
