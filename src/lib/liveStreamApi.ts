@@ -1,8 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
 
-const invoke = async (action: string, params: Record<string, string> = {}) => {
+const invoke = async (action: string, params: Record<string, string | undefined> = {}) => {
+  // Remove undefined values
+  const cleanParams: Record<string, string> = {};
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined) cleanParams[k] = v;
+  }
   const { data, error } = await supabase.functions.invoke("live-stream", {
-    body: { action, ...params },
+    body: { action, ...cleanParams },
   });
   if (error) throw error;
   return data;
@@ -20,9 +25,9 @@ export const createChannel = (channelId: string, inputId: string) =>
 export const startChannel = (channelId: string) =>
   invoke("startChannel", { channelId });
 
-/** 채널 라이브 종료 */
-export const stopChannel = (channelId: string) =>
-  invoke("stopChannel", { channelId });
+/** 채널 라이브 종료 (자동 VOD 저장) */
+export const stopChannel = (channelId: string, vodOptions?: { vodTitle?: string; vodCategory?: string; vodPreacher?: string }) =>
+  invoke("stopChannel", { channelId, ...vodOptions });
 
 /** 채널 상태 조회 */
 export const getStatus = (channelId: string) =>
