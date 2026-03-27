@@ -32,7 +32,6 @@ async function getAccessToken(): Promise<string> {
 
   const signInput = `${header}.${payload}`;
 
-  // Import RSA private key
   const pemBody = sa.private_key
     .replace(/-----BEGIN PRIVATE KEY-----/, "")
     .replace(/-----END PRIVATE KEY-----/, "")
@@ -92,12 +91,11 @@ async function gcpFetch(url: string, options: RequestInit = {}) {
   return data;
 }
 
-// --- Verify admin role ---
+// --- Auth helpers ---
 
-async function verifyAdmin(authHeader: string | null) {
+async function verifyUser(authHeader: string | null) {
   if (!authHeader?.startsWith("Bearer ")) throw new Error("Unauthorized");
 
-  // Verify user identity via anon key client
   const anonClient = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -110,7 +108,6 @@ async function verifyAdmin(authHeader: string | null) {
 
   const userId = claimsData.claims.sub as string;
 
-  // Check admin role via service role client (bypasses RLS)
   const serviceClient = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -121,8 +118,25 @@ async function verifyAdmin(authHeader: string | null) {
     .eq("user_id", userId)
     .eq("role", "admin");
 
-  if (!roles || roles.length === 0) throw new Error("Forbidden: admin only");
-  return { id: userId };
+  const isAdmin = roles && roles.length > 0;
+  return { id: userId, isAdmin, serviceClient };
+}
+
+async function verifyChannelAccess(
+  user: { id: string; isAdmin: boolean; serviceClient: ReturnType<typeof createClient> },
+  channelId: string
+) {
+  if (user.isAdmin) return;
+
+  const { data: channel } = await user.serviceClient
+    .from("channels")
+    .select("owner_id")
+    .eq("id", channelId)
+    .single();
+
+  if (!channel || channel.owner_id !== user.id) {
+    throw new Error("Forbidden: not channel owner or admin");
+  }
 }
 
 // --- API Handlers ---
@@ -178,12 +192,12 @@ async function createChannel(channelId: string, inputId: string) {
   });
 }
 
-async function startChannel(channelId: string) {
+async function startChannelGCP(channelId: string) {
   const url = `${BASE_URL}/channels/${channelId}:start`;
   return gcpFetch(url, { method: "POST", body: "{}" });
 }
 
-async function stopChannel(channelId: string) {
+async function stopChannelGCP(channelId: string) {
   const url = `${BASE_URL}/channels/${channelId}:stop`;
   return gcpFetch(url, { method: "POST", body: "{}" });
 }
@@ -195,7 +209,6 @@ async function getChannelStatus(channelId: string) {
 
 async function getHLSUrl(channelId: string) {
   const channel = await getChannelStatus(channelId);
-  // HLS URL from the output config
   const manifest = channel.manifests?.[0];
   const outputUri = channel.output?.uri || "";
   const hlsUrl = `${outputUri}${manifest?.fileName || "main.m3u8"}`;
@@ -237,7 +250,6 @@ function checkRateLimit(userId: string, action: string) {
   entry.count++;
 }
 
-// Cleanup stale entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of rateLimitMap) {
@@ -252,7 +264,7 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("authorization");
-    const adminUser = await verifyAdmin(authHeader);
+    const user = await verifyUser(authHeader);
 
     const { action, inputId, channelId } = await req.json();
 
@@ -261,7 +273,19 @@ serve(async (req) => {
     if (inputId && !ID_REGEX.test(inputId)) throw new Error("Invalid inputId format");
     if (channelId && !ID_REGEX.test(channelId)) throw new Error("Invalid channelId format");
     if (action && !ID_REGEX.test(action)) throw new Error("Invalid action format");
-    checkRateLimit(adminUser.id, action);
+    checkRateLimit(user.id, action);
+
+    // Actions that require admin only
+    const adminOnlyActions = ["createInput", "createChannel"];
+    if (adminOnlyActions.includes(action) && !user.isAdmin) {
+      throw new Error("Forbidden: admin only");
+    }
+
+    // Actions that require channel owner or admin
+    const channelActions = ["startChannel", "stopChannel", "getStatus", "getHLSUrl"];
+    if (channelActions.includes(action) && channelId) {
+      await verifyChannelAccess(user, channelId);
+    }
 
     let result: unknown;
 
@@ -274,14 +298,26 @@ serve(async (req) => {
         if (!channelId || !inputId) throw new Error("channelId and inputId required");
         result = await createChannel(channelId, inputId);
         break;
-      case "startChannel":
+      case "startChannel": {
         if (!channelId) throw new Error("channelId required");
-        result = await startChannel(channelId);
+        result = await startChannelGCP(channelId);
+        // Update is_live in DB
+        await user.serviceClient
+          .from("channels")
+          .update({ is_live: true })
+          .eq("id", channelId);
         break;
-      case "stopChannel":
+      }
+      case "stopChannel": {
         if (!channelId) throw new Error("channelId required");
-        result = await stopChannel(channelId);
+        result = await stopChannelGCP(channelId);
+        // Update is_live in DB
+        await user.serviceClient
+          .from("channels")
+          .update({ is_live: false })
+          .eq("id", channelId);
         break;
+      }
       case "getStatus":
         if (!channelId) throw new Error("channelId required");
         result = await getChannelStatus(channelId);
