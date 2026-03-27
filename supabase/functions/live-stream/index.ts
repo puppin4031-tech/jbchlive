@@ -266,7 +266,7 @@ serve(async (req) => {
     const authHeader = req.headers.get("authorization");
     const user = await verifyUser(authHeader);
 
-    const { action, inputId, channelId } = await req.json();
+    const { action, inputId, channelId, vodTitle, vodCategory, vodPreacher } = await req.json();
 
     // Validate input IDs to prevent injection
     const ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
