@@ -155,21 +155,35 @@ const ChannelSettingsPage = () => {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const toggleLive = useMutation({
+  const startLive = useMutation({
     mutationFn: async () => {
       if (!channelId) throw new Error('채널 ID가 없습니다');
-      if (channel?.is_live) {
-        await apiStopChannel(channelId);
-      } else {
-        await apiStartChannel(channelId);
-      }
+      await apiStartChannel(channelId);
     },
     onSuccess: () => {
-      const msg = channel?.is_live ? '라이브가 종료되었습니다' : '라이브가 시작되었습니다';
-      toast.success(msg);
+      toast.success('라이브가 시작되었습니다');
       queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
     },
-    onError: (e: Error) => toast.error('라이브 전환 실패: ' + e.message),
+    onError: (e: Error) => toast.error('라이브 시작 실패: ' + e.message),
+  });
+
+  const stopLive = useMutation({
+    mutationFn: async () => {
+      if (!channelId) throw new Error('채널 ID가 없습니다');
+      await apiStopChannel(channelId, {
+        vodTitle: vodTitle.trim() || undefined,
+        vodCategory: vodCategory || undefined,
+        vodPreacher: vodPreacher.trim() || undefined,
+      });
+    },
+    onSuccess: () => {
+      toast.success('라이브가 종료되고 VOD로 저장되었습니다');
+      setStopDialogOpen(false);
+      setVodTitle('');
+      setVodPreacher('');
+      queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
+    },
+    onError: (e: Error) => toast.error('라이브 종료 실패: ' + e.message),
   });
 
   if (authLoading || isLoading) return null;
