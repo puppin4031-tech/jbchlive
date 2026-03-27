@@ -15,6 +15,52 @@ const categories = ['전체', '주일말씀', '수요말씀', '특별집회'];
 
 const Index = () => {
   const [activeCategory, setActiveCategory] = useState('전체');
+  const [liveAlert, setLiveAlert] = useState<{ id: string; name: string; logoUrl: string | null } | null>(null);
+  const queryClient = useQueryClient();
+  const alertTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Realtime: listen for channels going live
+  useEffect(() => {
+    const channel = supabase
+      .channel('home-live-alerts')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'channels',
+          filter: 'is_approved=eq.true',
+        },
+        (payload) => {
+          const newRow = payload.new as any;
+          const oldRow = payload.old as any;
+          // Only show alert when is_live changes from false to true
+          if (newRow.is_live && !oldRow.is_live) {
+            setLiveAlert({
+              id: newRow.id,
+              name: newRow.name,
+              logoUrl: newRow.logo_url,
+            });
+            // Auto-dismiss after 10 seconds
+            if (alertTimeoutRef.current) clearTimeout(alertTimeoutRef.current);
+            alertTimeoutRef.current = setTimeout(() => setLiveAlert(null), 10000);
+            // Refresh live channels query
+            queryClient.invalidateQueries({ queryKey: ['live-channels'] });
+            queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+          }
+          if (!newRow.is_live && oldRow.is_live) {
+            queryClient.invalidateQueries({ queryKey: ['live-channels'] });
+            queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (alertTimeoutRef.current) clearTimeout(alertTimeoutRef.current);
+    };
+  }, [queryClient]);
 
   // Fetch live channels
   const { data: liveChannels } = useQuery({
