@@ -30,6 +30,10 @@ const ChannelSettingsPage = () => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showStreamKey, setShowStreamKey] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [vodTitle, setVodTitle] = useState('');
+  const [vodCategory, setVodCategory] = useState('주일말씀');
+  const [vodPreacher, setVodPreacher] = useState('');
 
   const { data: channel, isLoading } = useQuery({
     queryKey: ['channel-settings', channelId],
