@@ -5,6 +5,7 @@ import Header from '@/components/Header';
 import VideoPlayer from '@/components/VideoPlayer';
 import SermonCard from '@/components/SermonCard';
 import { Eye, Calendar, Share2 } from 'lucide-react';
+import SermonChat from '@/components/SermonChat';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
