@@ -123,6 +123,8 @@ const VodPage = () => {
           <p className="text-sm text-muted-foreground whitespace-pre-line">{sermon.description}</p>
         )}
 
+        <SermonChat sermon={{ title: sermon.title, preacher: sermon.preacher, description: sermon.description, category: sermon.category }} />
+
         {related && related.length > 0 && (
           <section>
             <h2 className="font-semibold text-sm mb-2 text-foreground">추천 말씀</h2>
