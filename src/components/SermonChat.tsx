@@ -143,9 +143,26 @@ const SermonChat = ({ sermon }: SermonChatProps) => {
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {messages.length === 0 && (
-          <div className="text-center text-muted-foreground text-sm py-8">
-            <p className="mb-1">"{sermon.title}" 에 대해 궁금한 점을 물어보세요.</p>
-            <p className="text-xs">청교도·침례교 신학 기준으로 답변합니다.</p>
+          <div className="flex flex-col items-center gap-4 py-8">
+            <div className="text-center text-muted-foreground text-sm">
+              <p className="mb-1">"{sermon.title}" 에 대해 궁금한 점을 물어보세요.</p>
+              <p className="text-xs">청교도·침례교 신학 기준으로 답변합니다.</p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
+              {[
+                { label: '📋 동영상 요약', prompt: '이 설교 영상의 내용을 요약해 주세요.' },
+                { label: '📂 큰 주제로 나누기', prompt: '이 설교를 큰 주제별로 나누어 정리해 주세요.' },
+                { label: '💡 핵심 메시지는?', prompt: '이 설교의 핵심 메시지가 무엇인가요?' },
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  onClick={() => { setInput(preset.prompt); }}
+                  className="px-3 py-2 text-sm rounded-xl border border-border bg-muted/50 hover:bg-muted text-foreground transition-colors"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((msg, i) => (
