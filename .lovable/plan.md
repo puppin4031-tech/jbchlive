@@ -1,47 +1,62 @@
 
 
-# 모바일 폰트/버튼 크기 20% 확대 + 퍼블리시
+# VOD 페이지 AI 성경 채팅 구현
 
-## 요약
-모바일(md 미만)에서 폰트와 버튼 크기를 약 20% 키우고, 완료 후 퍼블리시합니다.
+## 개요
+VOD 영상 하단에 AI 채팅 버튼을 추가하고, 클릭 시 90% 불투명도 팝업이 열리며 상단에 X 닫기 버튼이 있는 채팅 UI를 구현합니다.
 
-## 변경 대상 및 내용
+## 구현 단계
 
-### 1. `src/index.css` — 모바일 기본 폰트 크기 확대
-- `body`에 모바일 기본 `font-size: 1.2rem` (md 이상에서는 기본값 복원)
+### 1. Edge Function 생성 — `supabase/functions/sermon-chat/index.ts`
+- Lovable AI Gateway (`https://ai.gateway.lovable.dev/v1/chat/completions`) 사용
+- 모델: `google/gemini-3-flash-preview`
+- SSE 스트리밍 응답
+- 시스템 프롬프트에 설교 메타데이터(제목, 설교자, 설명) + 신학 기준 포함:
+  - 문자적·역사적·문법적 해석
+  - 청교도 신학 (1689 런던 침례교 신앙고백)
+  - 성경 무오성·충족성
+  - 침례교 신앙 기준
 
-### 2. `src/components/Header.tsx`
-- 로고 `w-8 h-8` → `w-10 h-10`
-- LIVE 버튼 `text-xs px-3` → `text-sm px-4`
-- 아이콘들 `w-5 h-5` → `w-6 h-6`
+### 2. 채팅 컴포넌트 — `src/components/SermonChat.tsx`
+- **닫힌 상태**: 영상 정보 영역 아래에 "AI 말씀 도우미" 버튼 (MessageCircle 아이콘)
+- **열린 상태**: 화면 전체를 덮는 고정 팝업
+  - `bg-background/90 backdrop-blur` (불투명도 90%)
+  - 상단 헤더: 제목 + **X 닫기 버튼**
+  - 중간: 채팅 메시지 목록 (react-markdown 렌더링)
+  - 하단: 입력창 + 전송 버튼
+- SSE 스트리밍으로 실시간 토큰 표시
+- 대화 히스토리 유지
 
-### 3. `src/components/SermonCard.tsx`
-- 제목 `text-sm` → `text-base`
-- 메타 텍스트 `text-xs` → `text-sm`
-- 아이콘 `w-3 h-3` → `w-4 h-4`
-- 채널 로고 `w-8 h-8` → `w-10 h-10`
-- LIVE/duration 뱃지 텍스트 `text-xs` → `text-sm`
+### 3. VodPage 수정
+- `SermonChat` 컴포넌트를 영상 정보 아래, 추천 말씀 위에 배치
+- sermon 데이터를 props로 전달
 
-### 4. `src/components/ChannelCard.tsx`
-- 채널명 `text-sm` → `text-base`
-- 구독자 수 `text-xs` → `text-sm`
-- 구독 버튼 `text-xs` → `text-sm`
-- 로고 `w-12 h-12` → `w-14 h-14`
+### 4. 패키지 추가
+- `react-markdown`
 
-### 5. `src/components/CategoryTabs.tsx`
-- 탭 버튼 `text-xs` → `text-sm`
+## UI 레이아웃
 
-### 6. `src/pages/Index.tsx`
-- 섹션 제목 `text-base` → `text-lg`
+```text
+┌──────────────────────────┐
+│  VideoPlayer             │
+├──────────────────────────┤
+│  채널 로고 · 제목 · 공유  │
+├──────────────────────────┤
+│  [💬 AI 말씀 도우미] ← 버튼│
+├──────────────────────────┤
+│  추천 말씀                │
+└──────────────────────────┘
 
-### 7. `src/pages/LoginPage.tsx`
-- 로고 아이콘 `w-12 h-12` → `w-16 h-16`
-- 제목 `text-2xl` → `text-3xl`
-- 설명/하단 텍스트 크기 확대
-
-### 8. 퍼블리시
-- 모든 변경 완료 후 퍼블리시 실행
-
-## 접근 방식
-모바일 전용 반응형 클래스(`md:text-sm` 등)를 사용하여 데스크탑 레이아웃에는 영향을 주지 않으면서 모바일에서만 크기를 키웁니다.
+버튼 클릭 시:
+┌──────────────────────────┐
+│  AI 말씀 도우미     [X]  │ ← 상단 X 버튼
+│──────────────────────────│
+│  👤 창세기 1장에 대해...  │
+│  🤖 창세기 1장은...      │
+│                          │
+│──────────────────────────│
+│  [메시지 입력...]  [전송] │
+└──────────────────────────┘
+  (배경 불투명도 90%)
+```
 
