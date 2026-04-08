@@ -5,6 +5,7 @@ import Header from '@/components/Header';
 import VideoPlayer from '@/components/VideoPlayer';
 import SermonCard from '@/components/SermonCard';
 import { Eye, Calendar, Share2 } from 'lucide-react';
+import SermonChat from '@/components/SermonChat';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
@@ -121,6 +122,8 @@ const VodPage = () => {
         {sermon.description && (
           <p className="text-sm text-muted-foreground whitespace-pre-line">{sermon.description}</p>
         )}
+
+        <SermonChat sermon={{ title: sermon.title, preacher: sermon.preacher, description: sermon.description, category: sermon.category }} />
 
         {related && related.length > 0 && (
           <section>
