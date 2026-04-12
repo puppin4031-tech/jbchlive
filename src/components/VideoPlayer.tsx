@@ -34,10 +34,14 @@ function parseVideoSource(src?: string): VideoSource {
     return { type: 'google-drive', embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview` };
   }
 
-  // 3. 카카오TV
-  const kakaoMatch = src.match(/tv\.kakao\.com\/channel\/\d+\/cliplink\/(\d+)/);
-  if (kakaoMatch) {
-    return { type: 'kakao', embedUrl: `https://tv.kakao.com/embed/player/cliplink/${kakaoMatch[1]}` };
+  // 3. 카카오TV (cliplink 또는 단축 URL)
+  const kakaoClipMatch = src.match(/tv\.kakao\.com\/channel\/\d+\/cliplink\/(\d+)/);
+  if (kakaoClipMatch) {
+    return { type: 'kakao', embedUrl: `https://tv.kakao.com/embed/player/cliplink/${kakaoClipMatch[1]}` };
+  }
+  const kakaoShortMatch = src.match(/tv\.kakao\.com\/l\/(\d+)/);
+  if (kakaoShortMatch) {
+    return { type: 'kakao', embedUrl: `https://tv.kakao.com/embed/player/cliplink/${kakaoShortMatch[1]}` };
   }
 
   // 4. 아프리카TV
