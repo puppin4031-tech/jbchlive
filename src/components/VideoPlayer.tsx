@@ -11,6 +11,8 @@ interface VideoPlayerProps {
 type VideoSource =
   | { type: 'youtube'; embedUrl: string }
   | { type: 'google-drive'; embedUrl: string }
+  | { type: 'kakao'; embedUrl: string }
+  | { type: 'afreeca'; embedUrl: string }
   | { type: 'external-only'; url: string; label: string }
   | { type: 'direct'; url: string }
   | { type: 'none' };
@@ -18,7 +20,7 @@ type VideoSource =
 function parseVideoSource(src?: string): VideoSource {
   if (!src) return { type: 'none' };
 
-  // YouTube: various URL formats
+  // 1. YouTube
   const ytMatch = src.match(
     /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
   );
@@ -26,20 +28,34 @@ function parseVideoSource(src?: string): VideoSource {
     return { type: 'youtube', embedUrl: `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&rel=0` };
   }
 
-  // Google Drive: extract file ID
+  // 2. Google Drive
   const gdMatch = src.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
   if (gdMatch) {
     return { type: 'google-drive', embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview` };
   }
 
-  // GoFile: cannot be embedded, open externally
+  // 3. 카카오TV
+  const kakaoMatch = src.match(/tv\.kakao\.com\/channel\/\d+\/cliplink\/(\d+)/);
+  if (kakaoMatch) {
+    return { type: 'kakao', embedUrl: `https://tv.kakao.com/embed/player/cliplink/${kakaoMatch[1]}` };
+  }
+
+  // 4. 아프리카TV
+  const afreecaMatch = src.match(/play\.afreecatv\.com\/([^/]+)\/(\d+)/);
+  if (afreecaMatch) {
+    return { type: 'afreeca', embedUrl: `https://play.afreecatv.com/${afreecaMatch[1]}/${afreecaMatch[2]}/embed` };
+  }
+
+  // 5. GoFile (임베딩 불가)
   if (src.match(/gofile\.(me|io)\//)) {
     return { type: 'external-only', url: src, label: 'GoFile에서 보기' };
   }
 
-  // Direct video URL (MP4, HLS, etc.)
+  // 6. 직접 링크 (HLS, MP4 등)
   return { type: 'direct', url: src };
 }
+
+const IFRAME_TYPES = ['youtube', 'google-drive', 'kakao', 'afreeca'];
 
 const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -65,12 +81,14 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
     }
   }, [source, autoPlay]);
 
+  const isIframe = IFRAME_TYPES.includes(source.type);
+
   return (
     <div className="relative w-full aspect-video bg-foreground/5 rounded-xl overflow-hidden">
-      {source.type === 'youtube' || source.type === 'google-drive' ? (
+      {isIframe ? (
         <iframe
-          src={source.embedUrl}
-          className="w-full h-full"
+          src={(source as { embedUrl: string }).embedUrl}
+          className="w-full h-full border-none"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
           title="Video player"
