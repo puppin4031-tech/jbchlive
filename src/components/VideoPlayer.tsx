@@ -11,8 +11,6 @@ interface VideoPlayerProps {
 type VideoSource =
   | { type: 'youtube'; embedUrl: string }
   | { type: 'google-drive'; embedUrl: string }
-  | { type: 'kakao'; embedUrl: string }
-  | { type: 'afreeca'; embedUrl: string }
   | { type: 'external-only'; url: string; label: string }
   | { type: 'direct'; url: string }
   | { type: 'none' };
@@ -34,32 +32,14 @@ function parseVideoSource(src?: string): VideoSource {
     return { type: 'google-drive', embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview` };
   }
 
-  // 3. 카카오TV (cliplink 또는 단축 URL)
-  const kakaoClipMatch = src.match(/tv\.kakao\.com\/channel\/\d+\/cliplink\/(\d+)/);
-  if (kakaoClipMatch) {
-    return { type: 'kakao', embedUrl: `https://tv.kakao.com/embed/player/cliplink/${kakaoClipMatch[1]}` };
-  }
-  const kakaoShortMatch = src.match(/tv\.kakao\.com\/l\/(\d+)/);
-  if (kakaoShortMatch) {
-    return { type: 'kakao', embedUrl: `https://tv.kakao.com/embed/player/cliplink/${kakaoShortMatch[1]}` };
-  }
-
-  // 4. 아프리카TV
-  const afreecaMatch = src.match(/play\.afreecatv\.com\/([^/]+)\/(\d+)/);
-  if (afreecaMatch) {
-    return { type: 'afreeca', embedUrl: `https://play.afreecatv.com/${afreecaMatch[1]}/${afreecaMatch[2]}/embed` };
-  }
-
-  // 5. GoFile (임베딩 불가)
+  // 3. GoFile (임베딩 불가)
   if (src.match(/gofile\.(me|io)\//)) {
     return { type: 'external-only', url: src, label: 'GoFile에서 보기' };
   }
 
-  // 6. 직접 링크 (HLS, MP4 등)
+  // 4. 직접 링크 (HLS, MP4 등)
   return { type: 'direct', url: src };
 }
-
-const IFRAME_TYPES = ['youtube', 'google-drive', 'kakao', 'afreeca'];
 
 const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -85,7 +65,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
     }
   }, [source, autoPlay]);
 
-  const isIframe = IFRAME_TYPES.includes(source.type);
+  const isIframe = source.type === 'youtube' || source.type === 'google-drive';
 
   return (
     <div className="relative w-full aspect-video bg-foreground/5 rounded-xl overflow-hidden">
