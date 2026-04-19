@@ -1,30 +1,22 @@
 
 
-## 분석 결과: 해당 링크는 현재 코드로 작동합니다
+## 복구 계획: VideoPlayer를 KakaoTV/AfreecaTV 추가 이전 상태로
 
-사용자가 보낸 링크:
-```
-https://drive.google.com/file/d/1JYnRy1EGJtfOBLdMm6FU5cychZrUT2v4/view?usp=drive_link
-```
+### 변경 파일
+`src/components/VideoPlayer.tsx` 1개
 
-현재 정규식: `/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/`
+### 복구 내용
+- `VideoSource` 타입에서 `kakao`, `afreeca` 제거
+- `parseVideoSource`에서 카카오TV(cliplink, 단축 URL), 아프리카TV 파싱 로직 제거
+- `IFRAME_TYPES` 상수 제거하고 렌더링부에서 `youtube`/`google-drive`만 iframe으로 처리하던 원래 구조로 복원
+- YouTube, Google Drive, GoFile(external-only), 직접 링크(HLS/MP4) 지원은 그대로 유지
 
-→ `1JYnRy1EGJtfOBLdMm6FU5cychZrUT2v4` 부분이 정확히 매칭됩니다. 즉 `/file/d/FILE_ID/view?...` 형식은 **이미 지원됨**.
+### 복구 후 지원 목록
+- YouTube
+- Google Drive (`/file/d/ID/`)
+- GoFile (외부 링크 버튼)
+- 직접 링크 (HLS `.m3u8`, MP4 등)
 
-## 그럼 왜 안 켜질까?
-
-코드 문제가 아니라 **구글 드라이브 파일 공유 권한** 문제일 가능성이 매우 높습니다.
-
-- 임베드 URL(`/preview`)은 파일이 **"링크가 있는 모든 사용자"** 로 공유되어 있어야 재생됩니다.
-- 비공개거나 특정 사용자만 접근 가능한 파일은 iframe 안에 구글 로그인 화면이 뜨고 영상이 재생 안 됩니다.
-
-## 확인 방법
-
-해당 링크를 **시크릿 창**(로그인 안 된 상태)에서 열어보세요.
-- 영상이 보이면 → 권한 OK, 코드도 OK (다른 원인)
-- "권한이 필요합니다" 화면이 뜨면 → 구글 드라이브에서 공유 설정을 **"링크가 있는 모든 사용자 - 뷰어"** 로 변경 필요
-
-## 결론
-
-**코드 변경 불필요.** 구글 드라이브 파일의 공유 권한을 확인해 주세요. 만약 시크릿 창에서도 잘 보이는데 사이트에서만 안 보인다면, 그때 다시 알려주시면 다른 원인(예: 다른 URL 형식, `docs.google.com` 변형 등)을 추가로 조사하겠습니다.
+### 주의
+복구 후엔 카카오TV / 아프리카TV 링크를 넣으면 검은 화면(direct로 처리됨)이 됩니다. 사용자가 명시적으로 "이전 상태로 되돌려달라"고 요청했으므로 의도된 동작입니다.
 
