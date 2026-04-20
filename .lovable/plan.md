@@ -1,22 +1,43 @@
 
 
-## 복구 계획: VideoPlayer를 KakaoTV/AfreecaTV 추가 이전 상태로
+## 영상 등록 - 날짜(년/월/일) + 카테고리 (수정안)
 
-### 변경 파일
-`src/components/VideoPlayer.tsx` 1개
+### 변경 요약
+**파일 1개**: `src/pages/ManageSermonsPage.tsx`
 
-### 복구 내용
-- `VideoSource` 타입에서 `kakao`, `afreeca` 제거
-- `parseVideoSource`에서 카카오TV(cliplink, 단축 URL), 아프리카TV 파싱 로직 제거
-- `IFRAME_TYPES` 상수 제거하고 렌더링부에서 `youtube`/`google-drive`만 iframe으로 처리하던 원래 구조로 복원
-- YouTube, Google Drive, GoFile(external-only), 직접 링크(HLS/MP4) 지원은 그대로 유지
+### 1. 카테고리 드롭다운
+옵션: **주일말씀 / 전도집회 / 조각말씀 / 수련회 / 동계수련회**
 
-### 복구 후 지원 목록
-- YouTube
-- Google Drive (`/file/d/ID/`)
-- GoFile (외부 링크 버튼)
-- 직접 링크 (HLS `.m3u8`, MP4 등)
+### 2. 날짜 입력 (년/월/일 드롭다운 3개)
 
-### 주의
-복구 후엔 카카오TV / 아프리카TV 링크를 넣으면 검은 화면(direct로 처리됨)이 됩니다. 사용자가 명시적으로 "이전 상태로 되돌려달라"고 요청했으므로 의도된 동작입니다.
+**년 옵션** (수정됨):
+- "선택 안함"
+- 현재 연도(2026) → 2010 까지 한 해씩
+- **"2010년 이전"** (특수값)
+
+**월 옵션**: 선택 안함 / 1~12
+**일 옵션**: 선택 안함 / 1~말일 (선택된 년·월 기준 자동 조정)
+
+### 3. 저장 로직
+- **년/월/일 모두 선택** → `new Date(y, m-1, d).toISOString()` 저장
+- **"2010년 이전" 선택** → `2009-12-31T00:00:00Z` 로 저장 (정렬 시 가장 오래된 영상으로 묶임)
+  - 월/일 드롭다운은 비활성화
+- **하나라도 "선택 안함"** → `new Date()` (등록 시각) 저장 → 업로드 순서대로 최신에 위치
+
+### 4. 수정 모드
+기존 `sermon_date` 파싱:
+- `< 2010-01-01` → "2010년 이전"으로 표시
+- 그 외 → 년/월/일 분해해서 드롭다운 채움
+
+### 5. 정렬
+기존 `sermon_date DESC` 유지. 사용자 의도대로 동작:
+- 날짜 입력 → 그 날짜 위치
+- 2010년 이전 → 맨 뒤
+- 비움 → 최신 (업로드 시각)
+
+### 기술 메모
+- 폼 임시 상태: `sermon_year` (string, "" | "pre-2010" | "2026"~"2010"), `sermon_month`, `sermon_day`
+- `sermon_year === "pre-2010"` 일 때 월/일 Select disabled + 값 강제 ""
+- 일 옵션은 `useMemo`로 `new Date(y, m, 0).getDate()` 계산
+- DB 마이그레이션 불필요 (`sermon_date`는 timestamptz)
 
