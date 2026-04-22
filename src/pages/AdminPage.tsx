@@ -353,8 +353,8 @@ const AdminPage = () => {
 
           <TabsContent value="channels" className="space-y-3 mt-4">
             {channels.map(ch => {
-              const isStarting = setupAndStartLive.isPending && setupAndStartLive.variables?.id === ch.id;
               const isStopping = stopLive.isPending && stopLive.variables?.id === ch.id;
+              const isReprov = reprovisionChannel.isPending && reprovisionChannel.variables === ch.id;
 
               return (
                 <Card key={ch.id} className={`p-4 space-y-2 ${ch.is_suspended ? 'border-destructive/50' : ''}`}>
@@ -369,8 +369,16 @@ const AdminPage = () => {
                         )}
                         {ch.is_live && <Badge className="bg-live text-live-foreground text-xs">LIVE</Badge>}
                         {ch.is_suspended && <Badge variant="destructive" className="text-xs">정지됨</Badge>}
+                        {ch.gcp_input_uri ? (
+                          <Badge variant="outline" className="text-xs">GCP ✓</Badge>
+                        ) : ch.is_approved ? (
+                          <Badge variant="destructive" className="text-xs">GCP 미설정</Badge>
+                        ) : null}
                       </div>
                       <p className="text-xs text-muted-foreground truncate mt-1">{ch.stream_url || '스트림 URL 없음'}</p>
+                      {ch.gcp_last_error && (
+                        <p className="text-xs text-destructive mt-1 break-words">⚠️ GCP: {ch.gcp_last_error}</p>
+                      )}
                       {ch.is_suspended && ch.suspended_reason && (
                         <p className="text-xs text-destructive mt-1">사유: {ch.suspended_reason}</p>
                       )}
@@ -384,7 +392,18 @@ const AdminPage = () => {
                       >
                         {ch.is_approved ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                       </Button>
-                      {ch.is_live ? (
+                      {ch.is_approved && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => reprovisionChannel.mutate(ch.id)}
+                          disabled={isReprov}
+                          title="GCP 재프로비저닝"
+                        >
+                          {isReprov ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />}
+                        </Button>
+                      )}
+                      {ch.is_live && (
                         <Button
                           size="sm"
                           variant="destructive"
@@ -393,16 +412,6 @@ const AdminPage = () => {
                         >
                           {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
                           라이브 종료
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => setupAndStartLive.mutate({ id: ch.id, name: ch.name })}
-                          disabled={isStarting}
-                        >
-                          {isStarting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Radio className="w-4 h-4 mr-1" />}
-                          라이브 시작
                         </Button>
                       )}
                       <Button size="icon" variant="ghost" onClick={() => deleteChannel.mutate(ch.id)}>
