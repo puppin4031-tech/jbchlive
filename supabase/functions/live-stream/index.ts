@@ -286,7 +286,7 @@ async function getHLSUrl(channelId: string) {
   const channel = await getChannelGCP(channelId);
   const manifest = channel.manifests?.[0];
   const outputUri = channel.output?.uri || "";
-  const hlsUrl = `${outputUri}${manifest?.fileName || "main.m3u8"}`;
+  const hlsUrl = `${outputUri}${manifest?.fileName || "manifest.m3u8"}`;
   return {
     hlsUrl,
     streamingState: channel.streamingState,
