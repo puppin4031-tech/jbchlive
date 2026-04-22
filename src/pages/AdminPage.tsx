@@ -248,10 +248,13 @@ const AdminPage = () => {
           ))}
         </div>
 
-        <Tabs defaultValue={pendingChannels.length > 0 ? "pending" : "channels"}>
-          <TabsList>
+        <Tabs defaultValue={openReports.length > 0 ? "reports" : (pendingChannels.length > 0 ? "pending" : "channels")}>
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="pending">
               승인 대기 {pendingChannels.length > 0 && <Badge variant="destructive" className="ml-1 text-xs">{pendingChannels.length}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="reports">
+              신고 관리 {openReports.length > 0 && <Badge variant="destructive" className="ml-1 text-xs">{openReports.length}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="channels">전체 채널</TabsTrigger>
             <TabsTrigger value="new">새 채널</TabsTrigger>
@@ -285,53 +288,85 @@ const AdminPage = () => {
               const isStopping = stopLive.isPending && stopLive.variables?.id === ch.id;
 
               return (
-                <Card key={ch.id} className="p-4 flex items-center justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-foreground truncate">{ch.name}</span>
-                      {ch.is_approved ? (
-                        <Badge variant="secondary" className="text-xs">승인됨</Badge>
-                      ) : (
-                        <Badge variant="destructive" className="text-xs">미승인</Badge>
+                <Card key={ch.id} className={`p-4 space-y-2 ${ch.is_suspended ? 'border-destructive/50' : ''}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-foreground truncate">{ch.name}</span>
+                        {ch.is_approved ? (
+                          <Badge variant="secondary" className="text-xs">승인됨</Badge>
+                        ) : (
+                          <Badge variant="destructive" className="text-xs">미승인</Badge>
+                        )}
+                        {ch.is_live && <Badge className="bg-live text-live-foreground text-xs">LIVE</Badge>}
+                        {ch.is_suspended && <Badge variant="destructive" className="text-xs">정지됨</Badge>}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate mt-1">{ch.stream_url || '스트림 URL 없음'}</p>
+                      {ch.is_suspended && ch.suspended_reason && (
+                        <p className="text-xs text-destructive mt-1">사유: {ch.suspended_reason}</p>
                       )}
-                      {ch.is_live && <Badge className="bg-live text-live-foreground text-xs">LIVE</Badge>}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate mt-1">{ch.stream_url || '스트림 URL 없음'}</p>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => toggleApproval.mutate({ id: ch.id, approved: !ch.is_approved })}
+                        title={ch.is_approved ? '승인 취소' : '승인'}
+                      >
+                        {ch.is_approved ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                      </Button>
+                      {ch.is_live ? (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => stopLive.mutate({ id: ch.id })}
+                          disabled={isStopping}
+                        >
+                          {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                          라이브 종료
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => setupAndStartLive.mutate({ id: ch.id, name: ch.name })}
+                          disabled={isStarting}
+                        >
+                          {isStarting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Radio className="w-4 h-4 mr-1" />}
+                          라이브 시작
+                        </Button>
+                      )}
+                      <Button size="icon" variant="ghost" onClick={() => deleteChannel.mutate(ch.id)}>
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  {ch.is_suspended ? (
                     <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => toggleApproval.mutate({ id: ch.id, approved: !ch.is_approved })}
-                      title={ch.is_approved ? '승인 취소' : '승인'}
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => toggleSuspend.mutate({ id: ch.id, suspend: false })}
                     >
-                      {ch.is_approved ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                      정지 해제
                     </Button>
-                    {ch.is_live ? (
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="정지 사유 (선택)"
+                        value={suspendReasons[ch.id] || ''}
+                        onChange={e => setSuspendReasons(p => ({ ...p, [ch.id]: e.target.value }))}
+                        className="text-xs h-8"
+                      />
                       <Button
                         size="sm"
                         variant="destructive"
-                        onClick={() => stopLive.mutate({ id: ch.id })}
-                        disabled={isStopping}
+                        onClick={() => toggleSuspend.mutate({ id: ch.id, suspend: true, reason: suspendReasons[ch.id] })}
                       >
-                        {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-                        라이브 종료
+                        <Ban className="w-3.5 h-3.5 mr-1" /> 정지
                       </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="default"
-                        onClick={() => setupAndStartLive.mutate({ id: ch.id, name: ch.name })}
-                        disabled={isStarting}
-                      >
-                        {isStarting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Radio className="w-4 h-4 mr-1" />}
-                        라이브 시작
-                      </Button>
-                    )}
-                    <Button size="icon" variant="ghost" onClick={() => deleteChannel.mutate(ch.id)}>
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
-                  </div>
+                    </div>
+                  )}
                 </Card>
               );
             })}
