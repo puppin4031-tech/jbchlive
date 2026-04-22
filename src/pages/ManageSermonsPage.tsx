@@ -126,6 +126,55 @@ const ManageSermonsPage = () => {
     enabled: !!channelId,
   });
 
+  // Reports received on my channel's sermons
+  const sermonIds = (sermons || []).map(s => s.id);
+  const { data: receivedReports = [] } = useQuery({
+    queryKey: ['received-reports', channelId, sermonIds.join(',')],
+    queryFn: async () => {
+      if (sermonIds.length === 0) return [];
+      const { data } = await supabase
+        .from('sermon_reports')
+        .select('*, sermons(id, title), sermon_report_replies(*)')
+        .in('sermon_id', sermonIds)
+        .order('created_at', { ascending: false });
+      return data ?? [];
+    },
+    enabled: sermonIds.length > 0,
+  });
+
+  const reportCountBySermon = receivedReports.reduce<Record<string, number>>((acc, r: any) => {
+    if (r.status === 'open') acc[r.sermon_id] = (acc[r.sermon_id] || 0) + 1;
+    return acc;
+  }, {});
+
+  const [replyTexts, setReplyTexts] = useState<Record<string, string>>({});
+
+  const postOwnerReply = useMutation({
+    mutationFn: async ({ reportId, body }: { reportId: string; body: string }) => {
+      if (!user) throw new Error('로그인 필요');
+      const { error } = await supabase.from('sermon_report_replies').insert({
+        report_id: reportId,
+        author_id: user.id,
+        author_role: 'owner',
+        body: body.trim().slice(0, 2000),
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      setReplyTexts(p => ({ ...p, [vars.reportId]: '' }));
+      queryClient.invalidateQueries({ queryKey: ['received-reports', channelId] });
+      toast.success('답변이 등록되었습니다.');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const REASON_LABELS: Record<string, string> = {
+    heresy: '이단 교리',
+    inappropriate: '부적절한 영상',
+    copyright: '저작권 침해',
+    other: '기타',
+  };
+
   const upsertMutation = useMutation({
     mutationFn: async (data: SermonForm & { id?: string }) => {
       const payload = {
