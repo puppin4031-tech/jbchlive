@@ -241,16 +241,23 @@ async function createChannel(channelId: string, inputId: string) {
       ],
       muxStreams: [
         {
-          key: "mux-video-audio",
+          key: "mux-video",
           container: "fmp4",
-          elementaryStreams: ["video-stream", "audio-stream"],
+          elementaryStreams: ["video-stream"],
+          segmentSettings: { segmentDuration: "6s" },
+        },
+        {
+          key: "mux-audio",
+          container: "fmp4",
+          elementaryStreams: ["audio-stream"],
+          segmentSettings: { segmentDuration: "6s" },
         },
       ],
       manifests: [
         {
-          fileName: "main.m3u8",
+          fileName: "manifest.m3u8",
           type: "HLS",
-          muxStreams: ["mux-video-audio"],
+          muxStreams: ["mux-video", "mux-audio"],
           maxSegmentCount: 5,
           segmentKeepDuration: "60s",
         },
