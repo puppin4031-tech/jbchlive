@@ -282,6 +282,15 @@ async function stopChannelGCP(channelId: string) {
   return gcpFetch(url, { method: "POST", body: "{}" });
 }
 
+async function deleteChannelGCP(channelId: string) {
+  const op = await gcpFetch(`${BASE_URL}/channels/${channelId}`, { method: "DELETE" });
+  if (op.name) {
+    await waitForOperation(op.name).catch((e) =>
+      console.error("deleteChannel wait failed", e)
+    );
+  }
+}
+
 async function getHLSUrl(channelId: string) {
   const channel = await getChannelGCP(channelId);
   const manifest = channel.manifests?.[0];
