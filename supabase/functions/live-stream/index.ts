@@ -352,12 +352,19 @@ async function provisionChannel(
     }
     const inputUri = input.uri;
 
-    // Step 2: Create or fetch Channel
+    // Step 2: Ensure Channel matches current config.
+    // Best-effort cleanup: if a channel already exists (possibly from a failed
+    // earlier attempt with a different mux config), delete it before recreating.
     try {
       await getChannelGCP(gcpChannelId);
+      // Exists — delete to ensure fresh creation with current mux config
+      await deleteChannelGCP(gcpChannelId).catch((e) =>
+        console.error("Cleanup deleteChannel failed:", e)
+      );
     } catch {
-      await createChannel(gcpChannelId, inputId);
+      // Channel does not exist, nothing to clean up
     }
+    await createChannel(gcpChannelId, inputId);
 
     // Step 3: Save to DB
     const { error: dbErr } = await serviceClient
