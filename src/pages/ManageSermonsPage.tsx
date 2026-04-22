@@ -370,6 +370,59 @@ const ManageSermonsPage = () => {
           </div>
         )}
 
+        {receivedReports.length > 0 && (
+          <section className="space-y-3 pt-4">
+            <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
+              <Flag className="w-4 h-4 text-destructive" /> 받은 신고 ({receivedReports.length})
+            </h2>
+            {receivedReports.map((r: any) => (
+              <Card key={r.id} className="p-4 space-y-3">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant="outline" className="text-xs">{REASON_LABELS[r.reason] || r.reason}</Badge>
+                    <Badge variant={r.status === 'open' ? 'destructive' : 'secondary'} className="text-xs">
+                      {r.status === 'open' ? '처리 대기' : r.status === 'resolved' ? '처리됨' : '기각됨'}
+                    </Badge>
+                  </div>
+                  <p className="text-sm font-medium mt-2">{r.sermons?.title}</p>
+                  {r.detail && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{r.detail}</p>}
+                  <p className="text-xs text-muted-foreground mt-1">{new Date(r.created_at).toLocaleString('ko-KR')}</p>
+                </div>
+
+                {r.sermon_report_replies?.length > 0 && (
+                  <div className="space-y-2 pl-3 border-l-2 border-muted">
+                    {r.sermon_report_replies.map((rep: any) => (
+                      <div key={rep.id} className="text-sm">
+                        <span className="text-xs font-semibold text-muted-foreground">
+                          {rep.author_role === 'admin' ? '관리자' : rep.author_role === 'owner' ? '나 (담당자)' : '신고자'}
+                        </span>
+                        <p className="whitespace-pre-wrap">{rep.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="답변 입력..."
+                    value={replyTexts[r.id] || ''}
+                    onChange={e => setReplyTexts(p => ({ ...p, [r.id]: e.target.value }))}
+                    maxLength={2000}
+                    className="text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => postOwnerReply.mutate({ reportId: r.id, body: replyTexts[r.id] || '' })}
+                    disabled={!replyTexts[r.id]?.trim() || postOwnerReply.isPending}
+                  >
+                    답변
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </section>
+        )}
+
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
