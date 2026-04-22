@@ -1,6 +1,14 @@
 import { Link } from 'react-router-dom';
-import { Radio, Eye, Clock } from 'lucide-react';
+import { useState } from 'react';
+import { Radio, Eye, Clock, Flag, MoreVertical } from 'lucide-react';
 import { extractYouTubeId } from '@/lib/thumbnailUtils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import ReportDialog from '@/components/ReportDialog';
 
 export interface SermonCardData {
   id: string;
@@ -24,6 +32,7 @@ interface SermonCardProps {
 
 const SermonCard = ({ sermon }: SermonCardProps) => {
   const link = sermon.isLive ? `/live/${sermon.channelId}` : `/vod/${sermon.id}`;
+  const [reportOpen, setReportOpen] = useState(false);
 
   // Auto-derive thumbnail: stored → YouTube video URL → placeholder
   let thumbnail = sermon.thumbnailUrl;
@@ -33,7 +42,8 @@ const SermonCard = ({ sermon }: SermonCardProps) => {
   }
 
   return (
-    <Link to={link} className="group block">
+    <div className="group block relative">
+      <Link to={link} className="block">
       <div className="relative aspect-video rounded-xl overflow-hidden bg-muted">
         <img
           src={thumbnail || '/placeholder.svg'}
@@ -64,8 +74,38 @@ const SermonCard = ({ sermon }: SermonCardProps) => {
             <Eye className="w-5 h-5 md:w-3 md:h-3" /> {(sermon.views || 0).toLocaleString()}회 · {sermon.date?.slice(0, 10)}
           </p>
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
+            <button
+              type="button"
+              className="ml-auto shrink-0 p-1.5 rounded-full hover:bg-muted text-muted-foreground"
+              aria-label="메뉴"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setReportOpen(true);
+              }}
+            >
+              <Flag className="w-4 h-4 mr-2" /> 신고하기
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-    </Link>
+      </Link>
+      <ReportDialog
+        sermonId={sermon.id}
+        sermonTitle={sermon.title}
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+      />
+    </div>
   );
 };
 
