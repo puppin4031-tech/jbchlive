@@ -15,7 +15,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Video, ArrowLeft, ExternalLink, Flag, EyeOff } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
 import { clientRateLimit } from '@/lib/security';
 import ThumbnailPicker from '@/components/ThumbnailPicker';
 
