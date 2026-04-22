@@ -241,16 +241,23 @@ async function createChannel(channelId: string, inputId: string) {
       ],
       muxStreams: [
         {
-          key: "mux-video-audio",
+          key: "mux-video",
           container: "fmp4",
-          elementaryStreams: ["video-stream", "audio-stream"],
+          elementaryStreams: ["video-stream"],
+          segmentSettings: { segmentDuration: "6s" },
+        },
+        {
+          key: "mux-audio",
+          container: "fmp4",
+          elementaryStreams: ["audio-stream"],
+          segmentSettings: { segmentDuration: "6s" },
         },
       ],
       manifests: [
         {
-          fileName: "main.m3u8",
+          fileName: "manifest.m3u8",
           type: "HLS",
-          muxStreams: ["mux-video-audio"],
+          muxStreams: ["mux-video", "mux-audio"],
           maxSegmentCount: 5,
           segmentKeepDuration: "60s",
         },
@@ -275,11 +282,20 @@ async function stopChannelGCP(channelId: string) {
   return gcpFetch(url, { method: "POST", body: "{}" });
 }
 
+async function deleteChannelGCP(channelId: string) {
+  const op = await gcpFetch(`${BASE_URL}/channels/${channelId}`, { method: "DELETE" });
+  if (op.name) {
+    await waitForOperation(op.name).catch((e) =>
+      console.error("deleteChannel wait failed", e)
+    );
+  }
+}
+
 async function getHLSUrl(channelId: string) {
   const channel = await getChannelGCP(channelId);
   const manifest = channel.manifests?.[0];
   const outputUri = channel.output?.uri || "";
-  const hlsUrl = `${outputUri}${manifest?.fileName || "main.m3u8"}`;
+  const hlsUrl = `${outputUri}${manifest?.fileName || "manifest.m3u8"}`;
   return {
     hlsUrl,
     streamingState: channel.streamingState,
@@ -336,12 +352,19 @@ async function provisionChannel(
     }
     const inputUri = input.uri;
 
-    // Step 2: Create or fetch Channel
+    // Step 2: Ensure Channel matches current config.
+    // Best-effort cleanup: if a channel already exists (possibly from a failed
+    // earlier attempt with a different mux config), delete it before recreating.
     try {
       await getChannelGCP(gcpChannelId);
+      // Exists — delete to ensure fresh creation with current mux config
+      await deleteChannelGCP(gcpChannelId).catch((e) =>
+        console.error("Cleanup deleteChannel failed:", e)
+      );
     } catch {
-      await createChannel(gcpChannelId, inputId);
+      // Channel does not exist, nothing to clean up
     }
+    await createChannel(gcpChannelId, inputId);
 
     // Step 3: Save to DB
     const { error: dbErr } = await serviceClient
