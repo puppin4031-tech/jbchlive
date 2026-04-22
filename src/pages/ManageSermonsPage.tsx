@@ -13,7 +13,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Video, ArrowLeft, ExternalLink } from 'lucide-react';
+import { Plus, Pencil, Trash2, Video, ArrowLeft, ExternalLink, Flag, EyeOff } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import { clientRateLimit } from '@/lib/security';
 import ThumbnailPicker from '@/components/ThumbnailPicker';
 
