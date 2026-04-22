@@ -6,10 +6,11 @@ import { Navigate } from 'react-router-dom';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Check, X, Trash2, Radio, Loader2 } from 'lucide-react';
+import { Plus, Check, X, Trash2, Radio, Loader2, Ban, EyeOff, Flag } from 'lucide-react';
 import { toast } from 'sonner';
 import * as liveApi from '@/lib/liveStreamApi';
 
@@ -18,6 +19,9 @@ const AdminPage = () => {
   const queryClient = useQueryClient();
   const [newChannel, setNewChannel] = useState({ name: '', description: '', stream_url: '', logo_url: '' });
   const [streamSetup, setStreamSetup] = useState<Record<string, { inputId: string; gcpChannelId: string }>>({});
+  const [suspendReasons, setSuspendReasons] = useState<Record<string, string>>({});
+  const [hideReasons, setHideReasons] = useState<Record<string, string>>({});
+  const [replyTexts, setReplyTexts] = useState<Record<string, string>>({});
 
   const { data: channels = [] } = useQuery({
     queryKey: ['admin-channels'],
@@ -134,6 +138,87 @@ const AdminPage = () => {
       queryClient.invalidateQueries({ queryKey: ['admin-channels'] });
     },
   });
+
+  // Channel suspension
+  const toggleSuspend = useMutation({
+    mutationFn: async ({ id, suspend, reason }: { id: string; suspend: boolean; reason?: string }) => {
+      const { error } = await supabase.from('channels').update({
+        is_suspended: suspend,
+        suspended_reason: suspend ? (reason?.trim() || null) : null,
+      }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('채널 상태가 변경되었습니다.');
+      queryClient.invalidateQueries({ queryKey: ['admin-channels'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // Reports
+  const { data: reports = [] } = useQuery({
+    queryKey: ['admin-reports'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('sermon_reports')
+        .select('*, sermons(id, title, channel_id, is_hidden), sermon_report_replies(*)')
+        .order('created_at', { ascending: false });
+      return data ?? [];
+    },
+  });
+
+  const openReports = reports.filter((r: any) => r.status === 'open');
+
+  const updateReportStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase.from('sermon_reports').update({ status }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('신고 상태가 변경되었습니다.');
+      queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
+    },
+  });
+
+  const hideSermon = useMutation({
+    mutationFn: async ({ id, hide, reason }: { id: string; hide: boolean; reason?: string }) => {
+      const { error } = await supabase.from('sermons').update({
+        is_hidden: hide,
+        hidden_reason: hide ? (reason?.trim() || null) : null,
+      }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('영상 노출 상태가 변경되었습니다.');
+      queryClient.invalidateQueries({ queryKey: ['admin-sermons'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
+    },
+  });
+
+  const postReply = useMutation({
+    mutationFn: async ({ reportId, body }: { reportId: string; body: string }) => {
+      if (!user) throw new Error('로그인 필요');
+      const { error } = await supabase.from('sermon_report_replies').insert({
+        report_id: reportId,
+        author_id: user.id,
+        author_role: 'admin',
+        body: body.trim().slice(0, 2000),
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      setReplyTexts(p => ({ ...p, [vars.reportId]: '' }));
+      queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const REASON_LABELS: Record<string, string> = {
+    heresy: '이단 교리',
+    inappropriate: '부적절한 영상',
+    copyright: '저작권 침해',
+    other: '기타',
+  };
 
   if (loading) return null;
   if (!isAdmin) return <Navigate to="/" replace />;
