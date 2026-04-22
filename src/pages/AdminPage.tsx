@@ -18,7 +18,6 @@ const AdminPage = () => {
   const { isAdmin, loading, user } = useAuth();
   const queryClient = useQueryClient();
   const [newChannel, setNewChannel] = useState({ name: '', description: '', stream_url: '', logo_url: '' });
-  const [streamSetup, setStreamSetup] = useState<Record<string, { inputId: string; gcpChannelId: string }>>({});
   const [suspendReasons, setSuspendReasons] = useState<Record<string, string>>({});
   const [hideReasons, setHideReasons] = useState<Record<string, string>>({});
   const [replyTexts, setReplyTexts] = useState<Record<string, string>>({});
