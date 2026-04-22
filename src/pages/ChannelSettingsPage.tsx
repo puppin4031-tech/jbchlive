@@ -12,9 +12,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { ImagePlus, Loader2, ArrowLeft, Copy, Check, ChevronDown, Radio, RefreshCw, Eye, EyeOff, Play, Square } from 'lucide-react';
+import { ImagePlus, Loader2, ArrowLeft, Copy, Check, ChevronDown, Radio, Eye, EyeOff, Play, Square, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { startChannel as apiStartChannel, stopChannel as apiStopChannel } from '@/lib/liveStreamApi';
+import { startChannel as apiStartChannel, stopChannel as apiStopChannel, getStatus as apiGetStatus, parseRtmpUri } from '@/lib/liveStreamApi';
 
 const ChannelSettingsPage = () => {
   const { channelId } = useParams();
@@ -35,7 +35,12 @@ const ChannelSettingsPage = () => {
   const [vodCategory, setVodCategory] = useState('주일말씀');
   const [vodPreacher, setVodPreacher] = useState('');
 
-  const { data: channel, isLoading } = useQuery({
+  // GCP 라이브 시작 폴링 상태
+  const [startingDialogOpen, setStartingDialogOpen] = useState(false);
+  const [gcpState, setGcpState] = useState<string>('');
+  const [pollAttempts, setPollAttempts] = useState(0);
+
+  const { data: channel, isLoading, refetch: refetchChannel } = useQuery({
     queryKey: ['channel-settings', channelId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -49,21 +54,6 @@ const ChannelSettingsPage = () => {
     enabled: !!channelId,
   });
 
-  // Fetch stream key from separate secure table
-  const { data: streamKeyData } = useQuery({
-    queryKey: ['stream-key', channelId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('channel_stream_keys')
-        .select('stream_key')
-        .eq('channel_id', channelId!)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!channelId && !!user,
-  });
-
   useEffect(() => {
     if (channel) {
       setName(channel.name);
@@ -71,6 +61,32 @@ const ChannelSettingsPage = () => {
       setLogoPreview(channel.logo_url);
     }
   }, [channel]);
+
+  // GCP 채널 상태 폴링 (라이브 시작 다이얼로그 열려있을 때)
+  useEffect(() => {
+    if (!startingDialogOpen || !channelId) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await apiGetStatus(channelId);
+        if (cancelled) return;
+        setGcpState(res.streamingState || 'UNKNOWN');
+        setPollAttempts((n) => n + 1);
+        // STREAMING이면 OBS가 송출 중. AWAITING_INPUT이면 GCP는 준비 완료, OBS 대기 중.
+        if (res.streamingState === 'AWAITING_INPUT' || res.streamingState === 'STREAMING') {
+          // 준비 완료 — 다이얼로그는 사용자가 닫게 둠
+        }
+      } catch (e) {
+        console.error('polling error', e);
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [startingDialogOpen, channelId]);
 
   const canEdit = channel && user && (channel.owner_id === user.id || isAdmin);
   const isOwner = channel && user && channel.owner_id === user.id;
@@ -138,31 +154,16 @@ const ChannelSettingsPage = () => {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const generateStreamKey = useMutation({
-    mutationFn: async () => {
-      if (!channelId) throw new Error('채널 ID가 없습니다');
-      const newKey = crypto.randomUUID();
-      const { error } = await supabase.from('channel_stream_keys').upsert({
-        channel_id: channelId,
-        stream_key: newKey,
-      }, { onConflict: 'channel_id' });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success('스트림 키가 생성되었습니다');
-      queryClient.invalidateQueries({ queryKey: ['stream-key', channelId] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   const startLive = useMutation({
     mutationFn: async () => {
       if (!channelId) throw new Error('채널 ID가 없습니다');
       await apiStartChannel(channelId);
     },
     onSuccess: () => {
-      toast.success('라이브가 시작되었습니다');
-      queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
+      setGcpState('STARTING');
+      setPollAttempts(0);
+      setStartingDialogOpen(true);
+      refetchChannel();
     },
     onError: (e: Error) => toast.error('라이브 시작 실패: ' + e.message),
   });
@@ -190,9 +191,14 @@ const ChannelSettingsPage = () => {
   if (!user) return <Navigate to="/login" replace />;
   if (channel && !canEdit) return <Navigate to="/" replace />;
 
-  const rtmpUrl = 'rtmp://live-stream.googleapis.com:1935/live';
-  const streamKey = streamKeyData?.stream_key || null;
-  const maskedKey = streamKey ? streamKey.slice(0, 4) + '-****-****-' + streamKey.slice(-4) : null;
+  const rtmpInfo = parseRtmpUri(channel?.gcp_input_uri ?? null);
+  const rtmpServer = rtmpInfo?.server || null;
+  const streamKey = rtmpInfo?.streamKey || null;
+  const maskedKey = streamKey
+    ? streamKey.slice(0, 4) + '****' + streamKey.slice(-4)
+    : null;
+
+  const isReady = gcpState === 'AWAITING_INPUT' || gcpState === 'STREAMING';
 
   return (
     <div className="min-h-screen bg-background">
@@ -245,11 +251,31 @@ const ChannelSettingsPage = () => {
             <h2 className="text-lg font-semibold text-foreground">라이브 스트림 설정</h2>
           </div>
 
+          {/* 비용 안내 */}
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex gap-2">
+            <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+            <div className="text-xs text-foreground space-y-1">
+              <p className="font-semibold">방송 종료 시 반드시 [라이브 종료] 버튼을 눌러주세요.</p>
+              <p className="text-muted-foreground">누르지 않으면 GCP 서버 비용이 계속 청구됩니다. (30분간 무송출 시 자동 종료)</p>
+            </div>
+          </div>
+
           {!channel?.is_approved ? (
             <div className="rounded-lg bg-muted p-4 text-center space-y-2">
               <div className="text-2xl">⏳</div>
               <p className="text-sm font-medium text-foreground">관리자 승인 대기 중...</p>
-              <p className="text-xs text-muted-foreground">채널이 승인되면 스트림 키를 생성할 수 있습니다.</p>
+              <p className="text-xs text-muted-foreground">채널이 승인되면 RTMP 정보가 자동 발급됩니다.</p>
+            </div>
+          ) : !rtmpServer ? (
+            <div className="rounded-lg bg-muted p-4 text-center space-y-2">
+              <div className="text-2xl">⚙️</div>
+              <p className="text-sm font-medium text-foreground">GCP 인프라 설정 대기 중</p>
+              <p className="text-xs text-muted-foreground">관리자에게 GCP 재프로비저닝을 요청하세요.</p>
+              {channel.gcp_last_error && (
+                <p className="text-xs text-destructive break-words pt-2 border-t border-border">
+                  ⚠️ {channel.gcp_last_error}
+                </p>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -264,41 +290,39 @@ const ChannelSettingsPage = () => {
               )}
 
               {/* Live Start/Stop Button */}
-              {streamKey && (
-                <Button
-                  onClick={() => {
-                    if (channel?.is_live) {
-                      setStopDialogOpen(true);
-                    } else {
-                      startLive.mutate();
-                    }
-                  }}
-                  disabled={startLive.isPending || stopLive.isPending}
-                  variant={channel?.is_live ? "destructive" : "default"}
-                  className="w-full h-12 text-base font-semibold gap-2"
-                >
-                  {(startLive.isPending || stopLive.isPending) ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : channel?.is_live ? (
-                    <Square className="w-5 h-5" />
-                  ) : (
-                    <Play className="w-5 h-5" />
-                  )}
-                  {(startLive.isPending || stopLive.isPending)
-                    ? '처리 중...'
-                    : channel?.is_live
-                      ? '라이브 종료'
-                      : '라이브 시작'}
-                </Button>
-              )}
+              <Button
+                onClick={() => {
+                  if (channel?.is_live) {
+                    setStopDialogOpen(true);
+                  } else {
+                    startLive.mutate();
+                  }
+                }}
+                disabled={startLive.isPending || stopLive.isPending}
+                variant={channel?.is_live ? 'destructive' : 'default'}
+                className="w-full h-12 text-base font-semibold gap-2"
+              >
+                {(startLive.isPending || stopLive.isPending) ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : channel?.is_live ? (
+                  <Square className="w-5 h-5" />
+                ) : (
+                  <Play className="w-5 h-5" />
+                )}
+                {(startLive.isPending || stopLive.isPending)
+                  ? '처리 중...'
+                  : channel?.is_live
+                    ? '라이브 종료'
+                    : '라이브 시작'}
+              </Button>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">RTMP 서버 URL</label>
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 rounded-md border border-border bg-muted/50 px-3 py-2.5">
-                    <code className="text-sm font-mono text-foreground break-all">{rtmpUrl}</code>
+                  <div className="flex-1 rounded-md border border-border bg-muted/50 px-3 py-2.5 min-w-0">
+                    <code className="text-sm font-mono text-foreground break-all">{rtmpServer}</code>
                   </div>
-                  <Button variant="outline" size="icon" onClick={() => handleCopy(rtmpUrl, 'rtmp')} className="shrink-0 h-10 w-10">
+                  <Button variant="outline" size="icon" onClick={() => handleCopy(rtmpServer, 'rtmp')} className="shrink-0 h-10 w-10">
                     {copiedField === 'rtmp' ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
                   </Button>
                 </div>
@@ -306,31 +330,24 @@ const ChannelSettingsPage = () => {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">스트림 키</label>
-                {streamKey && (isOwner || isAdmin) ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 rounded-md border border-border bg-muted/50 px-3 py-2.5">
-                        <code className="text-sm font-mono text-foreground break-all">
-                          {showStreamKey ? streamKey : maskedKey}
-                        </code>
-                      </div>
-                      <Button variant="outline" size="icon" onClick={() => setShowStreamKey(!showStreamKey)} className="shrink-0 h-10 w-10">
-                        {showStreamKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </Button>
-                      <Button variant="outline" size="icon" onClick={() => handleCopy(streamKey, 'key')} className="shrink-0 h-10 w-10">
-                        {copiedField === 'key' ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
-                      </Button>
+                {streamKey && (isOwner || isAdmin) && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 rounded-md border border-border bg-muted/50 px-3 py-2.5 min-w-0">
+                      <code className="text-sm font-mono text-foreground break-all">
+                        {showStreamKey ? streamKey : maskedKey}
+                      </code>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => generateStreamKey.mutate()} disabled={generateStreamKey.isPending} className="text-xs text-muted-foreground">
-                      <RefreshCw className="w-3 h-3 mr-1" /> 스트림 키 재생성
+                    <Button variant="outline" size="icon" onClick={() => setShowStreamKey(!showStreamKey)} className="shrink-0 h-10 w-10">
+                      {showStreamKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </Button>
+                    <Button variant="outline" size="icon" onClick={() => handleCopy(streamKey, 'key')} className="shrink-0 h-10 w-10">
+                      {copiedField === 'key' ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
                     </Button>
                   </div>
-                ) : (
-                  <Button onClick={() => generateStreamKey.mutate()} disabled={generateStreamKey.isPending} className="w-full">
-                    {generateStreamKey.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-                    스트림 키 생성
-                  </Button>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  GCP에서 발급한 고유 RTMP 주소입니다. 외부 노출 금지.
+                </p>
               </div>
 
               <Collapsible open={guideOpen} onOpenChange={setGuideOpen}>
@@ -342,13 +359,12 @@ const ChannelSettingsPage = () => {
                   <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 text-sm text-foreground">
                     <p className="font-medium">OBS Studio에서 라이브 방송 시작하기:</p>
                     <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground">
-                      <li><span className="text-foreground font-medium">OBS Studio</span>를 실행합니다</li>
-                      <li>상단 메뉴에서 <span className="text-foreground font-medium">설정</span>을 클릭합니다</li>
-                      <li>왼쪽 메뉴에서 <span className="text-foreground font-medium">방송</span>을 선택합니다</li>
-                      <li>서비스를 <span className="text-foreground font-medium">"사용자 정의..."</span>로 변경합니다</li>
-                      <li>서버에 위의 <span className="text-foreground font-medium">RTMP 서버 URL</span>을 붙여넣습니다</li>
-                      <li>스트림 키에 위의 <span className="text-foreground font-medium">스트림 키</span>를 붙여넣습니다</li>
-                      <li><span className="text-foreground font-medium">확인</span> → <span className="text-foreground font-medium">"방송 시작"</span>을 클릭합니다</li>
+                      <li>먼저 위에서 <span className="text-foreground font-medium">[라이브 시작]</span> 버튼을 누르고 GCP 서버가 준비될 때까지(1~2분) 기다립니다</li>
+                      <li><span className="text-foreground font-medium">OBS Studio</span>를 실행 → <span className="text-foreground font-medium">설정</span> → <span className="text-foreground font-medium">방송</span></li>
+                      <li>서비스를 <span className="text-foreground font-medium">"사용자 정의..."</span>로 변경</li>
+                      <li>서버에 위의 <span className="text-foreground font-medium">RTMP 서버 URL</span> 붙여넣기</li>
+                      <li>스트림 키에 위의 <span className="text-foreground font-medium">스트림 키</span> 붙여넣기</li>
+                      <li><span className="text-foreground font-medium">확인</span> → <span className="text-foreground font-medium">"방송 시작"</span> 클릭</li>
                     </ol>
                     <div className="rounded-md bg-accent/50 p-2.5 text-xs text-muted-foreground">
                       💡 <strong>팁:</strong> OBS가 없다면 <a href="https://obsproject.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">obsproject.com</a>에서 무료로 다운로드할 수 있습니다.
@@ -360,6 +376,57 @@ const ChannelSettingsPage = () => {
           )}
         </Card>
       </main>
+
+      {/* GCP Starting Polling Dialog */}
+      <Dialog open={startingDialogOpen} onOpenChange={setStartingDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {isReady ? '🟢 준비 완료' : '🟡 GCP 서버 준비 중'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {isReady ? (
+              <>
+                <p className="text-sm text-foreground font-medium">
+                  이제 OBS에서 [방송 시작] 버튼을 누르세요.
+                </p>
+                <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">서버:</span>
+                    <code className="block mt-1 break-all font-mono">{rtmpServer}</code>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">스트림 키:</span>
+                    <code className="block mt-1 break-all font-mono">{streamKey}</code>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  현재 상태: <code className="text-foreground">{gcpState}</code>
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                </div>
+                <p className="text-sm text-foreground text-center">
+                  GCP Live Stream 서버를 준비하고 있습니다.<br />
+                  보통 1~2분 소요됩니다.
+                </p>
+                <p className="text-xs text-muted-foreground text-center">
+                  현재 상태: <code className="text-foreground">{gcpState || '시작 중...'}</code> (확인 #{pollAttempts})
+                </p>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant={isReady ? 'default' : 'outline'} onClick={() => setStartingDialogOpen(false)}>
+              {isReady ? '확인 (OBS로 이동)' : '백그라운드에서 계속 대기'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Stop Live & Save VOD Dialog */}
       <Dialog open={stopDialogOpen} onOpenChange={setStopDialogOpen}>

@@ -18,7 +18,6 @@ const AdminPage = () => {
   const { isAdmin, loading, user } = useAuth();
   const queryClient = useQueryClient();
   const [newChannel, setNewChannel] = useState({ name: '', description: '', stream_url: '', logo_url: '' });
-  const [streamSetup, setStreamSetup] = useState<Record<string, { inputId: string; gcpChannelId: string }>>({});
   const [suspendReasons, setSuspendReasons] = useState<Record<string, string>>({});
   const [hideReasons, setHideReasons] = useState<Record<string, string>>({});
   const [replyTexts, setReplyTexts] = useState<Record<string, string>>({});
@@ -71,56 +70,38 @@ const AdminPage = () => {
 
   const toggleApproval = useMutation({
     mutationFn: async ({ id, approved }: { id: string; approved: boolean }) => {
-      await supabase.from('channels').update({ is_approved: approved }).eq('id', id);
+      const { error } = await supabase.from('channels').update({ is_approved: approved }).eq('id', id);
+      if (error) throw error;
+      // 승인 시 자동 GCP 프로비저닝
+      if (approved) {
+        try {
+          await liveApi.provisionChannel(id);
+        } catch (e) {
+          throw new Error(`승인은 됐지만 GCP 프로비저닝 실패: ${(e as Error).message}`);
+        }
+      }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-channels'] }),
-  });
-
-  const setupAndStartLive = useMutation({
-    mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      const sanitized = name.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase().slice(0, 50);
-      const inputId = `input-${sanitized}-${Date.now()}`;
-      const gcpChannelId = `ch-${sanitized}-${Date.now()}`;
-
-      toast.info('RTMP 입력을 생성하는 중...');
-      const inputResult = await liveApi.createInput(inputId);
-
-      toast.info('라이브 채널을 생성하는 중...');
-      await liveApi.createChannel(gcpChannelId, inputId);
-
-      toast.info('라이브를 시작하는 중...');
-      await liveApi.startChannel(gcpChannelId);
-
-      // Get HLS URL and save to DB
-      const hlsInfo = await liveApi.getHLSUrl(gcpChannelId);
-      await supabase.from('channels').update({
-        is_live: true,
-        stream_url: hlsInfo.hlsUrl || '',
-      }).eq('id', id);
-
-      setStreamSetup(prev => ({ ...prev, [id]: { inputId, gcpChannelId } }));
-
-      // Extract RTMP URL from input result
-      const rtmpUri = inputResult?.inputStreamProperty?.rtmpPushUri ||
-        inputResult?.metadata?.inputStreamProperty?.rtmpPushUri ||
-        '(RTMP URL 확인 필요)';
-
-      return { rtmpUri, hlsUrl: hlsInfo.hlsUrl };
-    },
-    onSuccess: (data) => {
-      toast.success(`라이브 시작됨!\nRTMP: ${data.rtmpUri}`, { duration: 10000 });
+    onSuccess: (_d, vars) => {
+      toast.success(vars.approved ? '승인 완료 + GCP 라이브 인프라 생성됨' : '승인 취소됨');
       queryClient.invalidateQueries({ queryKey: ['admin-channels'] });
     },
-    onError: (e: Error) => toast.error(`라이브 시작 실패: ${e.message}`),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const reprovisionChannel = useMutation({
+    mutationFn: async (id: string) => {
+      await liveApi.provisionChannel(id);
+    },
+    onSuccess: () => {
+      toast.success('GCP 재프로비저닝 완료. 채널 설정에서 RTMP 정보를 확인하세요.');
+      queryClient.invalidateQueries({ queryKey: ['admin-channels'] });
+    },
+    onError: (e: Error) => toast.error(`재프로비저닝 실패: ${e.message}`),
   });
 
   const stopLive = useMutation({
     mutationFn: async ({ id }: { id: string }) => {
-      const setup = streamSetup[id];
-      if (setup?.gcpChannelId) {
-        await liveApi.stopChannel(setup.gcpChannelId);
-      }
-      await supabase.from('channels').update({ is_live: false }).eq('id', id);
+      await liveApi.stopChannel(id);
     },
     onSuccess: () => {
       toast.success('라이브가 종료되었습니다');
@@ -371,8 +352,8 @@ const AdminPage = () => {
 
           <TabsContent value="channels" className="space-y-3 mt-4">
             {channels.map(ch => {
-              const isStarting = setupAndStartLive.isPending && setupAndStartLive.variables?.id === ch.id;
               const isStopping = stopLive.isPending && stopLive.variables?.id === ch.id;
+              const isReprov = reprovisionChannel.isPending && reprovisionChannel.variables === ch.id;
 
               return (
                 <Card key={ch.id} className={`p-4 space-y-2 ${ch.is_suspended ? 'border-destructive/50' : ''}`}>
@@ -387,8 +368,16 @@ const AdminPage = () => {
                         )}
                         {ch.is_live && <Badge className="bg-live text-live-foreground text-xs">LIVE</Badge>}
                         {ch.is_suspended && <Badge variant="destructive" className="text-xs">정지됨</Badge>}
+                        {ch.gcp_input_uri ? (
+                          <Badge variant="outline" className="text-xs">GCP ✓</Badge>
+                        ) : ch.is_approved ? (
+                          <Badge variant="destructive" className="text-xs">GCP 미설정</Badge>
+                        ) : null}
                       </div>
                       <p className="text-xs text-muted-foreground truncate mt-1">{ch.stream_url || '스트림 URL 없음'}</p>
+                      {ch.gcp_last_error && (
+                        <p className="text-xs text-destructive mt-1 break-words">⚠️ GCP: {ch.gcp_last_error}</p>
+                      )}
                       {ch.is_suspended && ch.suspended_reason && (
                         <p className="text-xs text-destructive mt-1">사유: {ch.suspended_reason}</p>
                       )}
@@ -402,7 +391,18 @@ const AdminPage = () => {
                       >
                         {ch.is_approved ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                       </Button>
-                      {ch.is_live ? (
+                      {ch.is_approved && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => reprovisionChannel.mutate(ch.id)}
+                          disabled={isReprov}
+                          title="GCP 재프로비저닝"
+                        >
+                          {isReprov ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />}
+                        </Button>
+                      )}
+                      {ch.is_live && (
                         <Button
                           size="sm"
                           variant="destructive"
@@ -411,16 +411,6 @@ const AdminPage = () => {
                         >
                           {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
                           라이브 종료
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => setupAndStartLive.mutate({ id: ch.id, name: ch.name })}
-                          disabled={isStarting}
-                        >
-                          {isStarting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Radio className="w-4 h-4 mr-1" />}
-                          라이브 시작
                         </Button>
                       )}
                       <Button size="icon" variant="ghost" onClick={() => deleteChannel.mutate(ch.id)}>
