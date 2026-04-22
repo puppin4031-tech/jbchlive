@@ -6,10 +6,11 @@ import { Navigate } from 'react-router-dom';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Check, X, Trash2, Radio, Loader2 } from 'lucide-react';
+import { Plus, Check, X, Trash2, Radio, Loader2, Ban, EyeOff, Flag } from 'lucide-react';
 import { toast } from 'sonner';
 import * as liveApi from '@/lib/liveStreamApi';
 
@@ -18,6 +19,9 @@ const AdminPage = () => {
   const queryClient = useQueryClient();
   const [newChannel, setNewChannel] = useState({ name: '', description: '', stream_url: '', logo_url: '' });
   const [streamSetup, setStreamSetup] = useState<Record<string, { inputId: string; gcpChannelId: string }>>({});
+  const [suspendReasons, setSuspendReasons] = useState<Record<string, string>>({});
+  const [hideReasons, setHideReasons] = useState<Record<string, string>>({});
+  const [replyTexts, setReplyTexts] = useState<Record<string, string>>({});
 
   const { data: channels = [] } = useQuery({
     queryKey: ['admin-channels'],
@@ -135,6 +139,87 @@ const AdminPage = () => {
     },
   });
 
+  // Channel suspension
+  const toggleSuspend = useMutation({
+    mutationFn: async ({ id, suspend, reason }: { id: string; suspend: boolean; reason?: string }) => {
+      const { error } = await supabase.from('channels').update({
+        is_suspended: suspend,
+        suspended_reason: suspend ? (reason?.trim() || null) : null,
+      }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('채널 상태가 변경되었습니다.');
+      queryClient.invalidateQueries({ queryKey: ['admin-channels'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // Reports
+  const { data: reports = [] } = useQuery({
+    queryKey: ['admin-reports'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('sermon_reports')
+        .select('*, sermons(id, title, channel_id, is_hidden), sermon_report_replies(*)')
+        .order('created_at', { ascending: false });
+      return data ?? [];
+    },
+  });
+
+  const openReports = reports.filter((r: any) => r.status === 'open');
+
+  const updateReportStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase.from('sermon_reports').update({ status }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('신고 상태가 변경되었습니다.');
+      queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
+    },
+  });
+
+  const hideSermon = useMutation({
+    mutationFn: async ({ id, hide, reason }: { id: string; hide: boolean; reason?: string }) => {
+      const { error } = await supabase.from('sermons').update({
+        is_hidden: hide,
+        hidden_reason: hide ? (reason?.trim() || null) : null,
+      }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('영상 노출 상태가 변경되었습니다.');
+      queryClient.invalidateQueries({ queryKey: ['admin-sermons'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
+    },
+  });
+
+  const postReply = useMutation({
+    mutationFn: async ({ reportId, body }: { reportId: string; body: string }) => {
+      if (!user) throw new Error('로그인 필요');
+      const { error } = await supabase.from('sermon_report_replies').insert({
+        report_id: reportId,
+        author_id: user.id,
+        author_role: 'admin',
+        body: body.trim().slice(0, 2000),
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      setReplyTexts(p => ({ ...p, [vars.reportId]: '' }));
+      queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const REASON_LABELS: Record<string, string> = {
+    heresy: '이단 교리',
+    inappropriate: '부적절한 영상',
+    copyright: '저작권 침해',
+    other: '기타',
+  };
+
   if (loading) return null;
   if (!isAdmin) return <Navigate to="/" replace />;
 
@@ -163,10 +248,13 @@ const AdminPage = () => {
           ))}
         </div>
 
-        <Tabs defaultValue={pendingChannels.length > 0 ? "pending" : "channels"}>
-          <TabsList>
+        <Tabs defaultValue={openReports.length > 0 ? "reports" : (pendingChannels.length > 0 ? "pending" : "channels")}>
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="pending">
               승인 대기 {pendingChannels.length > 0 && <Badge variant="destructive" className="ml-1 text-xs">{pendingChannels.length}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="reports">
+              신고 관리 {openReports.length > 0 && <Badge variant="destructive" className="ml-1 text-xs">{openReports.length}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="channels">전체 채널</TabsTrigger>
             <TabsTrigger value="new">새 채널</TabsTrigger>
@@ -194,59 +282,178 @@ const AdminPage = () => {
             ))}
           </TabsContent>
 
+          <TabsContent value="reports" className="space-y-3 mt-4">
+            {reports.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">접수된 신고가 없습니다.</p>
+            ) : reports.map((r: any) => (
+              <Card key={r.id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Flag className="w-4 h-4 text-destructive shrink-0" />
+                      <Badge variant="outline" className="text-xs">{REASON_LABELS[r.reason] || r.reason}</Badge>
+                      <Badge variant={r.status === 'open' ? 'destructive' : 'secondary'} className="text-xs">
+                        {r.status === 'open' ? '처리 대기' : r.status === 'resolved' ? '처리됨' : '기각됨'}
+                      </Badge>
+                      {r.sermons?.is_hidden && <Badge variant="outline" className="text-xs"><EyeOff className="w-3 h-3 mr-1" />비공개</Badge>}
+                    </div>
+                    <p className="text-sm font-medium mt-2 truncate">{r.sermons?.title || '(삭제된 영상)'}</p>
+                    {r.detail && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{r.detail}</p>}
+                    <p className="text-xs text-muted-foreground mt-1">{new Date(r.created_at).toLocaleString('ko-KR')}</p>
+                  </div>
+                </div>
+
+                {r.sermon_report_replies?.length > 0 && (
+                  <div className="space-y-2 pl-3 border-l-2 border-muted">
+                    {r.sermon_report_replies.map((rep: any) => (
+                      <div key={rep.id} className="text-sm">
+                        <span className="text-xs font-semibold text-muted-foreground">
+                          {rep.author_role === 'admin' ? '관리자' : rep.author_role === 'owner' ? '채널 담당자' : '신고자'}
+                        </span>
+                        <p className="whitespace-pre-wrap">{rep.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Textarea
+                    placeholder="답변 작성..."
+                    value={replyTexts[r.id] || ''}
+                    onChange={e => setReplyTexts(p => ({ ...p, [r.id]: e.target.value }))}
+                    rows={2}
+                    className="text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => postReply.mutate({ reportId: r.id, body: replyTexts[r.id] || '' })}
+                    disabled={!replyTexts[r.id]?.trim() || postReply.isPending}
+                  >
+                    답변
+                  </Button>
+                </div>
+
+                {r.sermons && (
+                  <div className="flex gap-2 flex-wrap">
+                    {r.sermons.is_hidden ? (
+                      <Button size="sm" variant="outline" onClick={() => hideSermon.mutate({ id: r.sermons.id, hide: false })}>
+                        영상 공개 복원
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => hideSermon.mutate({ id: r.sermons.id, hide: true, reason: REASON_LABELS[r.reason] })}
+                      >
+                        <EyeOff className="w-3.5 h-3.5 mr-1" /> 영상 비공개
+                      </Button>
+                    )}
+                    {r.status === 'open' && (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => updateReportStatus.mutate({ id: r.id, status: 'resolved' })}>
+                          처리 완료
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => updateReportStatus.mutate({ id: r.id, status: 'dismissed' })}>
+                          기각
+                        </Button>
+                      </>
+                    )}
+                    {r.status !== 'open' && (
+                      <Button size="sm" variant="ghost" onClick={() => updateReportStatus.mutate({ id: r.id, status: 'open' })}>
+                        다시 열기
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </Card>
+            ))}
+          </TabsContent>
+
           <TabsContent value="channels" className="space-y-3 mt-4">
             {channels.map(ch => {
               const isStarting = setupAndStartLive.isPending && setupAndStartLive.variables?.id === ch.id;
               const isStopping = stopLive.isPending && stopLive.variables?.id === ch.id;
 
               return (
-                <Card key={ch.id} className="p-4 flex items-center justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-foreground truncate">{ch.name}</span>
-                      {ch.is_approved ? (
-                        <Badge variant="secondary" className="text-xs">승인됨</Badge>
-                      ) : (
-                        <Badge variant="destructive" className="text-xs">미승인</Badge>
+                <Card key={ch.id} className={`p-4 space-y-2 ${ch.is_suspended ? 'border-destructive/50' : ''}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-foreground truncate">{ch.name}</span>
+                        {ch.is_approved ? (
+                          <Badge variant="secondary" className="text-xs">승인됨</Badge>
+                        ) : (
+                          <Badge variant="destructive" className="text-xs">미승인</Badge>
+                        )}
+                        {ch.is_live && <Badge className="bg-live text-live-foreground text-xs">LIVE</Badge>}
+                        {ch.is_suspended && <Badge variant="destructive" className="text-xs">정지됨</Badge>}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate mt-1">{ch.stream_url || '스트림 URL 없음'}</p>
+                      {ch.is_suspended && ch.suspended_reason && (
+                        <p className="text-xs text-destructive mt-1">사유: {ch.suspended_reason}</p>
                       )}
-                      {ch.is_live && <Badge className="bg-live text-live-foreground text-xs">LIVE</Badge>}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate mt-1">{ch.stream_url || '스트림 URL 없음'}</p>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => toggleApproval.mutate({ id: ch.id, approved: !ch.is_approved })}
+                        title={ch.is_approved ? '승인 취소' : '승인'}
+                      >
+                        {ch.is_approved ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                      </Button>
+                      {ch.is_live ? (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => stopLive.mutate({ id: ch.id })}
+                          disabled={isStopping}
+                        >
+                          {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                          라이브 종료
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => setupAndStartLive.mutate({ id: ch.id, name: ch.name })}
+                          disabled={isStarting}
+                        >
+                          {isStarting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Radio className="w-4 h-4 mr-1" />}
+                          라이브 시작
+                        </Button>
+                      )}
+                      <Button size="icon" variant="ghost" onClick={() => deleteChannel.mutate(ch.id)}>
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  {ch.is_suspended ? (
                     <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => toggleApproval.mutate({ id: ch.id, approved: !ch.is_approved })}
-                      title={ch.is_approved ? '승인 취소' : '승인'}
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => toggleSuspend.mutate({ id: ch.id, suspend: false })}
                     >
-                      {ch.is_approved ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                      정지 해제
                     </Button>
-                    {ch.is_live ? (
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="정지 사유 (선택)"
+                        value={suspendReasons[ch.id] || ''}
+                        onChange={e => setSuspendReasons(p => ({ ...p, [ch.id]: e.target.value }))}
+                        className="text-xs h-8"
+                      />
                       <Button
                         size="sm"
                         variant="destructive"
-                        onClick={() => stopLive.mutate({ id: ch.id })}
-                        disabled={isStopping}
+                        onClick={() => toggleSuspend.mutate({ id: ch.id, suspend: true, reason: suspendReasons[ch.id] })}
                       >
-                        {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-                        라이브 종료
+                        <Ban className="w-3.5 h-3.5 mr-1" /> 정지
                       </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="default"
-                        onClick={() => setupAndStartLive.mutate({ id: ch.id, name: ch.name })}
-                        disabled={isStarting}
-                      >
-                        {isStarting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Radio className="w-4 h-4 mr-1" />}
-                        라이브 시작
-                      </Button>
-                    )}
-                    <Button size="icon" variant="ghost" onClick={() => deleteChannel.mutate(ch.id)}>
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
-                  </div>
+                    </div>
+                  )}
                 </Card>
               );
             })}

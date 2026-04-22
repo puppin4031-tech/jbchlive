@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import SermonCard, { type SermonCardData } from '@/components/SermonCard';
 import CategoryTabs from '@/components/CategoryTabs';
-import { Users, Heart, Radio, Settings } from 'lucide-react';
+import { Users, Heart, Radio, Settings, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
@@ -105,6 +105,18 @@ const ChannelPage = () => {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container px-4 py-4 max-w-4xl mx-auto space-y-5">
+        {channel.is_suspended && (
+          <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-4 flex gap-3">
+            <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-destructive">이 채널은 현재 관리자 검토 중입니다</p>
+              {channel.suspended_reason && (
+                <p className="text-sm text-muted-foreground mt-1">사유: {channel.suspended_reason}</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">검토가 완료될 때까지 일반 사용자에게는 노출되지 않습니다.</p>
+            </div>
+          </div>
+        )}
         {/* Channel Header */}
         <div className="flex items-center gap-4 p-4 rounded-xl bg-card">
           <img src={channel.logo_url || '/placeholder.svg'} alt={channel.name} className="w-16 h-16 rounded-full object-cover" />
