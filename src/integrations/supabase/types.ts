@@ -47,10 +47,15 @@ export type Database = {
         Row: {
           created_at: string
           description: string | null
+          gcp_channel_state: string | null
+          gcp_input_uri: string | null
+          gcp_last_error: string | null
+          gcp_provisioned_at: string | null
           id: string
           is_approved: boolean
           is_live: boolean
           is_suspended: boolean
+          live_started_at: string | null
           logo_url: string | null
           name: string
           owner_id: string | null
@@ -62,10 +67,15 @@ export type Database = {
         Insert: {
           created_at?: string
           description?: string | null
+          gcp_channel_state?: string | null
+          gcp_input_uri?: string | null
+          gcp_last_error?: string | null
+          gcp_provisioned_at?: string | null
           id?: string
           is_approved?: boolean
           is_live?: boolean
           is_suspended?: boolean
+          live_started_at?: string | null
           logo_url?: string | null
           name: string
           owner_id?: string | null
@@ -77,10 +87,15 @@ export type Database = {
         Update: {
           created_at?: string
           description?: string | null
+          gcp_channel_state?: string | null
+          gcp_input_uri?: string | null
+          gcp_last_error?: string | null
+          gcp_provisioned_at?: string | null
           id?: string
           is_approved?: boolean
           is_live?: boolean
           is_suspended?: boolean
+          live_started_at?: string | null
           logo_url?: string | null
           name?: string
           owner_id?: string | null
