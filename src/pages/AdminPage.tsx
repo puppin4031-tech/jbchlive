@@ -282,6 +282,93 @@ const AdminPage = () => {
             ))}
           </TabsContent>
 
+          <TabsContent value="reports" className="space-y-3 mt-4">
+            {reports.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">접수된 신고가 없습니다.</p>
+            ) : reports.map((r: any) => (
+              <Card key={r.id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Flag className="w-4 h-4 text-destructive shrink-0" />
+                      <Badge variant="outline" className="text-xs">{REASON_LABELS[r.reason] || r.reason}</Badge>
+                      <Badge variant={r.status === 'open' ? 'destructive' : 'secondary'} className="text-xs">
+                        {r.status === 'open' ? '처리 대기' : r.status === 'resolved' ? '처리됨' : '기각됨'}
+                      </Badge>
+                      {r.sermons?.is_hidden && <Badge variant="outline" className="text-xs"><EyeOff className="w-3 h-3 mr-1" />비공개</Badge>}
+                    </div>
+                    <p className="text-sm font-medium mt-2 truncate">{r.sermons?.title || '(삭제된 영상)'}</p>
+                    {r.detail && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{r.detail}</p>}
+                    <p className="text-xs text-muted-foreground mt-1">{new Date(r.created_at).toLocaleString('ko-KR')}</p>
+                  </div>
+                </div>
+
+                {r.sermon_report_replies?.length > 0 && (
+                  <div className="space-y-2 pl-3 border-l-2 border-muted">
+                    {r.sermon_report_replies.map((rep: any) => (
+                      <div key={rep.id} className="text-sm">
+                        <span className="text-xs font-semibold text-muted-foreground">
+                          {rep.author_role === 'admin' ? '관리자' : rep.author_role === 'owner' ? '채널 담당자' : '신고자'}
+                        </span>
+                        <p className="whitespace-pre-wrap">{rep.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Textarea
+                    placeholder="답변 작성..."
+                    value={replyTexts[r.id] || ''}
+                    onChange={e => setReplyTexts(p => ({ ...p, [r.id]: e.target.value }))}
+                    rows={2}
+                    className="text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => postReply.mutate({ reportId: r.id, body: replyTexts[r.id] || '' })}
+                    disabled={!replyTexts[r.id]?.trim() || postReply.isPending}
+                  >
+                    답변
+                  </Button>
+                </div>
+
+                {r.sermons && (
+                  <div className="flex gap-2 flex-wrap">
+                    {r.sermons.is_hidden ? (
+                      <Button size="sm" variant="outline" onClick={() => hideSermon.mutate({ id: r.sermons.id, hide: false })}>
+                        영상 공개 복원
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => hideSermon.mutate({ id: r.sermons.id, hide: true, reason: REASON_LABELS[r.reason] })}
+                      >
+                        <EyeOff className="w-3.5 h-3.5 mr-1" /> 영상 비공개
+                      </Button>
+                    )}
+                    {r.status === 'open' && (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => updateReportStatus.mutate({ id: r.id, status: 'resolved' })}>
+                          처리 완료
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => updateReportStatus.mutate({ id: r.id, status: 'dismissed' })}>
+                          기각
+                        </Button>
+                      </>
+                    )}
+                    {r.status !== 'open' && (
+                      <Button size="sm" variant="ghost" onClick={() => updateReportStatus.mutate({ id: r.id, status: 'open' })}>
+                        다시 열기
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </Card>
+            ))}
+          </TabsContent>
+
           <TabsContent value="channels" className="space-y-3 mt-4">
             {channels.map(ch => {
               const isStarting = setupAndStartLive.isPending && setupAndStartLive.variables?.id === ch.id;
