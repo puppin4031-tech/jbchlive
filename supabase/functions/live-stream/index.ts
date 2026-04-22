@@ -91,6 +91,23 @@ async function gcpFetch(url: string, options: RequestInit = {}) {
   return data;
 }
 
+// Poll an LRO operation until done (with timeout)
+async function waitForOperation(opName: string, timeoutMs = 120_000): Promise<any> {
+  const url = `https://livestream.googleapis.com/v1/${opName}`;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const op = await gcpFetch(url);
+    if (op.done) {
+      if (op.error) {
+        throw new Error(`Operation failed: ${JSON.stringify(op.error)}`);
+      }
+      return op.response || op;
+    }
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  throw new Error(`Operation timed out: ${opName}`);
+}
+
 // --- Auth helpers ---
 
 async function verifyUser(authHeader: string | null) {
@@ -139,23 +156,49 @@ async function verifyChannelAccess(
   }
 }
 
-// --- API Handlers ---
+// --- GCP Resource ID derivation ---
+// Use deterministic IDs based on channel UUID so we can re-find them.
+// GCP IDs: lowercase letters, digits, hyphens, max 63 chars, must start with letter.
+function gcpResourceId(channelUuid: string, kind: "input" | "channel"): string {
+  // Strip hyphens, take first 24 hex chars, prefix
+  const short = channelUuid.replace(/-/g, "").slice(0, 24);
+  return `${kind === "input" ? "in" : "ch"}-${short}`;
+}
+
+// --- GCP API operations ---
 
 async function createInput(inputId: string) {
   const url = `${BASE_URL}/inputs?inputId=${inputId}`;
-  return gcpFetch(url, {
+  const op = await gcpFetch(url, {
     method: "POST",
     body: JSON.stringify({
       type: "RTMP_PUSH",
       securityRules: { ipRanges: ["0.0.0.0/0"] },
     }),
   });
+  // Wait for input creation to complete
+  await waitForOperation(op.name);
+  // Fetch the created input to get the RTMP URI
+  return getInput(inputId);
+}
+
+async function getInput(inputId: string) {
+  return gcpFetch(`${BASE_URL}/inputs/${inputId}`);
+}
+
+async function deleteInput(inputId: string) {
+  const op = await gcpFetch(`${BASE_URL}/inputs/${inputId}`, { method: "DELETE" });
+  if (op.name) {
+    await waitForOperation(op.name).catch((e) =>
+      console.error("deleteInput wait failed", e)
+    );
+  }
 }
 
 async function createChannel(channelId: string, inputId: string) {
   const inputName = `projects/${PROJECT_ID}/locations/${LOCATION}/inputs/${inputId}`;
   const url = `${BASE_URL}/channels?channelId=${channelId}`;
-  return gcpFetch(url, {
+  const op = await gcpFetch(url, {
     method: "POST",
     body: JSON.stringify({
       inputAttachments: [{ key: "primary", input: inputName }],
@@ -164,12 +207,23 @@ async function createChannel(channelId: string, inputId: string) {
         {
           key: "video-stream",
           videoStream: {
-            h264: { profile: "high", bitrateBps: 3000000, frameRate: 30, widthPixels: 1920, heightPixels: 1080 },
+            h264: {
+              profile: "high",
+              bitrateBps: 3000000,
+              frameRate: 30,
+              widthPixels: 1920,
+              heightPixels: 1080,
+            },
           },
         },
         {
           key: "audio-stream",
-          audioStream: { codec: "aac", bitrateBps: 128000, channelCount: 2, sampleRateHertz: 48000 },
+          audioStream: {
+            codec: "aac",
+            bitrateBps: 128000,
+            channelCount: 2,
+            sampleRateHertz: 48000,
+          },
         },
       ],
       muxStreams: [
@@ -190,6 +244,12 @@ async function createChannel(channelId: string, inputId: string) {
       ],
     }),
   });
+  await waitForOperation(op.name);
+  return getChannelGCP(channelId);
+}
+
+async function getChannelGCP(channelId: string) {
+  return gcpFetch(`${BASE_URL}/channels/${channelId}`);
 }
 
 async function startChannelGCP(channelId: string) {
@@ -202,13 +262,8 @@ async function stopChannelGCP(channelId: string) {
   return gcpFetch(url, { method: "POST", body: "{}" });
 }
 
-async function getChannelStatus(channelId: string) {
-  const url = `${BASE_URL}/channels/${channelId}`;
-  return gcpFetch(url);
-}
-
 async function getHLSUrl(channelId: string) {
-  const channel = await getChannelStatus(channelId);
+  const channel = await getChannelGCP(channelId);
   const manifest = channel.manifests?.[0];
   const outputUri = channel.output?.uri || "";
   const hlsUrl = `${outputUri}${manifest?.fileName || "main.m3u8"}`;
@@ -219,16 +274,102 @@ async function getHLSUrl(channelId: string) {
   };
 }
 
+// --- High-level orchestrations ---
+
+/**
+ * Provision GCP Input + Channel for a given DB channel UUID.
+ * Idempotent: if already provisioned, returns existing URI.
+ * Clean-up: if channel creation fails after input was created, deletes the input.
+ */
+async function provisionChannel(
+  serviceClient: ReturnType<typeof createClient>,
+  channelUuid: string
+) {
+  // Check existing state
+  const { data: existing } = await serviceClient
+    .from("channels")
+    .select("gcp_input_uri")
+    .eq("id", channelUuid)
+    .single();
+
+  const inputId = gcpResourceId(channelUuid, "input");
+  const gcpChannelId = gcpResourceId(channelUuid, "channel");
+
+  // If already provisioned with URI, verify GCP still has it
+  if (existing?.gcp_input_uri) {
+    try {
+      const input = await getInput(inputId);
+      if (input?.uri) {
+        return { gcp_input_uri: input.uri, alreadyProvisioned: true };
+      }
+    } catch {
+      // Input missing on GCP, will recreate
+    }
+  }
+
+  let inputCreated = false;
+  try {
+    // Step 1: Create or fetch Input
+    let input;
+    try {
+      input = await getInput(inputId);
+    } catch {
+      input = await createInput(inputId);
+      inputCreated = true;
+    }
+
+    if (!input?.uri) {
+      throw new Error("Input created but no RTMP URI returned");
+    }
+    const inputUri = input.uri;
+
+    // Step 2: Create or fetch Channel
+    try {
+      await getChannelGCP(gcpChannelId);
+    } catch {
+      await createChannel(gcpChannelId, inputId);
+    }
+
+    // Step 3: Save to DB
+    const { error: dbErr } = await serviceClient
+      .from("channels")
+      .update({
+        gcp_input_uri: inputUri,
+        gcp_provisioned_at: new Date().toISOString(),
+        gcp_last_error: null,
+      })
+      .eq("id", channelUuid);
+    if (dbErr) throw new Error(`DB update failed: ${dbErr.message}`);
+
+    return { gcp_input_uri: inputUri, alreadyProvisioned: false };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Clean-up: if we created the input but channel failed, delete the input
+    if (inputCreated) {
+      await deleteInput(inputId).catch((e) =>
+        console.error("Cleanup deleteInput failed:", e)
+      );
+    }
+    await serviceClient
+      .from("channels")
+      .update({ gcp_last_error: msg.slice(0, 1000) })
+      .eq("id", channelUuid);
+    throw err;
+  }
+}
+
 // --- In-memory Rate Limiter ---
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 const RATE_LIMITS: Record<string, { max: number; windowSec: number }> = {
-  createInput:   { max: 3, windowSec: 60 },
+  createInput: { max: 3, windowSec: 60 },
   createChannel: { max: 3, windowSec: 60 },
-  startChannel:  { max: 5, windowSec: 60 },
-  stopChannel:   { max: 5, windowSec: 60 },
-  getStatus:     { max: 30, windowSec: 60 },
-  getHLSUrl:     { max: 30, windowSec: 60 },
+  provisionChannel: { max: 3, windowSec: 60 },
+  startChannel: { max: 5, windowSec: 60 },
+  stopChannel: { max: 5, windowSec: 60 },
+  getStatus: { max: 60, windowSec: 60 },
+  getHLSUrl: { max: 30, windowSec: 60 },
+  autoStopIdleChannels: { max: 30, windowSec: 60 },
 };
 
 function checkRateLimit(userId: string, action: string) {
@@ -263,26 +404,80 @@ serve(async (req) => {
   }
 
   try {
+    const body = await req.json();
+    const { action } = body;
+
+    // === Cron-triggered: autoStopIdleChannels ===
+    // Authenticated via service-role secret in body for cron use.
+    if (action === "autoStopIdleChannels") {
+      const cronSecret = req.headers.get("x-cron-secret");
+      const expected = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!cronSecret || cronSecret !== expected) {
+        throw new Error("Unauthorized");
+      }
+      const serviceClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { data: idle } = await serviceClient
+        .from("channels")
+        .select("id")
+        .eq("is_live", true)
+        .lt("live_started_at", cutoff);
+
+      const stopped: string[] = [];
+      for (const ch of idle ?? []) {
+        const gcpChannelId = gcpResourceId(ch.id, "channel");
+        try {
+          // Check GCP state — only stop if not actively streaming
+          const gcpCh = await getChannelGCP(gcpChannelId).catch(() => null);
+          const state = gcpCh?.streamingState;
+          if (state && state !== "STREAMING") {
+            await stopChannelGCP(gcpChannelId).catch(() => null);
+            await serviceClient
+              .from("channels")
+              .update({ is_live: false, gcp_channel_state: "STOPPED" })
+              .eq("id", ch.id);
+            stopped.push(ch.id);
+          }
+        } catch (e) {
+          console.error("autoStop error for", ch.id, e);
+        }
+      }
+      return new Response(JSON.stringify({ stopped }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // === Authenticated user actions ===
     const authHeader = req.headers.get("authorization");
     const user = await verifyUser(authHeader);
 
-    const { action, inputId, channelId, vodTitle, vodCategory, vodPreacher } = await req.json();
+    const { channelId, vodTitle, vodCategory, vodPreacher } = body;
 
-    // Validate input IDs to prevent injection
-    const ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
-    if (inputId && !ID_REGEX.test(inputId)) throw new Error("Invalid inputId format");
-    if (channelId && !ID_REGEX.test(channelId)) throw new Error("Invalid channelId format");
-    if (action && !ID_REGEX.test(action)) throw new Error("Invalid action format");
+    // Validate IDs
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const ACTION_REGEX = /^[a-zA-Z0-9_-]{1,50}$/;
+    if (channelId && !UUID_REGEX.test(channelId)) {
+      throw new Error("Invalid channelId format (must be UUID)");
+    }
+    if (action && !ACTION_REGEX.test(action)) throw new Error("Invalid action format");
     checkRateLimit(user.id, action);
 
-    // Actions that require admin only
-    const adminOnlyActions = ["createInput", "createChannel"];
-    if (adminOnlyActions.includes(action) && !user.isAdmin) {
+    // provisionChannel: admin only
+    if (action === "provisionChannel" && !user.isAdmin) {
       throw new Error("Forbidden: admin only");
     }
 
-    // Actions that require channel owner or admin
-    const channelActions = ["startChannel", "stopChannel", "getStatus", "getHLSUrl"];
+    // Channel-scoped actions: owner or admin
+    const channelActions = [
+      "startChannel",
+      "stopChannel",
+      "getStatus",
+      "getHLSUrl",
+      "provisionChannel",
+    ];
     if (channelActions.includes(action) && channelId) {
       await verifyChannelAccess(user, channelId);
     }
@@ -290,56 +485,80 @@ serve(async (req) => {
     let result: unknown;
 
     switch (action) {
-      case "createInput":
-        if (!inputId) throw new Error("inputId required");
-        result = await createInput(inputId);
+      case "provisionChannel": {
+        if (!channelId) throw new Error("channelId required");
+        result = await provisionChannel(user.serviceClient, channelId);
         break;
-      case "createChannel":
-        if (!channelId || !inputId) throw new Error("channelId and inputId required");
-        result = await createChannel(channelId, inputId);
-        break;
+      }
+
       case "startChannel": {
         if (!channelId) throw new Error("channelId required");
-        result = await startChannelGCP(channelId);
-        // Update is_live in DB
+        // Auto-provision if not yet done
+        const { data: ch } = await user.serviceClient
+          .from("channels")
+          .select("gcp_input_uri")
+          .eq("id", channelId)
+          .single();
+        if (!ch?.gcp_input_uri) {
+          if (!user.isAdmin) {
+            throw new Error("Channel not provisioned. Contact administrator.");
+          }
+          await provisionChannel(user.serviceClient, channelId);
+        }
+        const gcpChannelId = gcpResourceId(channelId, "channel");
+        result = await startChannelGCP(gcpChannelId);
         await user.serviceClient
           .from("channels")
-          .update({ is_live: true })
+          .update({
+            is_live: true,
+            live_started_at: new Date().toISOString(),
+            gcp_channel_state: "STARTING",
+          })
           .eq("id", channelId);
         break;
       }
+
       case "stopChannel": {
         if (!channelId) throw new Error("channelId required");
-        
-        // Get HLS URL before stopping (for VOD recording)
+        const gcpChannelId = gcpResourceId(channelId, "channel");
+
         let recordingUrl: string | null = null;
         try {
-          const hlsInfo = await getHLSUrl(channelId);
-          if (hlsInfo.hlsUrl) {
-            recordingUrl = hlsInfo.hlsUrl;
-          }
+          const hlsInfo = await getHLSUrl(gcpChannelId);
+          if (hlsInfo.hlsUrl) recordingUrl = hlsInfo.hlsUrl;
         } catch {
-          // Channel may not have output yet, continue
+          // ok
         }
 
-        result = await stopChannelGCP(channelId);
+        try {
+          result = await stopChannelGCP(gcpChannelId);
+        } catch (e) {
+          // Idempotent: already stopped is fine
+          const msg = e instanceof Error ? e.message : String(e);
+          if (!msg.includes("FAILED_PRECONDITION") && !msg.includes("not running")) {
+            throw e;
+          }
+          result = { alreadyStopped: true };
+        }
 
-        // Update is_live in DB
         await user.serviceClient
           .from("channels")
-          .update({ is_live: false })
+          .update({ is_live: false, gcp_channel_state: "STOPPED" })
           .eq("id", channelId);
 
-        // Auto-save as VOD sermon
-        const title = (typeof vodTitle === "string" && vodTitle.trim())
-          ? vodTitle.trim()
-          : `라이브 녹화 ${new Date().toLocaleDateString("ko-KR")}`;
-        const category = (typeof vodCategory === "string" && vodCategory.trim())
-          ? vodCategory.trim()
-          : "주일말씀";
-        const preacher = (typeof vodPreacher === "string" && vodPreacher.trim())
-          ? vodPreacher.trim()
-          : null;
+        // Auto-save VOD
+        const title =
+          typeof vodTitle === "string" && vodTitle.trim()
+            ? vodTitle.trim()
+            : `라이브 녹화 ${new Date().toLocaleDateString("ko-KR")}`;
+        const category =
+          typeof vodCategory === "string" && vodCategory.trim()
+            ? vodCategory.trim()
+            : "주일말씀";
+        const preacher =
+          typeof vodPreacher === "string" && vodPreacher.trim()
+            ? vodPreacher.trim()
+            : null;
 
         const { data: vodData, error: vodError } = await user.serviceClient
           .from("sermons")
@@ -355,21 +574,36 @@ serve(async (req) => {
           .select("id")
           .single();
 
-        if (vodError) {
-          console.error("VOD auto-save error:", vodError);
-        }
-
-        result = { ...result as object, vod: vodData || null };
+        if (vodError) console.error("VOD auto-save error:", vodError);
+        result = { ...(result as object), vod: vodData || null };
         break;
       }
-      case "getStatus":
+
+      case "getStatus": {
         if (!channelId) throw new Error("channelId required");
-        result = await getChannelStatus(channelId);
+        const gcpChannelId = gcpResourceId(channelId, "channel");
+        const gcpCh = await getChannelGCP(gcpChannelId);
+        const state = gcpCh.streamingState || "UNKNOWN";
+        // Sync DB
+        await user.serviceClient
+          .from("channels")
+          .update({ gcp_channel_state: state })
+          .eq("id", channelId);
+        result = {
+          streamingState: state,
+          inputAttachments: gcpCh.inputAttachments,
+          activeInput: gcpCh.activeInput,
+        };
         break;
-      case "getHLSUrl":
+      }
+
+      case "getHLSUrl": {
         if (!channelId) throw new Error("channelId required");
-        result = await getHLSUrl(channelId);
+        const gcpChannelId = gcpResourceId(channelId, "channel");
+        result = await getHLSUrl(gcpChannelId);
         break;
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }
@@ -379,10 +613,13 @@ serve(async (req) => {
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    const status = msg.includes("Unauthorized") ? 401
-      : msg.includes("Forbidden") ? 403
-      : msg.includes("Rate limit") ? 429
-      : 500;
+    const status = msg.includes("Unauthorized")
+      ? 401
+      : msg.includes("Forbidden")
+        ? 403
+        : msg.includes("Rate limit")
+          ? 429
+          : 500;
     return new Response(JSON.stringify({ error: msg }), {
       status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
