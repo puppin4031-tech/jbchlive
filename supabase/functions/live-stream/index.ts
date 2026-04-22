@@ -32,11 +32,24 @@ async function getAccessToken(): Promise<string> {
 
   const signInput = `${header}.${payload}`;
 
+  // Normalize PEM: handle literal "\n" sequences (escaped in env vars), real newlines, CR, and any whitespace
   const pemBody = sa.private_key
-    .replace(/-----BEGIN PRIVATE KEY-----/, "")
-    .replace(/-----END PRIVATE KEY-----/, "")
-    .replace(/\n/g, "");
-  const binaryKey = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0));
+    .replace(/\\n/g, "\n")
+    .replace(/-----BEGIN [^-]+-----/g, "")
+    .replace(/-----END [^-]+-----/g, "")
+    .replace(/\s+/g, "");
+  if (!pemBody) {
+    throw new Error("GCP_SERVICE_ACCOUNT_JSON: private_key is empty after cleanup");
+  }
+  let binaryKey: Uint8Array;
+  try {
+    binaryKey = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0));
+  } catch (e) {
+    throw new Error(
+      `Failed to base64-decode private_key (length=${pemBody.length}). ` +
+      `Check that GCP_SERVICE_ACCOUNT_JSON contains valid JSON with a proper PEM private_key.`
+    );
+  }
 
   const cryptoKey = await crypto.subtle.importKey(
     "pkcs8",
