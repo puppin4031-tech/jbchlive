@@ -50,11 +50,13 @@ export type Database = {
           id: string
           is_approved: boolean
           is_live: boolean
+          is_suspended: boolean
           logo_url: string | null
           name: string
           owner_id: string | null
           stream_url: string | null
           subscriber_count: number
+          suspended_reason: string | null
           updated_at: string
         }
         Insert: {
@@ -63,11 +65,13 @@ export type Database = {
           id?: string
           is_approved?: boolean
           is_live?: boolean
+          is_suspended?: boolean
           logo_url?: string | null
           name: string
           owner_id?: string | null
           stream_url?: string | null
           subscriber_count?: number
+          suspended_reason?: string | null
           updated_at?: string
         }
         Update: {
@@ -76,11 +80,13 @@ export type Database = {
           id?: string
           is_approved?: boolean
           is_live?: boolean
+          is_suspended?: boolean
           logo_url?: string | null
           name?: string
           owner_id?: string | null
           stream_url?: string | null
           subscriber_count?: number
+          suspended_reason?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -142,6 +148,77 @@ export type Database = {
         }
         Relationships: []
       }
+      sermon_report_replies: {
+        Row: {
+          author_id: string
+          author_role: string
+          body: string
+          created_at: string
+          id: string
+          report_id: string
+        }
+        Insert: {
+          author_id: string
+          author_role: string
+          body: string
+          created_at?: string
+          id?: string
+          report_id: string
+        }
+        Update: {
+          author_id?: string
+          author_role?: string
+          body?: string
+          created_at?: string
+          id?: string
+          report_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sermon_report_replies_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "sermon_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sermon_reports: {
+        Row: {
+          admin_note: string | null
+          created_at: string
+          detail: string | null
+          id: string
+          reason: string
+          reporter_id: string
+          sermon_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          admin_note?: string | null
+          created_at?: string
+          detail?: string | null
+          id?: string
+          reason: string
+          reporter_id: string
+          sermon_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          admin_note?: string | null
+          created_at?: string
+          detail?: string | null
+          id?: string
+          reason?: string
+          reporter_id?: string
+          sermon_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sermons: {
         Row: {
           category: string
@@ -149,7 +226,9 @@ export type Database = {
           created_at: string
           description: string | null
           duration: string | null
+          hidden_reason: string | null
           id: string
+          is_hidden: boolean
           is_live: boolean
           preacher: string | null
           sermon_date: string
@@ -165,7 +244,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           duration?: string | null
+          hidden_reason?: string | null
           id?: string
+          is_hidden?: boolean
           is_live?: boolean
           preacher?: string | null
           sermon_date?: string
@@ -181,7 +262,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           duration?: string | null
+          hidden_reason?: string | null
           id?: string
+          is_hidden?: boolean
           is_live?: boolean
           preacher?: string | null
           sermon_date?: string
@@ -224,11 +307,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_access_report: {
+        Args: { _report_id: string; _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      is_sermon_channel_owner: {
+        Args: { _sermon_id: string; _user_id: string }
         Returns: boolean
       }
     }
