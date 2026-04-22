@@ -333,7 +333,13 @@ const ManageSermonsPage = () => {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{s.title}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium text-foreground truncate">{s.title}</p>
+                    {s.is_hidden && <Badge variant="outline" className="text-[10px]"><EyeOff className="w-3 h-3 mr-0.5" />비공개</Badge>}
+                    {reportCountBySermon[s.id] > 0 && (
+                      <Badge variant="destructive" className="text-[10px]"><Flag className="w-3 h-3 mr-0.5" />{reportCountBySermon[s.id]}</Badge>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {s.preacher && `${s.preacher} · `}{s.category} · {s.sermon_date?.slice(0, 10)}
                   </p>
