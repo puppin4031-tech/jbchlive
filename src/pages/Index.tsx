@@ -47,10 +47,12 @@ const Index = () => {
             // Refresh live channels query
             queryClient.invalidateQueries({ queryKey: ['live-channels'] });
             queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+            queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
           }
           if (!newRow.is_live && oldRow.is_live) {
             queryClient.invalidateQueries({ queryKey: ['live-channels'] });
             queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+            queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
           }
         }
       )
