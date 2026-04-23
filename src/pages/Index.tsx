@@ -185,6 +185,44 @@ const Index = () => {
       )}
 
       <main className="container px-4 py-4 max-w-5xl mx-auto space-y-6">
+        {/* Live Channels Strip */}
+        {liveChannels && liveChannels.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="flex items-center gap-1 bg-live text-live-foreground text-sm font-bold px-3 py-1 rounded-md">
+                <Radio className="w-4 h-4 animate-pulse" /> 지금 라이브 중
+              </span>
+              <Link to="/live" className="ml-auto text-sm text-primary hover:underline">
+                전체 보기 →
+              </Link>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
+              {liveChannels.map((ch) => (
+                <Link
+                  key={ch.id}
+                  to={`/live/${ch.id}`}
+                  className="shrink-0 w-44 md:w-52 snap-start rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow"
+                >
+                  <div className="relative aspect-video bg-muted flex items-center justify-center">
+                    {ch.logo_url ? (
+                      <img src={ch.logo_url} alt={ch.name} className="w-16 h-16 rounded-full object-cover" />
+                    ) : (
+                      <Radio className="w-10 h-10 text-muted-foreground" />
+                    )}
+                    <span className="absolute top-2 left-2 flex items-center gap-1 bg-live text-live-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">
+                      <Radio className="w-2.5 h-2.5 animate-pulse" /> LIVE
+                    </span>
+                  </div>
+                  <div className="p-2">
+                    <p className="font-semibold text-sm text-foreground truncate">{ch.name}</p>
+                    <p className="text-xs text-muted-foreground">지금 시청하기 →</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Live Now Section */}
         {currentLiveChannel && currentLiveChannel.stream_url && (
           <section>
