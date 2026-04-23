@@ -47,10 +47,12 @@ const Index = () => {
             // Refresh live channels query
             queryClient.invalidateQueries({ queryKey: ['live-channels'] });
             queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+            queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
           }
           if (!newRow.is_live && oldRow.is_live) {
             queryClient.invalidateQueries({ queryKey: ['live-channels'] });
             queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+            queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
           }
         }
       )
@@ -124,6 +126,22 @@ const Index = () => {
     },
   });
 
+  // Fetch ALL approved channels for permanent live links strip
+  const { data: allChannels } = useQuery({
+    queryKey: ['all-approved-channels'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('channels')
+        .select('id, name, logo_url, is_live')
+        .eq('is_approved', true)
+        .eq('is_suspended', false)
+        .order('is_live', { ascending: false })
+        .order('subscriber_count', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const currentLiveChannel = liveChannels?.[0];
   const currentLiveSermon = liveSermons?.find(s => s.channel_id === currentLiveChannel?.id);
 
@@ -185,6 +203,45 @@ const Index = () => {
       )}
 
       <main className="container px-4 py-4 max-w-5xl mx-auto space-y-6">
+        {/* Permanent Church Live Links — always visible */}
+        {allChannels && allChannels.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <h2 className="font-semibold text-xl md:text-base text-foreground">교회 라이브 링크</h2>
+              <span className="text-xs text-muted-foreground ml-1">영구 링크 · 클릭하여 시청</span>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
+              {allChannels.map((ch) => (
+                <Link
+                  key={ch.id}
+                  to={`/live/${ch.id}`}
+                  className="shrink-0 w-36 md:w-40 snap-start rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow"
+                >
+                  <div className="relative aspect-square bg-muted flex items-center justify-center">
+                    <img
+                      src={ch.logo_url || '/placeholder.svg'}
+                      alt={ch.name}
+                      className="w-full h-full object-cover"
+                    />
+                    {ch.is_live ? (
+                      <span className="absolute top-2 left-2 flex items-center gap-1 bg-live text-live-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">
+                        <Radio className="w-2.5 h-2.5 animate-pulse" /> LIVE
+                      </span>
+                    ) : (
+                      <span className="absolute top-2 left-2 bg-muted text-muted-foreground text-[10px] font-bold px-1.5 py-0.5 rounded border border-border">
+                        OFFLINE
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-2">
+                    <p className="font-semibold text-sm text-foreground truncate">{ch.name}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Live Channels Strip */}
         {liveChannels && liveChannels.length > 0 && (
           <section>

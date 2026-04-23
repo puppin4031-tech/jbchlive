@@ -65,6 +65,19 @@ const LivePage = () => {
     enabled: !!channelId,
   });
 
+  // Viewer count (must be called unconditionally before any early return)
+  const viewerCount = useViewerCount(channelId, !!channel?.is_live);
+
+  // Update document title for sharing
+  useEffect(() => {
+    if (channel?.name) {
+      document.title = `${channel.name} 라이브 - Live Word Mission`;
+    }
+    return () => {
+      document.title = 'Live Word Mission';
+    };
+  }, [channel?.name]);
+
   // Realtime subscription for live status changes
   useEffect(() => {
     if (!channelId) return;
@@ -128,7 +141,7 @@ const LivePage = () => {
 
   const isLive = channel.is_live;
   const streamUrl = channel.stream_url;
-  const viewerCount = useViewerCount(channelId, isLive);
+  const permanentUrl = `${window.location.origin}/live/${channelId}`;
 
   return (
     <div className="min-h-screen bg-background">
@@ -138,12 +151,28 @@ const LivePage = () => {
         {isLive && streamUrl ? (
           <VideoPlayer src={streamUrl} autoPlay />
         ) : (
-          <div className="relative w-full aspect-video bg-muted rounded-xl overflow-hidden flex flex-col items-center justify-center gap-3">
-            <VideoOff className="w-12 h-12 text-muted-foreground" />
-            <p className="text-muted-foreground text-sm text-center px-4">
-              현재 라이브가 아닙니다.<br />
-              라이브가 시작되면 여기서 자동으로 시청할 수 있습니다.
-            </p>
+          <div className="relative w-full aspect-video bg-card border border-border rounded-xl overflow-hidden flex flex-col items-center justify-center gap-4 p-6">
+            <img
+              src={channel.logo_url || '/placeholder.svg'}
+              alt={channel.name}
+              className="w-20 h-20 rounded-full object-cover border-2 border-border"
+            />
+            <div className="text-center space-y-2">
+              <span className="inline-flex items-center gap-1 bg-muted text-muted-foreground text-xs font-bold px-2 py-1 rounded">
+                <VideoOff className="w-3 h-3" /> 현재 오프라인
+              </span>
+              <h2 className="font-semibold text-lg text-foreground">{channel.name}</h2>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                라이브가 시작되면 이 페이지에서 자동으로 재생됩니다.<br />
+                아래 링크를 공유하여 시청자를 초대하세요.
+              </p>
+            </div>
+            <div className="w-full max-w-md flex items-center gap-2 bg-muted/50 border border-border rounded-lg px-3 py-2">
+              <code className="flex-1 text-xs text-foreground truncate">{permanentUrl}</code>
+              <Button size="sm" variant="outline" onClick={handleShare}>
+                <Share2 className="w-3 h-3 mr-1" /> 복사
+              </Button>
+            </div>
           </div>
         )}
 
