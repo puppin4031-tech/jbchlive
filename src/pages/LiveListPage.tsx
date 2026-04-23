@@ -22,6 +22,9 @@ const LiveListPage = () => {
       if (error) throw error;
       return data;
     },
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
   // Realtime: refresh when any channel goes live/offline
