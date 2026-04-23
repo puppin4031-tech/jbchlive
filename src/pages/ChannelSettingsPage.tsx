@@ -316,6 +316,41 @@ const ChannelSettingsPage = () => {
                     : '라이브 시작'}
               </Button>
 
+              {/* Permanent Live Share Link */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  라이브 시청 링크 (영구)
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 rounded-md border border-border bg-muted/50 px-3 py-2.5 min-w-0">
+                    <code className="text-xs font-mono text-foreground break-all">
+                      {`${window.location.origin}/live/${channelId}`}
+                    </code>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => handleCopy(`${window.location.origin}/live/${channelId}`, 'liveUrl')}
+                    className="shrink-0 h-10 w-10"
+                    title="복사"
+                  >
+                    {copiedField === 'liveUrl' ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => window.open(`/live/${channelId}`, '_blank')}
+                    className="shrink-0 h-10 w-10"
+                    title="새 탭에서 열기"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  이 링크는 변하지 않습니다. SNS·문자로 공유하세요.
+                </p>
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">RTMP 서버 URL</label>
                 <div className="flex items-center gap-2">
