@@ -1,70 +1,67 @@
 
 
-## 라이브 노출/공유 시스템 정비
+## 라이브 페이지 흰 화면 + 영구 링크 노출 개선
 
-### 현재 상태 진단
+### 문제 진단
 
-**문제 1: `/live` 페이지가 비어있음**
-- `LiveListPage`는 `channels.is_live=true AND sermons.is_live=true`를 **`!inner` 조인**으로 요구
-- "라이브 시작" 버튼은 `channels.is_live`만 true로 바꾸고, **sermon 레코드를 자동 생성하지 않음**
-- → 채널은 라이브 중이지만 sermon이 없어서 리스트에서 제외됨
+**1. 라이브 페이지 흰 화면 (React Hooks 위반)**
+`src/pages/LivePage.tsx`에서 `useViewerCount(channelId, isLive)` 훅이 **조건부 early return(`if (channelLoading)`, `if (!channel)`) 이후**에 호출됨. React Hooks 규칙 위반 → 로딩이 끝나는 순간 훅 호출 순서가 바뀌면서 컴포넌트가 크래시 → 흰 화면. 흰 화면 + URL 변화로 일부 환경에서 Lovable 프리뷰 fallback 페이지가 잠깐 보일 수 있음.
 
-**문제 2: 홈에서 라이브 진입 동선이 약함**
-- `Index.tsx`에 라이브 알림 배너가 있긴 하지만, 라이브 채널이 여러 개일 때 한 채널만 보이거나 자동 이동 동선이 모호
+**2. 라이브가 꺼져있을 때 화면이 빈약함**
+DB 확인 결과 채널은 존재하나 `is_live=false`, `logo_url=null`, `stream_url=null` 상태. 현재 fallback은 `VideoOff` 아이콘과 짧은 문구만 표시 → "흰 화면처럼 보임"의 또 다른 원인.
 
-**문제 3: 라이브 링크 공유 위치가 분산됨**
-- 라이브 페이지(`/live/:channelId`) 안에만 공유 버튼 존재
-- 송출자(ChannelSettingsPage)가 방송 시작 직후 링크를 복사할 수 없음
+**3. 홈 상단에 항상 보이는 "라이브 링크" 카드 부재**
+현재 홈 상단 "지금 라이브 중" 섹션은 `is_live=true`인 채널만 노출. 라이브가 꺼져있으면 섹션 자체가 사라져, 사용자가 채널의 영구 라이브 링크에 접근할 입구가 없음.
 
 ---
 
 ### 해결 방안
 
-#### A. `/live` 리스트가 sermon 없이도 채널 자체를 보여주도록 수정
-`LiveListPage`를 **채널 기반**으로 변경. sermon이 있으면 sermon 정보를, 없으면 채널 정보(이름/로고/"라이브 중")만으로 카드 렌더링.
+#### A. LivePage Hooks 위반 수정 (흰 화면 해결)
+- `useViewerCount`를 컴포넌트 본문 **상단**(early return 이전)으로 이동
+- `useParams`, `useQuery`, `useEffect`, `useViewerCount` 모두 항상 같은 순서로 호출되도록 정리
+- 안전한 fallback: `channelId`가 없으면 0 반환은 훅 내부에서 이미 처리됨
+
+#### B. 라이브 OFF 상태 fallback UI 강화
+플레이어 영역에 다음을 표시:
+- 채널 로고(없으면 placeholder) + 채널명을 큰 카드로
+- "현재 오프라인" 배지
+- "라이브가 시작되면 이 페이지에서 자동 재생됩니다" 안내
+- 공유 버튼 + 링크 박스(영구 URL 표시 + 복사) — 라이브 OFF 상태에서도 시청자가 링크 공유 가능
+
+#### C. 홈 상단 "채널 라이브 링크" 섹션 추가 (영구 노출)
+홈(`Index.tsx`) 상단, "지금 라이브 중" 섹션과는 별개로 **항상 표시되는** "교회 라이브 링크" 가로 스크롤 섹션:
+- 모든 승인된 채널의 카드 표시 (`is_approved=true AND is_suspended=false`)
+- 각 카드: 로고(없으면 기본 썸네일 `/placeholder.svg`) + 채널명 + 라이브 상태 뱃지(LIVE / OFFLINE)
+- 클릭 시 해당 채널의 영구 라이브 링크(`/live/:channelId`)로 이동
+- 라이브 중인 채널은 빨간 LIVE 뱃지 + 펄스 애니메이션으로 강조, 오프라인 채널은 회색 뱃지
 
 ```text
-┌──────────────────────────┐
-│ [채널 로고]  채널명      │
-│ 🔴 LIVE  · 23명 시청 중   │
-│ → 클릭 시 /live/:channelId │
-└──────────────────────────┘
+교회 라이브 링크
+┌────────┐ ┌────────┐ ┌────────┐
+│ [로고] │ │ [로고] │ │ [로고] │
+│ 🔴LIVE │ │ OFFLINE│ │ OFFLINE│
+│ 채널A  │ │ 채널B  │ │ 채널C  │
+└────────┘ └────────┘ └────────┘
+       (클릭 → /live/{id})
 ```
 
-#### B. 홈(`Index.tsx`)에 라이브 채널 섹션 추가
-페이지 최상단에 **"🔴 지금 라이브 중"** 섹션을 배치:
-- 라이브 채널이 1개면 큰 카드 + "지금 시청하기" 버튼 → `/live/:channelId`
-- 여러 개면 가로 스크롤 카드 리스트
-- 라이브가 0개면 섹션 자체 숨김
-- Realtime으로 `channels.is_live` 변화 구독 → 새로고침 없이 자동 등장/사라짐
-
-#### C. ChannelSettingsPage에 라이브 공유 박스 추가
-"라이브 시작" 버튼 영역 아래에 영구 라이브 URL 박스:
-```
-라이브 시청 링크 (영구)
-[https://jbchlive.lovable.app/live/{id}] [복사] [새 탭]
-이 링크는 변하지 않습니다. SNS·문자로 공유하세요.
-```
-라이브 시작 토스트에도 "링크가 복사되었습니다" 옵션 추가.
-
-#### D. LivePage 빈 상태 개선
-`is_live=true`인데 stream_url이 없거나 sermon이 없는 경우에도 채널 정보 + "방송 준비 중" 안내가 깔끔히 표시되도록 fallback 보강 (현재도 일부 처리되어 있으나 문구/UX 정리).
+#### D. LivePage 메타 (OG/title) 보강 (옵션)
+공유 시 카카오톡/SNS 미리보기에서 채널명이 보이도록 `document.title` 동적 설정.
 
 ---
 
-### 기술 변경 요약
+### 변경 파일
 
 | 파일 | 변경 |
 |---|---|
-| `src/pages/LiveListPage.tsx` | 쿼리를 `channels` 단독 select로 변경(`is_live=true AND is_approved=true AND is_suspended=false`), sermon은 LEFT JOIN으로 옵셔널 표시 |
-| `src/pages/Index.tsx` | 최상단에 "지금 라이브 중" 섹션 추가 + Realtime 구독으로 자동 갱신 |
-| `src/pages/ChannelSettingsPage.tsx` | 라이브 시작 버튼 근처에 영구 라이브 URL 공유 박스(복사/새탭) 추가 |
-| `src/pages/LivePage.tsx` | sermon 없는 라이브 상태 fallback 문구·레이아웃 정리 |
+| `src/pages/LivePage.tsx` | `useViewerCount` 호출 위치를 early return 이전으로 이동(훅 규칙 준수). 오프라인 fallback UI를 채널 로고/이름/공유링크 카드로 확장 |
+| `src/pages/Index.tsx` | 홈 상단에 "교회 라이브 링크" 섹션 추가(승인된 모든 채널 가로 스크롤, LIVE/OFFLINE 상태 뱃지 + 영구 링크) |
 
-DB 마이그레이션, 엣지 함수 변경 없음. 영구 링크 형식은 기존 `/live/:channelId` 그대로 유지.
+DB 마이그레이션, 엣지 함수, 라우팅 변경 없음. 영구 링크 형식 `/live/:channelId` 그대로 유지.
 
-### 사용자 다음 단계
-1. 적용 후 홈(`/`) 새로고침 → 라이브 채널이 상단에 노출되는지 확인
-2. `/live` 진입 시 현재 라이브 채널 카드가 표시되는지 확인
-3. ChannelSettingsPage에서 공유 링크 복사 → 다른 브라우저/시크릿창에 붙여넣어 시청 확인
+### 사용자 확인 단계
+1. 적용 후 `/live/b456e635-...` 직접 접속 → 흰 화면 없이 채널 카드 + "오프라인" + 공유 링크 표시 확인
+2. 홈(`/`) 상단에 "교회 라이브 링크" 섹션이 라이브 여부와 관계없이 항상 노출되는지 확인
+3. 카드 클릭 시 영구 라이브 링크로 이동, 링크 복사 후 시크릿창에서 접속 확인
 
