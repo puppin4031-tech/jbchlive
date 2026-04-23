@@ -164,6 +164,13 @@ const ChannelSettingsPage = () => {
       setPollAttempts(0);
       setStartingDialogOpen(true);
       refetchChannel();
+      queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
+      queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
+      queryClient.invalidateQueries({ queryKey: ['live-channels'] });
+      queryClient.invalidateQueries({ queryKey: ['live-channels-list'] });
+      queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
+      queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+      queryClient.invalidateQueries({ queryKey: ['live-sermon', channelId] });
     },
     onError: (e: Error) => toast.error('라이브 시작 실패: ' + e.message),
   });
@@ -183,6 +190,12 @@ const ChannelSettingsPage = () => {
       setVodTitle('');
       setVodPreacher('');
       queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
+      queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
+      queryClient.invalidateQueries({ queryKey: ['live-channels'] });
+      queryClient.invalidateQueries({ queryKey: ['live-channels-list'] });
+      queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
+      queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+      queryClient.invalidateQueries({ queryKey: ['live-sermon', channelId] });
     },
     onError: (e: Error) => toast.error('라이브 종료 실패: ' + e.message),
   });

@@ -32,27 +32,21 @@ const Index = () => {
           filter: 'is_approved=eq.true',
         },
         (payload) => {
-          const newRow = payload.new as any;
-          const oldRow = payload.old as any;
-          // Only show alert when is_live changes from false to true
-          if (newRow.is_live && !oldRow.is_live) {
+          const newRow = (payload.new ?? {}) as any;
+          const oldRow = (payload.old ?? {}) as any;
+          // Always invalidate on any channel update — UI relies on fresh state
+          queryClient.invalidateQueries({ queryKey: ['live-channels'] });
+          queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+          queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
+          // Show alert only on false/undefined → true transition
+          if (newRow.is_live === true && oldRow.is_live !== true) {
             setLiveAlert({
               id: newRow.id,
               name: newRow.name,
               logoUrl: newRow.logo_url,
             });
-            // Auto-dismiss after 10 seconds
             if (alertTimeoutRef.current) clearTimeout(alertTimeoutRef.current);
             alertTimeoutRef.current = setTimeout(() => setLiveAlert(null), 10000);
-            // Refresh live channels query
-            queryClient.invalidateQueries({ queryKey: ['live-channels'] });
-            queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
-            queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
-          }
-          if (!newRow.is_live && oldRow.is_live) {
-            queryClient.invalidateQueries({ queryKey: ['live-channels'] });
-            queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
-            queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
           }
         }
       )
@@ -76,6 +70,9 @@ const Index = () => {
       if (error) throw error;
       return data;
     },
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
   // Fetch live sermons (for metadata)
@@ -90,6 +87,9 @@ const Index = () => {
       if (error) throw error;
       return data;
     },
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
   // Fetch VOD sermons with channel info
@@ -140,6 +140,9 @@ const Index = () => {
       if (error) throw error;
       return data;
     },
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
   const currentLiveChannel = liveChannels?.[0];

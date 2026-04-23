@@ -28,6 +28,9 @@ const LivePage = () => {
       return data;
     },
     enabled: !!channelId,
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
   // Fetch current live sermon for this channel
@@ -46,6 +49,9 @@ const LivePage = () => {
       return data;
     },
     enabled: !!channelId && !!channel?.is_live,
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
   // Fetch recent VODs
