@@ -124,6 +124,22 @@ const Index = () => {
     },
   });
 
+  // Fetch ALL approved channels for permanent live links strip
+  const { data: allChannels } = useQuery({
+    queryKey: ['all-approved-channels'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('channels')
+        .select('id, name, logo_url, is_live')
+        .eq('is_approved', true)
+        .eq('is_suspended', false)
+        .order('is_live', { ascending: false })
+        .order('subscriber_count', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const currentLiveChannel = liveChannels?.[0];
   const currentLiveSermon = liveSermons?.find(s => s.channel_id === currentLiveChannel?.id);
 
