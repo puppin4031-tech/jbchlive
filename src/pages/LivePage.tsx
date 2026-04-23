@@ -65,6 +65,19 @@ const LivePage = () => {
     enabled: !!channelId,
   });
 
+  // Viewer count (must be called unconditionally before any early return)
+  const viewerCount = useViewerCount(channelId, !!channel?.is_live);
+
+  // Update document title for sharing
+  useEffect(() => {
+    if (channel?.name) {
+      document.title = `${channel.name} 라이브 - Live Word Mission`;
+    }
+    return () => {
+      document.title = 'Live Word Mission';
+    };
+  }, [channel?.name]);
+
   // Realtime subscription for live status changes
   useEffect(() => {
     if (!channelId) return;
