@@ -330,23 +330,27 @@ const ChannelSettingsPage = () => {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">스트림 키</label>
-                {streamKey && (isOwner || isAdmin) && (
+                {streamKey ? (
                   <div className="flex items-center gap-2">
                     <div className="flex-1 rounded-md border border-border bg-muted/50 px-3 py-2.5 min-w-0">
                       <code className="text-sm font-mono text-foreground break-all">
                         {showStreamKey ? streamKey : maskedKey}
                       </code>
                     </div>
-                    <Button variant="outline" size="icon" onClick={() => setShowStreamKey(!showStreamKey)} className="shrink-0 h-10 w-10">
+                    <Button variant="outline" size="icon" onClick={() => setShowStreamKey(!showStreamKey)} className="shrink-0 h-10 w-10" title={showStreamKey ? '숨기기' : '전체 보기'}>
                       {showStreamKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </Button>
-                    <Button variant="outline" size="icon" onClick={() => handleCopy(streamKey, 'key')} className="shrink-0 h-10 w-10">
+                    <Button variant="outline" size="icon" onClick={() => handleCopy(streamKey, 'key')} className="shrink-0 h-10 w-10" title="복사">
                       {copiedField === 'key' ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
                     </Button>
                   </div>
+                ) : (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
+                    스트림 키를 불러올 수 없습니다. 관리자에게 GCP 재프로비저닝을 요청하세요.
+                  </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  GCP에서 발급한 고유 RTMP 주소입니다. 외부 노출 금지.
+                  👁 아이콘을 누르면 전체 키가 표시됩니다. 외부 노출 금지.
                 </p>
               </div>
 
