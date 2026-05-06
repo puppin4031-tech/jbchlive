@@ -291,11 +291,31 @@ async function deleteChannelGCP(channelId: string) {
   }
 }
 
+function gsToHttps(uri: string): string {
+  const m = uri.match(/^gs:\/\/([^/]+)\/(.+)$/);
+  return m ? `https://storage.googleapis.com/${m[1]}/${m[2]}` : uri;
+}
+
+async function buildHlsHttpsUrl(gcpChannelId: string): Promise<string | null> {
+  try {
+    const ch = await getChannelGCP(gcpChannelId);
+    const fileName = ch.manifests?.[0]?.fileName ?? "manifest.m3u8";
+    const outputUri: string = ch.output?.uri ?? "";
+    if (!outputUri.startsWith("gs://")) return null;
+    const base = outputUri.endsWith("/") ? outputUri : `${outputUri}/`;
+    return gsToHttps(`${base}${fileName}`);
+  } catch {
+    return null;
+  }
+}
+
 async function getHLSUrl(channelId: string) {
   const channel = await getChannelGCP(channelId);
   const manifest = channel.manifests?.[0];
   const outputUri = channel.output?.uri || "";
-  const hlsUrl = `${outputUri}${manifest?.fileName || "manifest.m3u8"}`;
+  const base = outputUri.endsWith("/") ? outputUri : `${outputUri}/`;
+  const rawUrl = `${base}${manifest?.fileName || "manifest.m3u8"}`;
+  const hlsUrl = gsToHttps(rawUrl);
   return {
     hlsUrl,
     streamingState: channel.streamingState,
@@ -466,14 +486,13 @@ serve(async (req) => {
       for (const ch of idle ?? []) {
         const gcpChannelId = gcpResourceId(ch.id, "channel");
         try {
-          // Check GCP state — only stop if not actively streaming
           const gcpCh = await getChannelGCP(gcpChannelId).catch(() => null);
           const state = gcpCh?.streamingState;
           if (state && state !== "STREAMING") {
             await stopChannelGCP(gcpChannelId).catch(() => null);
             await serviceClient
               .from("channels")
-              .update({ is_live: false, gcp_channel_state: "STOPPED" })
+              .update({ is_live: false, gcp_channel_state: "STOPPED", stream_url: null })
               .eq("id", ch.id);
             stopped.push(ch.id);
           }
@@ -543,14 +562,19 @@ serve(async (req) => {
         }
         const gcpChannelId = gcpResourceId(channelId, "channel");
         result = await startChannelGCP(gcpChannelId);
+        // Pre-compute HLS HTTPS URL so viewers can attach hls.js immediately;
+        // hls.js will retry until the manifest segment is published by GCP.
+        const hlsUrl = await buildHlsHttpsUrl(gcpChannelId);
         await user.serviceClient
           .from("channels")
           .update({
             is_live: true,
             live_started_at: new Date().toISOString(),
             gcp_channel_state: "STARTING",
+            stream_url: hlsUrl,
           })
           .eq("id", channelId);
+        result = { ...(result as object), streamUrl: hlsUrl };
         break;
       }
 
@@ -579,8 +603,12 @@ serve(async (req) => {
 
         await user.serviceClient
           .from("channels")
-          .update({ is_live: false, gcp_channel_state: "STOPPED" })
+          .update({ is_live: false, gcp_channel_state: "STOPPED", stream_url: null })
           .eq("id", channelId);
+
+        // Sanitize VOD URL: must be http(s) per validate_sermon_urls trigger
+        const safeRecordingUrl =
+          recordingUrl && /^https?:\/\//.test(recordingUrl) ? recordingUrl : null;
 
         // Auto-save VOD
         const title =
@@ -603,7 +631,7 @@ serve(async (req) => {
             title,
             category,
             preacher,
-            video_url: recordingUrl,
+            video_url: safeRecordingUrl,
             is_live: false,
             sermon_date: new Date().toISOString(),
           })
@@ -620,15 +648,32 @@ serve(async (req) => {
         const gcpChannelId = gcpResourceId(channelId, "channel");
         const gcpCh = await getChannelGCP(gcpChannelId);
         const state = gcpCh.streamingState || "UNKNOWN";
-        // Sync DB
+
+        // Idempotent stream_url backfill: if channel is live but stream_url missing, populate it
+        const { data: dbCh } = await user.serviceClient
+          .from("channels")
+          .select("is_live, stream_url")
+          .eq("id", channelId)
+          .single();
+
+        let streamUrl = dbCh?.stream_url ?? null;
+        if (dbCh?.is_live && !streamUrl) {
+          streamUrl = await buildHlsHttpsUrl(gcpChannelId);
+        }
+
         await user.serviceClient
           .from("channels")
-          .update({ gcp_channel_state: state })
+          .update({
+            gcp_channel_state: state,
+            ...(dbCh?.is_live && streamUrl && !dbCh.stream_url ? { stream_url: streamUrl } : {}),
+          })
           .eq("id", channelId);
+
         result = {
           streamingState: state,
           inputAttachments: gcpCh.inputAttachments,
           activeInput: gcpCh.activeInput,
+          streamUrl,
         };
         break;
       }
