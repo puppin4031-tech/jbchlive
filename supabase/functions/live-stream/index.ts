@@ -562,14 +562,19 @@ serve(async (req) => {
         }
         const gcpChannelId = gcpResourceId(channelId, "channel");
         result = await startChannelGCP(gcpChannelId);
+        // Pre-compute HLS HTTPS URL so viewers can attach hls.js immediately;
+        // hls.js will retry until the manifest segment is published by GCP.
+        const hlsUrl = await buildHlsHttpsUrl(gcpChannelId);
         await user.serviceClient
           .from("channels")
           .update({
             is_live: true,
             live_started_at: new Date().toISOString(),
             gcp_channel_state: "STARTING",
+            stream_url: hlsUrl,
           })
           .eq("id", channelId);
+        result = { ...(result as object), streamUrl: hlsUrl };
         break;
       }
 
