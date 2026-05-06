@@ -603,8 +603,12 @@ serve(async (req) => {
 
         await user.serviceClient
           .from("channels")
-          .update({ is_live: false, gcp_channel_state: "STOPPED" })
+          .update({ is_live: false, gcp_channel_state: "STOPPED", stream_url: null })
           .eq("id", channelId);
+
+        // Sanitize VOD URL: must be http(s) per validate_sermon_urls trigger
+        const safeRecordingUrl =
+          recordingUrl && /^https?:\/\//.test(recordingUrl) ? recordingUrl : null;
 
         // Auto-save VOD
         const title =
