@@ -291,11 +291,31 @@ async function deleteChannelGCP(channelId: string) {
   }
 }
 
+function gsToHttps(uri: string): string {
+  const m = uri.match(/^gs:\/\/([^/]+)\/(.+)$/);
+  return m ? `https://storage.googleapis.com/${m[1]}/${m[2]}` : uri;
+}
+
+async function buildHlsHttpsUrl(gcpChannelId: string): Promise<string | null> {
+  try {
+    const ch = await getChannelGCP(gcpChannelId);
+    const fileName = ch.manifests?.[0]?.fileName ?? "manifest.m3u8";
+    const outputUri: string = ch.output?.uri ?? "";
+    if (!outputUri.startsWith("gs://")) return null;
+    const base = outputUri.endsWith("/") ? outputUri : `${outputUri}/`;
+    return gsToHttps(`${base}${fileName}`);
+  } catch {
+    return null;
+  }
+}
+
 async function getHLSUrl(channelId: string) {
   const channel = await getChannelGCP(channelId);
   const manifest = channel.manifests?.[0];
   const outputUri = channel.output?.uri || "";
-  const hlsUrl = `${outputUri}${manifest?.fileName || "manifest.m3u8"}`;
+  const base = outputUri.endsWith("/") ? outputUri : `${outputUri}/`;
+  const rawUrl = `${base}${manifest?.fileName || "manifest.m3u8"}`;
+  const hlsUrl = gsToHttps(rawUrl);
   return {
     hlsUrl,
     streamingState: channel.streamingState,
