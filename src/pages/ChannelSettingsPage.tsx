@@ -62,9 +62,16 @@ const ChannelSettingsPage = () => {
     }
   }, [channel]);
 
-  // GCP 채널 상태 폴링 (라이브 시작 다이얼로그 열려있을 때)
+  // Poll GCP status while:
+  //  (a) the start dialog is open, OR
+  //  (b) channel is live but stream_url has not been backfilled yet.
+  // getStatus backfills stream_url server-side; once present, Realtime fans out
+  // to viewer pages so they auto-switch from "preparing" to the live player.
   useEffect(() => {
-    if (!startingDialogOpen || !channelId) return;
+    if (!channelId) return;
+    const needsBackgroundPoll = !!channel?.is_live && !channel?.stream_url;
+    if (!startingDialogOpen && !needsBackgroundPoll) return;
+
     let cancelled = false;
     const poll = async () => {
       try {
@@ -72,9 +79,12 @@ const ChannelSettingsPage = () => {
         if (cancelled) return;
         setGcpState(res.streamingState || 'UNKNOWN');
         setPollAttempts((n) => n + 1);
-        // STREAMING이면 OBS가 송출 중. AWAITING_INPUT이면 GCP는 준비 완료, OBS 대기 중.
-        if (res.streamingState === 'AWAITING_INPUT' || res.streamingState === 'STREAMING') {
-          // 준비 완료 — 다이얼로그는 사용자가 닫게 둠
+        if (res.streamUrl && !channel?.stream_url) {
+          refetchChannel();
+          queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
+          queryClient.invalidateQueries({ queryKey: ['live-channels'] });
+          queryClient.invalidateQueries({ queryKey: ['live-channels-list'] });
+          queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
         }
       } catch (e) {
         console.error('polling error', e);
@@ -86,7 +96,7 @@ const ChannelSettingsPage = () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [startingDialogOpen, channelId]);
+  }, [startingDialogOpen, channelId, channel?.is_live, channel?.stream_url, queryClient, refetchChannel]);
 
   const canEdit = channel && user && (channel.owner_id === user.id || isAdmin);
   const isOwner = channel && user && channel.owner_id === user.id;
