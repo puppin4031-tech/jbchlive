@@ -34,6 +34,7 @@ export const getStatus = (
   streamingState: string;
   inputAttachments?: unknown;
   activeInput?: string;
+  streamUrl?: string | null;
 }> => invoke("getStatus", { channelId });
 
 /** HLS 재생 URL 조회 */
