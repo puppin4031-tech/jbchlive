@@ -648,15 +648,32 @@ serve(async (req) => {
         const gcpChannelId = gcpResourceId(channelId, "channel");
         const gcpCh = await getChannelGCP(gcpChannelId);
         const state = gcpCh.streamingState || "UNKNOWN";
-        // Sync DB
+
+        // Idempotent stream_url backfill: if channel is live but stream_url missing, populate it
+        const { data: dbCh } = await user.serviceClient
+          .from("channels")
+          .select("is_live, stream_url")
+          .eq("id", channelId)
+          .single();
+
+        let streamUrl = dbCh?.stream_url ?? null;
+        if (dbCh?.is_live && !streamUrl) {
+          streamUrl = await buildHlsHttpsUrl(gcpChannelId);
+        }
+
         await user.serviceClient
           .from("channels")
-          .update({ gcp_channel_state: state })
+          .update({
+            gcp_channel_state: state,
+            ...(dbCh?.is_live && streamUrl && !dbCh.stream_url ? { stream_url: streamUrl } : {}),
+          })
           .eq("id", channelId);
+
         result = {
           streamingState: state,
           inputAttachments: gcpCh.inputAttachments,
           activeInput: gcpCh.activeInput,
+          streamUrl,
         };
         break;
       }
