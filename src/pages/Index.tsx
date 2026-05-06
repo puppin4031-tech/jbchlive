@@ -10,6 +10,7 @@ import { Radio, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { isPlayableLiveChannel } from '@/lib/livePlayback';
 
 const categories = ['전체', '주일말씀', '수요말씀', '특별집회'];
 
@@ -145,7 +146,8 @@ const Index = () => {
     staleTime: 0,
   });
 
-  const currentLiveChannel = liveChannels?.[0];
+  const playableLiveChannels = (liveChannels || []).filter(isPlayableLiveChannel);
+  const currentLiveChannel = playableLiveChannels[0];
   const currentLiveSermon = liveSermons?.find(s => s.channel_id === currentLiveChannel?.id);
 
   const mapSermon = (s: any): SermonCardData => ({
@@ -246,7 +248,7 @@ const Index = () => {
         )}
 
         {/* Live Channels Strip */}
-        {liveChannels && liveChannels.length > 0 && (
+        {playableLiveChannels.length > 0 && (
           <section>
             <div className="flex items-center gap-2 mb-3">
               <span className="flex items-center gap-1 bg-live text-live-foreground text-sm font-bold px-3 py-1 rounded-md">
@@ -257,7 +259,7 @@ const Index = () => {
               </Link>
             </div>
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
-              {liveChannels.map((ch) => (
+              {playableLiveChannels.map((ch) => (
                 <Link
                   key={ch.id}
                   to={`/live/${ch.id}`}
@@ -305,11 +307,11 @@ const Index = () => {
         )}
 
         {/* Other Live */}
-        {liveChannels && liveChannels.length > 1 && (
+        {playableLiveChannels.length > 1 && (
           <section>
             <h2 className="font-semibold text-xl md:text-base mb-3 text-foreground">다른 라이브</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {liveChannels.slice(1).map(ch => {
+              {playableLiveChannels.slice(1).map(ch => {
                 const sermon = liveSermons?.find(s => s.channel_id === ch.id);
                 return sermon ? <SermonCard key={ch.id} sermon={mapSermon(sermon)} /> : null;
               })}
