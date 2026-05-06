@@ -6,6 +6,7 @@ import Header from '@/components/Header';
 import SermonCard, { type SermonCardData } from '@/components/SermonCard';
 import { Radio } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { isPlayableLiveChannel } from '@/lib/livePlayback';
 
 const LiveListPage = () => {
   const queryClient = useQueryClient();
@@ -20,7 +21,7 @@ const LiveListPage = () => {
         .eq('is_approved', true)
         .eq('is_suspended', false);
       if (error) throw error;
-      return data;
+        return (data || []).filter(isPlayableLiveChannel);
     },
     refetchOnWindowFocus: true,
     refetchOnMount: 'always',
