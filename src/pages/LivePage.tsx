@@ -147,6 +147,7 @@ const LivePage = () => {
 
   const isLive = channel.is_live;
   const streamUrl = channel.stream_url;
+  const isWaitingForBroadcaster = isLive && !streamUrl;
   const permanentUrl = `${window.location.origin}/live/${channelId}`;
 
   return (
@@ -156,6 +157,20 @@ const LivePage = () => {
         {/* Live or Offline Player Area */}
         {isLive && streamUrl ? (
           <VideoPlayer src={streamUrl} autoPlay />
+        ) : isWaitingForBroadcaster ? (
+          <div className="relative w-full aspect-video bg-card border border-border rounded-xl overflow-hidden flex flex-col items-center justify-center gap-4 p-6">
+            <span className="relative flex h-4 w-4">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-4 w-4 bg-destructive"></span>
+            </span>
+            <div className="text-center space-y-2">
+              <h2 className="font-semibold text-lg text-foreground">방송 준비 중입니다</h2>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                방송자가 송출을 시작하는 즉시 자동으로 재생됩니다.<br />
+                잠시만 기다려주세요.
+              </p>
+            </div>
+          </div>
         ) : (
           <div className="relative w-full aspect-video bg-card border border-border rounded-xl overflow-hidden flex flex-col items-center justify-center gap-4 p-6">
             <img
