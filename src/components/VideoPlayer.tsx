@@ -45,8 +45,47 @@ interface HlsErrorInfo {
   httpStatus?: number;
   type: string;
   details: string;
+  target?: string;
   responseSnippet?: string;
   timestamp: string;
+}
+
+function getHlsErrorUrl(data: ErrorData, fallbackUrl: string) {
+  const networkResponseUrl =
+    (data.networkDetails as { responseURL?: string } | undefined)?.responseURL ||
+    (data.networkDetails as { url?: string } | undefined)?.url;
+
+  return (
+    data.response?.url ||
+    data.url ||
+    data.frag?.url ||
+    data.part?.url ||
+    data.context?.url ||
+    networkResponseUrl ||
+    fallbackUrl
+  );
+}
+
+function getHlsErrorTarget(data: ErrorData) {
+  switch (data.details) {
+    case Hls.ErrorDetails.MANIFEST_LOAD_ERROR:
+    case Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT:
+      return 'master-manifest';
+    case Hls.ErrorDetails.LEVEL_LOAD_ERROR:
+    case Hls.ErrorDetails.LEVEL_LOAD_TIMEOUT:
+      return 'variant-playlist';
+    case Hls.ErrorDetails.AUDIO_TRACK_LOAD_ERROR:
+    case Hls.ErrorDetails.AUDIO_TRACK_LOAD_TIMEOUT:
+      return 'audio-playlist';
+    case Hls.ErrorDetails.FRAG_LOAD_ERROR:
+    case Hls.ErrorDetails.FRAG_LOAD_TIMEOUT:
+      return 'media-segment';
+    case Hls.ErrorDetails.KEY_LOAD_ERROR:
+    case Hls.ErrorDetails.KEY_LOAD_TIMEOUT:
+      return 'encryption-key';
+    default:
+      return 'unknown';
+  }
 }
 
 const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
@@ -73,11 +112,12 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
       hls.on(Hls.Events.ERROR, async (_evt, data: ErrorData) => {
         if (!data.fatal) return;
 
-        const failedUrl = (data as any).url || (data as any).context?.url || url;
-        const httpStatus = (data as any).response?.code;
+        const failedUrl = getHlsErrorUrl(data, url);
+        const httpStatus = data.response?.code;
+        const target = getHlsErrorTarget(data);
         let responseSnippet: string | undefined;
 
-        // Try to fetch body for diagnostic detail (e.g. NoSuchBucket XML)
+        // Try to fetch body for diagnostic detail when we know the failing URL.
         try {
           if (failedUrl) {
             const r = await fetch(failedUrl, { method: 'GET' });
@@ -97,9 +137,30 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
         } else if (responseSnippet?.includes('AccessDenied') || httpStatus === 403) {
           title = '스트리밍 접근 거부됨 (AccessDenied)';
           reason = '버킷 공개 권한(allUsers: Storage Object Viewer) 설정이 필요합니다.';
-        } else if (httpStatus === 404 || data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR) {
+        } else if (
+          data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
+          data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT
+        ) {
           title = '매니페스트를 찾을 수 없음 (404)';
           reason = '아직 송출이 시작되지 않았거나, HLS 매니페스트가 생성되지 않았습니다.';
+        } else if (
+          data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR ||
+          data.details === Hls.ErrorDetails.LEVEL_LOAD_TIMEOUT
+        ) {
+          title = httpStatus === 404 ? '하위 재생목록을 찾을 수 없음 (404)' : '하위 재생목록 로딩 실패';
+          reason = '최상위 manifest는 열렸지만 실제 영상 품질 재생목록(.m3u8)을 불러오지 못했습니다.';
+        } else if (
+          data.details === Hls.ErrorDetails.AUDIO_TRACK_LOAD_ERROR ||
+          data.details === Hls.ErrorDetails.AUDIO_TRACK_LOAD_TIMEOUT
+        ) {
+          title = httpStatus === 404 ? '오디오 재생목록을 찾을 수 없음 (404)' : '오디오 재생목록 로딩 실패';
+          reason = '영상은 열렸지만 오디오용 HLS 재생목록을 불러오지 못했습니다.';
+        } else if (
+          data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR ||
+          data.details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT
+        ) {
+          title = httpStatus === 404 ? '미디어 세그먼트를 찾을 수 없음 (404)' : '미디어 세그먼트 로딩 실패';
+          reason = 'manifest는 정상 응답했지만 실제 재생 데이터(ts/mp4 조각)를 불러오지 못했습니다.';
         } else if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
           title = '네트워크 오류';
           reason = '스트리밍 서버에 연결하지 못했습니다.';
@@ -115,6 +176,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
           httpStatus,
           type: String(data.type),
           details: String(data.details),
+          target,
           responseSnippet,
           timestamp: new Date().toISOString(),
         });
@@ -134,6 +196,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
       `Time: ${error.timestamp}`,
       `Title: ${error.title}`,
       `Reason: ${error.reason}`,
+      `Target: ${error.target ?? 'unknown'}`,
       `Type: ${error.type}`,
       `Details: ${error.details}`,
       `HTTP Status: ${error.httpStatus ?? 'N/A'}`,
@@ -200,6 +263,9 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
                 <div className="text-xs bg-muted/50 rounded-lg p-3 space-y-1 font-mono break-all max-h-40 overflow-auto">
                   <div><span className="text-muted-foreground">type:</span> {error.type}</div>
                   <div><span className="text-muted-foreground">details:</span> {error.details}</div>
+                  {error.target && (
+                    <div><span className="text-muted-foreground">target:</span> {error.target}</div>
+                  )}
                   {error.httpStatus !== undefined && (
                     <div><span className="text-muted-foreground">http:</span> {error.httpStatus}</div>
                   )}
