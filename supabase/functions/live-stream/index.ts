@@ -631,7 +631,7 @@ serve(async (req) => {
             title,
             category,
             preacher,
-            video_url: recordingUrl,
+            video_url: safeRecordingUrl,
             is_live: false,
             sermon_date: new Date().toISOString(),
           })
