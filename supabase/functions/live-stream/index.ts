@@ -486,14 +486,13 @@ serve(async (req) => {
       for (const ch of idle ?? []) {
         const gcpChannelId = gcpResourceId(ch.id, "channel");
         try {
-          // Check GCP state — only stop if not actively streaming
           const gcpCh = await getChannelGCP(gcpChannelId).catch(() => null);
           const state = gcpCh?.streamingState;
           if (state && state !== "STREAMING") {
             await stopChannelGCP(gcpChannelId).catch(() => null);
             await serviceClient
               .from("channels")
-              .update({ is_live: false, gcp_channel_state: "STOPPED" })
+              .update({ is_live: false, gcp_channel_state: "STOPPED", stream_url: null })
               .eq("id", ch.id);
             stopped.push(ch.id);
           }
