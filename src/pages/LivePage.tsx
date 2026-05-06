@@ -10,6 +10,7 @@ import { Share2, Users, Radio, VideoOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import { isPlayableLiveChannel, isPreparingLiveChannel } from '@/lib/livePlayback';
 
 const LivePage = () => {
   const { channelId } = useParams();
@@ -147,7 +148,8 @@ const LivePage = () => {
 
   const isLive = channel.is_live;
   const streamUrl = channel.stream_url;
-  const isWaitingForBroadcaster = isLive && !streamUrl;
+  const canPlayLive = isPlayableLiveChannel(channel);
+  const isWaitingForBroadcaster = isPreparingLiveChannel(channel);
   const permanentUrl = `${window.location.origin}/live/${channelId}`;
 
   return (
@@ -155,7 +157,7 @@ const LivePage = () => {
       <Header />
       <main className="container px-4 py-4 max-w-4xl mx-auto space-y-4">
         {/* Live or Offline Player Area */}
-        {isLive && streamUrl ? (
+        {canPlayLive && streamUrl ? (
           <VideoPlayer src={streamUrl} autoPlay />
         ) : isWaitingForBroadcaster ? (
           <div className="relative w-full aspect-video bg-card border border-border rounded-xl overflow-hidden flex flex-col items-center justify-center gap-4 p-6">
