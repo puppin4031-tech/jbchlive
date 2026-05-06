@@ -79,7 +79,7 @@ const ChannelSettingsPage = () => {
         if (cancelled) return;
         setGcpState(res.streamingState || 'UNKNOWN');
         setPollAttempts((n) => n + 1);
-        if (res.streamUrl && !channel?.stream_url) {
+        if ((res.streamingState === 'STREAMING' || !channel?.gcp_channel_state || channel?.gcp_channel_state !== res.streamingState) || (res.streamUrl && !channel?.stream_url)) {
           refetchChannel();
           queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
           queryClient.invalidateQueries({ queryKey: ['live-channels'] });
