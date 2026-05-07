@@ -1,152 +1,107 @@
-## 라이브 송출 파이프라인 통합 수정 (전체 흐름 재정리)
+## 어디서든 보이는 송출 컨트롤 (Broadcaster Control)
 
-### 전체 데이터 흐름 (현재 vs 정상)
+매번 채널 설정 페이지로 이동하지 않아도 라이브 시작/종료/상태 확인이 가능하도록 두 가지 진입점을 추가합니다.
+
+### 1. 플로팅 송출 패널 (FloatingBroadcasterDock)
+
+채널 소유자(승인된 채널 보유자)에게만 **모든 페이지 우측 하단**에 떠있는 작은 도크.
 
 ```text
-[송출자]                        [Edge Function]                     [DB]                      [시청자 UI]
-1. "방송 시작" 클릭   →   startChannel                          
-                          ├ GCP startChannelGCP                 
-                          └ channels UPDATE                  is_live=true
-                                                             gcp_channel_state=STARTING
-                                                             stream_url=NULL  ← ❌ 여기가 비어있음
-                                                                                      ↓
-                                                                              Realtime → invalidate
-                                                                              isLive=true && !streamUrl
-                                                                              → "오프라인" 박스 (잘못된 표시)
-
-2. OBS 송출 시작        →   GCP가 RTMP 수신                   
-                          (사이트는 모름, 폴링 필요)            
-
-3. ChannelSettingsPage  →   getStatus (5초 폴링)              gcp_channel_state=STREAMING
-                          └ ❌ stream_url을 채우지 않음        stream_url=NULL  ← ❌ 영원히 비어있음
-
-4. (라이브 종료)        →   stopChannel                       
-                          └ getHLSUrl → gs://...   →   sermons.video_url=gs://  
-                                                            ❌ validate_sermon_urls 트리거에서 거부
-                                                            (실제 로그 확인됨: "video_url must be a valid HTTP/HTTPS URL")
+                                    ┌──────────────────────┐
+                                    │ ● 라이브 중  12:34   │
+                                    │ ▣ STREAMING          │
+                                    │ [⏹ 종료]  [설정 ⚙]   │
+                                    └──────────────────────┘
+                                              ↑
+                                    오프라인일 땐 접힌 형태:
+                                    ┌──────────┐
+                                    │ ▶ 시작   │
+                                    └──────────┘
 ```
 
-### 핵심 결함 5가지
-
-| # | 위치 | 결함 |
+**상태별 표시:**
+| 상태 | 도크 모양 | 액션 버튼 |
 |---|---|---|
-| 1 | `live-stream/index.ts startChannel` | GCP 시작만 하고 `stream_url`에 HLS 재생 URL을 저장하지 않음 |
-| 2 | `live-stream/index.ts getHLSUrl` | `gs://{bucket}/...` 내부 URI 반환 — 브라우저 재생 불가, DB 트리거(`validate_stream_url`, `validate_sermon_urls`)도 거부 |
-| 3 | `live-stream/index.ts getStatus` | DB의 `gcp_channel_state`만 sync. STREAMING 상태가 되어도 `stream_url`을 채워주지 않음 |
-| 4 | `live-stream/index.ts stopChannel` | `stream_url` 클리어 안 함 + VOD 저장 시 `gs://` 그대로 insert → 트리거 거부 (이미 실패 로그 존재) |
-| 5 | `LivePage.tsx` | `is_live=true && stream_url=NULL` 상태에 대한 UX 분기 없음 — 일반 오프라인과 구별 불가 |
+| 오프라인 | 작은 둥근 버튼 "▶ 라이브 시작" | 클릭 → 시작 확인 다이얼로그 |
+| 서버 준비 중 (STARTING) | 노랑 펄스 + spinner + "준비 중..." | (대기) |
+| OBS 대기 (AWAITING_INPUT) | 파랑 + "OBS 대기 중" | RTMP 정보 보기 |
+| 송출 중 (STREAMING) | 빨강 펄스 + 경과 시간 | ⏹ 종료, ⚙ 설정 |
+| 에러 | 빨강 ⚠ + 메시지 1줄 | 자세히/숨기기 |
 
-### 수정 사항 (의존 순서대로)
+**동작:**
+- 사용자가 로그인 + 채널 소유 + `is_approved`일 때만 마운트
+- 접힌 상태(👈 오프라인) ↔ 펼친 상태 토글 가능, localStorage에 사용자 선호 저장
+- "라이브 종료" 클릭 시 → 기존 VOD 저장 다이얼로그(제목/카테고리/설교자) 그대로 재사용
+- "라이브 시작" 클릭 시 → 시작 후 GCP 준비 다이얼로그(STARTING → AWAITING_INPUT 폴링) 그대로 재사용
+- 라이브 시청 페이지(`/live/:channelId`)에서는 본인 방송이면 도크 숨김(혼동 방지)
 
-#### 1. Edge Function: `supabase/functions/live-stream/index.ts`
+### 2. 내 채널 페이지(/my-channel) 인라인 컨트롤
 
-**(a) 공용 헬퍼 추가**
-```ts
-function gsToHttps(uri: string): string {
-  // gs://bucket/path → https://storage.googleapis.com/bucket/path
-  const m = uri.match(/^gs:\/\/([^/]+)\/(.+)$/);
-  return m ? `https://storage.googleapis.com/${m[1]}/${m[2]}` : uri;
-}
+도크와 동일한 컨트롤을 채널 카드 안에도 내장하여, 도크가 거추장스러운 사용자도 한 번에 제어 가능하게 함.
 
-async function buildHlsHttpsUrl(gcpChannelId: string): Promise<string | null> {
-  const ch = await getChannelGCP(gcpChannelId);
-  const fileName = ch.manifests?.[0]?.fileName ?? "manifest.m3u8";
-  const outputUri = ch.output?.uri ?? "";
-  if (!outputUri.startsWith("gs://")) return null;
-  return gsToHttps(outputUri.replace(/\/?$/, "/") + fileName);
-}
-```
+`MyChannelPage` 채널 오버뷰 카드(74-134줄) 안 "Quick Stats" 위에 `<BroadcasterControlPanel channel={channel} />` 삽입:
+- 큰 시작/종료 버튼 (h-14, 노인 사용자 친화)
+- 상태 뱃지 + 경과 시간 + RTMP 빠른 복사 (펼치기)
+- 에러 발생 시 빨간 박스로 표시
 
-**(b) `startChannel` 액션**
-- GCP `start` 호출 후 HLS HTTPS URL을 계산
-- DB UPDATE에 `stream_url` 포함
-```ts
-const hlsUrl = await buildHlsHttpsUrl(gcpChannelId).catch(() => null);
-await user.serviceClient.from("channels").update({
-  is_live: true,
-  live_started_at: new Date().toISOString(),
-  gcp_channel_state: "STARTING",
-  stream_url: hlsUrl,                    // ← 추가
-}).eq("id", channelId);
-```
-> `output.uri`는 채널 생성 시점에 결정되므로 GCP가 STREAMING 상태가 아니어도 미리 알 수 있음. 시청자는 `is_live && stream_url`을 체크하므로 안전 (manifest 파일은 송출 시작 후 생성되며 hls.js가 자동 재시도).
+### 3. 컴포넌트 구조 (재사용)
 
-**(c) `getStatus` 액션**
-- 기존 sync 유지
-- 응답에 `streamUrl` 포함 (디버깅/UI용)
-- `stream_url`이 비어있고 manifest 계산 가능하면 같이 채움 (멱등 보정)
+공통 로직을 훅으로 추출:
 
-**(d) `stopChannel` 액션**
-- `stream_url: null`로 클리어
-- VOD 저장 전 `recordingUrl`을 `gsToHttps()` 변환
-- 만약 변환 후에도 `https://`로 시작하지 않으면 `video_url: null`로 저장 (트리거 회피)
+**`src/hooks/useBroadcasterChannel.ts`** (신규)
+- 현재 로그인 사용자의 채널 1개 조회 (`my-channel` 쿼리 재사용)
+- GCP 상태 폴링 로직 (`ChannelSettingsPage` 70-99줄에서 추출)
+- Realtime subscription: `channels` 테이블의 본인 채널 row 변화 구독 (다른 탭에서 시작/종료해도 즉시 반영)
+- `startLive` / `stopLive` mutation 노출
+- 반환: `{ channel, gcpState, pollAttempts, lastPolledAt, startLive, stopLive, refresh }`
 
-**(e) `autoStopIdleChannels` cron**
-- 자동 종료 시에도 `stream_url: null` 같이 클리어
+**`src/components/broadcaster/BroadcasterControlPanel.tsx`** (신규, 인라인용)
+- 큰 카드 형태, MyChannelPage 안에 삽입
 
-#### 2. `src/lib/liveStreamApi.ts`
-- `getStatus` 반환 타입에 `streamUrl?: string | null` 추가
+**`src/components/broadcaster/FloatingBroadcasterDock.tsx`** (신규, 플로팅용)
+- `fixed bottom-4 right-4 z-40`, 모바일에서는 `bottom-2 right-2`
+- 내부에서 `BroadcasterControlPanel`의 컴팩트 변형 렌더링
+- `App.tsx`에 단일 마운트, 라우트 따라 자동 표시/숨김
 
-#### 3. `src/pages/LivePage.tsx`
+**`src/components/broadcaster/StartLiveDialog.tsx` / `StopLiveDialog.tsx`** (신규)
+- 기존 `ChannelSettingsPage`의 startingDialog(442-491줄) + stopDialog(494-550줄)를 분리
+- 양쪽(도크/내 채널/채널 설정)에서 공유
 
-상태 분기 3단계로 명확화:
+### 4. ChannelSettingsPage 정리
 
-```tsx
-const isLive = channel.is_live;
-const streamUrl = channel.stream_url;
-const isWaitingForBroadcaster = isLive && !streamUrl;
+- 기존 라이브 시작/종료 UI(305-340줄), 폴링 effect(70-99줄), 두 다이얼로그를 새 컴포넌트로 교체
+- RTMP 키/OBS 가이드 등 "설정" 영역만 남김
 
-if (isLive && streamUrl) {
-  // 정상 재생
-} else if (isWaitingForBroadcaster) {
-  // "방송 준비 중 — 잠시만 기다려주세요" + 펄스 애니메이션
-} else {
-  // 오프라인
-}
-```
-
-> Realtime 구독은 이미 있어서 `stream_url`이 채워지는 순간 자동 invalidate → 플레이어로 전환.
-
-#### 4. `src/pages/ChannelSettingsPage.tsx`
-
-기존 폴링 다이얼로그를 살짝 보강:
-
-- 폴링 조건 변경: `startingDialogOpen || (channel?.is_live && !channel?.stream_url)`
-  - 사용자가 다이얼로그를 닫아도 `stream_url`이 채워질 때까지 백그라운드 폴링 지속
-- 다이얼로그 내 진행 단계 시각화:
-  ```text
-  ✓ GCP 채널 시작           STARTING → AWAITING_INPUT
-  ⏳ OBS 송출 대기 중        AWAITING_INPUT
-  ✓ 방송 송출 중             STREAMING + stream_url 존재 → "이제 시청자에게 보입니다"
-  ```
-- `gcp_last_error`가 있으면 빨간 알림 표시
-- `getStatus` 응답에 `streamUrl`이 들어오면 즉시 channel 쿼리 invalidate
-
-#### 5. DB 마이그레이션 — 불필요
-
-`stream_url`은 이미 `https://`만 허용하는 트리거(`validate_stream_url`)가 걸려있고, 우리가 항상 `https://storage.googleapis.com/...`로 넣으므로 통과. NULL도 허용됨. 추가 변경 없음.
-
-#### 6. (수동) GCS 버킷 공개 읽기 확인
-
-`{GOOGLE_CLOUD_PROJECT_ID}-live-output` 버킷에 다음 IAM이 필요:
-- 주체: `allUsers`
-- 역할: `Storage Object Viewer (roles/storage.objectViewer)`
-
-이게 없으면 HTTPS URL은 만들어져도 브라우저에서 403. **이건 GCP Console에서 1회 수동 작업**입니다. 이미 설정되어 있다면 무시. 작업 완료 후 시청 안 되면 이게 원인.
-
-### 검증 시나리오
-
-1. **방송 시작 → DB 즉시 확인**: `stream_url`이 `https://storage.googleapis.com/...-live-output/{uuid}/manifest.m3u8`로 채워짐
-2. **OBS 미연결 상태**: LivePage에 "방송 준비 중" 표시 (오프라인과 다른 메시지)
-3. **OBS 송출 시작 후**: ChannelSettings 진단 패널이 STREAMING으로 전환, LivePage가 자동으로 플레이어 표시 + HLS 재생
-4. **방송 종료**: `stream_url=NULL`, VOD가 sermons에 정상 insert (이번엔 트리거 에러 없음)
-5. **30분 무송출 자동 종료**: cron도 `stream_url` 클리어
-
-### 변경 파일 요약
+### 5. 변경 파일 요약
 
 | 파일 | 변경 |
 |---|---|
-| `supabase/functions/live-stream/index.ts` | gsToHttps 헬퍼, start/stop/getStatus/cron에서 stream_url 관리, VOD URL 변환 |
-| `src/lib/liveStreamApi.ts` | getStatus 응답 타입 확장 |
-| `src/pages/LivePage.tsx` | 3단계 상태 분기 (재생 / 송출 대기 / 오프라인) |
-| `src/pages/ChannelSettingsPage.tsx` | 폴링 조건 확장 + 단계 시각화 강화 |
+| `src/hooks/useBroadcasterChannel.ts` | 신규: 상태 폴링 + Realtime + mutation |
+| `src/components/broadcaster/BroadcasterControlPanel.tsx` | 신규: 인라인/컴팩트 변형 지원 |
+| `src/components/broadcaster/FloatingBroadcasterDock.tsx` | 신규: 플로팅 도크 |
+| `src/components/broadcaster/StartLiveDialog.tsx` | 신규: 시작 폴링 다이얼로그 분리 |
+| `src/components/broadcaster/StopLiveDialog.tsx` | 신규: 종료+VOD 저장 다이얼로그 분리 |
+| `src/App.tsx` | `<FloatingBroadcasterDock />` 전역 마운트 |
+| `src/pages/MyChannelPage.tsx` | 채널 카드에 `BroadcasterControlPanel` 삽입 |
+| `src/pages/ChannelSettingsPage.tsx` | 라이브 컨트롤 부분을 새 컴포넌트로 치환 |
+
+### 6. DB / Edge Function 변경
+
+**불필요.** 기존 `live-stream` Edge Function (startChannel/stopChannel/getStatus)과 `channels` 테이블 컬럼만 사용합니다. Realtime은 이미 활성화된 `channels` 테이블 구독으로 충분합니다.
+
+### 7. UX 디테일
+
+- 노인 친화: 도크 버튼 최소 높이 3rem, 한국어 명확한 라벨
+- 라이브 중일 때 페이지를 벗어나도 경과 시간이 계속 카운트(타이머는 도크 마운트와 동일 생명주기)
+- 모바일에서는 도크가 BottomNav를 가리지 않도록 `bottom-20` 등 안전 여백
+- "라이브 시작/종료"는 항상 확인 다이얼로그 → 실수 방지
+- 접근성: `aria-live="polite"`로 상태 변화 스크린리더 안내
+
+### 8. 검증 시나리오
+
+1. 홈에서 도크 "▶ 라이브 시작" → 다이얼로그 → STARTING → AWAITING_INPUT까지 도크에서 진행 표시
+2. OBS 송출 → 도크가 빨강 + 경과 시간 카운트 시작
+3. 다른 페이지로 이동해도 도크 유지, 경과 시간 끊기지 않음
+4. 도크의 "⏹ 종료" → VOD 저장 다이얼로그 → 종료 후 도크가 "▶ 라이브 시작"으로 복귀
+5. 채널 설정 페이지에서 종료해도 다른 탭의 도크가 Realtime으로 즉시 갱신
+6. 비로그인/채널 없음/미승인 사용자에게는 도크가 보이지 않음
