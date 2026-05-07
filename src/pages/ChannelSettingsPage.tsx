@@ -54,41 +54,7 @@ const ChannelSettingsPage = () => {
     }
   }, [channel]);
 
-  // Poll GCP status while:
-  //  (a) the start dialog is open, OR
-  //  (b) channel is live but stream_url has not been backfilled yet.
-  // getStatus backfills stream_url server-side; once present, Realtime fans out
-  // to viewer pages so they auto-switch from "preparing" to the live player.
-  useEffect(() => {
-    if (!channelId) return;
-    const needsBackgroundPoll = !!channel?.is_live && !channel?.stream_url;
-    if (!startingDialogOpen && !needsBackgroundPoll) return;
-
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const res = await apiGetStatus(channelId);
-        if (cancelled) return;
-        setGcpState(res.streamingState || 'UNKNOWN');
-        setPollAttempts((n) => n + 1);
-        if ((res.streamingState === 'STREAMING' || !channel?.gcp_channel_state || channel?.gcp_channel_state !== res.streamingState) || (res.streamUrl && !channel?.stream_url)) {
-          refetchChannel();
-          queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
-          queryClient.invalidateQueries({ queryKey: ['live-channels'] });
-          queryClient.invalidateQueries({ queryKey: ['live-channels-list'] });
-          queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
-        }
-      } catch (e) {
-        console.error('polling error', e);
-      }
-    };
-    poll();
-    const interval = setInterval(poll, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [startingDialogOpen, channelId, channel?.is_live, channel?.stream_url, queryClient, refetchChannel]);
+  // Live start/stop and GCP polling now handled by BroadcasterControlPanel.
 
   const canEdit = channel && user && (channel.owner_id === user.id || isAdmin);
   const isOwner = channel && user && channel.owner_id === user.id;
