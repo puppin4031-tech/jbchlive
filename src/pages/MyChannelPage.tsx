@@ -134,6 +134,9 @@ const MyChannelPage = () => {
               </div>
             </Card>
 
+            {/* Broadcaster Control */}
+            {channel.is_approved && <BroadcasterControlPanel variant="inline" />}
+
             {/* Quick Stats */}
             {channel.is_approved && (
               <div className="grid grid-cols-3 gap-3">
