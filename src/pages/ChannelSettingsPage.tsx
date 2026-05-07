@@ -31,15 +31,6 @@ const ChannelSettingsPage = () => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showStreamKey, setShowStreamKey] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [stopDialogOpen, setStopDialogOpen] = useState(false);
-  const [vodTitle, setVodTitle] = useState('');
-  const [vodCategory, setVodCategory] = useState('주일말씀');
-  const [vodPreacher, setVodPreacher] = useState('');
-
-  // GCP 라이브 시작 폴링 상태
-  const [startingDialogOpen, setStartingDialogOpen] = useState(false);
-  const [gcpState, setGcpState] = useState<string>('');
-  const [pollAttempts, setPollAttempts] = useState(0);
 
   const { data: channel, isLoading, refetch: refetchChannel } = useQuery({
     queryKey: ['channel-settings', channelId],
