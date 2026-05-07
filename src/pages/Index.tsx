@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { isPlayableLiveChannel } from '@/lib/livePlayback';
+import defaultThumbnail from '@/assets/default-thumbnail.png';
 
 const categories = ['전체', '주일말씀', '수요말씀', '특별집회'];
 
@@ -224,7 +225,7 @@ const Index = () => {
                 >
                   <div className="relative aspect-square bg-muted flex items-center justify-center">
                     <img
-                      src={ch.logo_url || '/placeholder.svg'}
+                      src={ch.is_live ? (ch.logo_url || defaultThumbnail) : defaultThumbnail}
                       alt={ch.name}
                       className="w-full h-full object-cover"
                     />
