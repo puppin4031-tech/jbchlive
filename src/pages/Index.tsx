@@ -224,7 +224,7 @@ const Index = () => {
                 >
                   <div className="relative aspect-square bg-muted flex items-center justify-center">
                     <img
-                      src={ch.logo_url || '/placeholder.svg'}
+                      src={ch.is_live ? (ch.logo_url || defaultThumbnail) : defaultThumbnail}
                       alt={ch.name}
                       className="w-full h-full object-cover"
                     />
