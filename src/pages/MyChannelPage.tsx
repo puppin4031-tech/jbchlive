@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Settings, Radio, Users, PlusCircle, Clock, CheckCircle2, Video } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import BroadcasterControlPanel from '@/components/broadcaster/BroadcasterControlPanel';
 
 const MyChannelPage = () => {
   const { user, loading: authLoading } = useAuth();
@@ -132,6 +133,9 @@ const MyChannelPage = () => {
                 </Link>
               </div>
             </Card>
+
+            {/* Broadcaster Control */}
+            {channel.is_approved && <BroadcasterControlPanel variant="inline" />}
 
             {/* Quick Stats */}
             {channel.is_approved && (

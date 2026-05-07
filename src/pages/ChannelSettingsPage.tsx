@@ -9,12 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { ImagePlus, Loader2, ArrowLeft, Copy, Check, ChevronDown, Radio, Eye, EyeOff, Play, Square, AlertTriangle } from 'lucide-react';
+import { ImagePlus, Loader2, ArrowLeft, Copy, Check, ChevronDown, Radio, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { startChannel as apiStartChannel, stopChannel as apiStopChannel, getStatus as apiGetStatus, parseRtmpUri } from '@/lib/liveStreamApi';
+import { parseRtmpUri } from '@/lib/liveStreamApi';
+import BroadcasterControlPanel from '@/components/broadcaster/BroadcasterControlPanel';
 
 const ChannelSettingsPage = () => {
   const { channelId } = useParams();
@@ -30,15 +28,6 @@ const ChannelSettingsPage = () => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showStreamKey, setShowStreamKey] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [stopDialogOpen, setStopDialogOpen] = useState(false);
-  const [vodTitle, setVodTitle] = useState('');
-  const [vodCategory, setVodCategory] = useState('주일말씀');
-  const [vodPreacher, setVodPreacher] = useState('');
-
-  // GCP 라이브 시작 폴링 상태
-  const [startingDialogOpen, setStartingDialogOpen] = useState(false);
-  const [gcpState, setGcpState] = useState<string>('');
-  const [pollAttempts, setPollAttempts] = useState(0);
 
   const { data: channel, isLoading, refetch: refetchChannel } = useQuery({
     queryKey: ['channel-settings', channelId],
@@ -62,41 +51,7 @@ const ChannelSettingsPage = () => {
     }
   }, [channel]);
 
-  // Poll GCP status while:
-  //  (a) the start dialog is open, OR
-  //  (b) channel is live but stream_url has not been backfilled yet.
-  // getStatus backfills stream_url server-side; once present, Realtime fans out
-  // to viewer pages so they auto-switch from "preparing" to the live player.
-  useEffect(() => {
-    if (!channelId) return;
-    const needsBackgroundPoll = !!channel?.is_live && !channel?.stream_url;
-    if (!startingDialogOpen && !needsBackgroundPoll) return;
-
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const res = await apiGetStatus(channelId);
-        if (cancelled) return;
-        setGcpState(res.streamingState || 'UNKNOWN');
-        setPollAttempts((n) => n + 1);
-        if ((res.streamingState === 'STREAMING' || !channel?.gcp_channel_state || channel?.gcp_channel_state !== res.streamingState) || (res.streamUrl && !channel?.stream_url)) {
-          refetchChannel();
-          queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
-          queryClient.invalidateQueries({ queryKey: ['live-channels'] });
-          queryClient.invalidateQueries({ queryKey: ['live-channels-list'] });
-          queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
-        }
-      } catch (e) {
-        console.error('polling error', e);
-      }
-    };
-    poll();
-    const interval = setInterval(poll, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [startingDialogOpen, channelId, channel?.is_live, channel?.stream_url, queryClient, refetchChannel]);
+  // Live start/stop and GCP polling now handled by BroadcasterControlPanel.
 
   const canEdit = channel && user && (channel.owner_id === user.id || isAdmin);
   const isOwner = channel && user && channel.owner_id === user.id;
@@ -164,52 +119,6 @@ const ChannelSettingsPage = () => {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const startLive = useMutation({
-    mutationFn: async () => {
-      if (!channelId) throw new Error('채널 ID가 없습니다');
-      await apiStartChannel(channelId);
-    },
-    onSuccess: () => {
-      setGcpState('STARTING');
-      setPollAttempts(0);
-      setStartingDialogOpen(true);
-      refetchChannel();
-      queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
-      queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
-      queryClient.invalidateQueries({ queryKey: ['live-channels'] });
-      queryClient.invalidateQueries({ queryKey: ['live-channels-list'] });
-      queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
-      queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
-      queryClient.invalidateQueries({ queryKey: ['live-sermon', channelId] });
-    },
-    onError: (e: Error) => toast.error('라이브 시작 실패: ' + e.message),
-  });
-
-  const stopLive = useMutation({
-    mutationFn: async () => {
-      if (!channelId) throw new Error('채널 ID가 없습니다');
-      await apiStopChannel(channelId, {
-        vodTitle: vodTitle.trim() || undefined,
-        vodCategory: vodCategory || undefined,
-        vodPreacher: vodPreacher.trim() || undefined,
-      });
-    },
-    onSuccess: () => {
-      toast.success('라이브가 종료되고 VOD로 저장되었습니다');
-      setStopDialogOpen(false);
-      setVodTitle('');
-      setVodPreacher('');
-      queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
-      queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
-      queryClient.invalidateQueries({ queryKey: ['live-channels'] });
-      queryClient.invalidateQueries({ queryKey: ['live-channels-list'] });
-      queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
-      queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
-      queryClient.invalidateQueries({ queryKey: ['live-sermon', channelId] });
-    },
-    onError: (e: Error) => toast.error('라이브 종료 실패: ' + e.message),
-  });
-
   if (authLoading || isLoading) return null;
   if (!user) return <Navigate to="/login" replace />;
   if (channel && !canEdit) return <Navigate to="/" replace />;
@@ -220,8 +129,6 @@ const ChannelSettingsPage = () => {
   const maskedKey = streamKey
     ? streamKey.slice(0, 4) + '****' + streamKey.slice(-4)
     : null;
-
-  const isReady = gcpState === 'AWAITING_INPUT' || gcpState === 'STREAMING';
 
   return (
     <div className="min-h-screen bg-background">
@@ -302,42 +209,7 @@ const ChannelSettingsPage = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {channel?.is_live && (
-                <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3">
-                  <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-                  </span>
-                  <span className="text-sm font-medium text-destructive">라이브 중</span>
-                </div>
-              )}
-
-              {/* Live Start/Stop Button */}
-              <Button
-                onClick={() => {
-                  if (channel?.is_live) {
-                    setStopDialogOpen(true);
-                  } else {
-                    startLive.mutate();
-                  }
-                }}
-                disabled={startLive.isPending || stopLive.isPending}
-                variant={channel?.is_live ? 'destructive' : 'default'}
-                className="w-full h-12 text-base font-semibold gap-2"
-              >
-                {(startLive.isPending || stopLive.isPending) ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : channel?.is_live ? (
-                  <Square className="w-5 h-5" />
-                ) : (
-                  <Play className="w-5 h-5" />
-                )}
-                {(startLive.isPending || stopLive.isPending)
-                  ? '처리 중...'
-                  : channel?.is_live
-                    ? '라이브 종료'
-                    : '라이브 시작'}
-              </Button>
+              <BroadcasterControlPanel variant="inline" />
 
               {/* Permanent Live Share Link */}
               <div className="space-y-1.5">
@@ -439,115 +311,6 @@ const ChannelSettingsPage = () => {
         </Card>
       </main>
 
-      {/* GCP Starting Polling Dialog */}
-      <Dialog open={startingDialogOpen} onOpenChange={setStartingDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {isReady ? '🟢 준비 완료' : '🟡 GCP 서버 준비 중'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {isReady ? (
-              <>
-                <p className="text-sm text-foreground font-medium">
-                  이제 OBS에서 [방송 시작] 버튼을 누르세요.
-                </p>
-                <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground">서버:</span>
-                    <code className="block mt-1 break-all font-mono">{rtmpServer}</code>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">스트림 키:</span>
-                    <code className="block mt-1 break-all font-mono">{streamKey}</code>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  현재 상태: <code className="text-foreground">{gcpState}</code>
-                </p>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="w-12 h-12 animate-spin text-primary" />
-                </div>
-                <p className="text-sm text-foreground text-center">
-                  GCP Live Stream 서버를 준비하고 있습니다.<br />
-                  보통 1~2분 소요됩니다.
-                </p>
-                <p className="text-xs text-muted-foreground text-center">
-                  현재 상태: <code className="text-foreground">{gcpState || '시작 중...'}</code> (확인 #{pollAttempts})
-                </p>
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant={isReady ? 'default' : 'outline'} onClick={() => setStartingDialogOpen(false)}>
-              {isReady ? '확인 (OBS로 이동)' : '백그라운드에서 계속 대기'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Stop Live & Save VOD Dialog */}
-      <Dialog open={stopDialogOpen} onOpenChange={setStopDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>라이브 종료 및 VOD 저장</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              라이브를 종료하면 녹화 영상이 자동으로 VOD로 저장됩니다.
-            </p>
-            <div className="space-y-2">
-              <Label>VOD 제목</Label>
-              <Input
-                value={vodTitle}
-                onChange={e => setVodTitle(e.target.value)}
-                placeholder={`라이브 녹화 ${new Date().toLocaleDateString('ko-KR')}`}
-                maxLength={200}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>카테고리</Label>
-              <Select value={vodCategory} onValueChange={setVodCategory}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="주일말씀">주일말씀</SelectItem>
-                  <SelectItem value="수요말씀">수요말씀</SelectItem>
-                  <SelectItem value="특별집회">특별집회</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>설교자</Label>
-              <Input
-                value={vodPreacher}
-                onChange={e => setVodPreacher(e.target.value)}
-                placeholder="설교자 이름 (선택)"
-                maxLength={100}
-              />
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setStopDialogOpen(false)}>
-              취소
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => stopLive.mutate()}
-              disabled={stopLive.isPending}
-              className="gap-2"
-            >
-              {stopLive.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              종료 및 저장
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
