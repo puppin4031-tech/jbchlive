@@ -199,6 +199,36 @@ export type Database = {
         }
         Relationships: []
       }
+      sermon_notes: {
+        Row: {
+          content: string | null
+          created_at: string
+          id: string
+          image_url: string | null
+          sermon_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          sermon_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          sermon_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       sermon_report_replies: {
         Row: {
           author_id: string
@@ -445,6 +475,10 @@ export type Database = {
         Returns: boolean
       }
       is_sermon_channel_owner: {
+        Args: { _sermon_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_sermon_channel_owner_by_id: {
         Args: { _sermon_id: string; _user_id: string }
         Returns: boolean
       }
