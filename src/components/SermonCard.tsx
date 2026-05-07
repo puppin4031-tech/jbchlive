@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { Radio, Eye, Clock, Flag, MoreVertical } from 'lucide-react';
 import { extractYouTubeId } from '@/lib/thumbnailUtils';
+import defaultThumbnail from '@/assets/default-thumbnail.png';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,7 +47,7 @@ const SermonCard = ({ sermon }: SermonCardProps) => {
       <Link to={link} className="block">
         <div className="relative aspect-video rounded-xl overflow-hidden bg-muted">
           <img
-            src={thumbnail || '/placeholder.svg'}
+            src={thumbnail || defaultThumbnail}
             alt={sermon.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
