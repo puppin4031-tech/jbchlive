@@ -19,6 +19,7 @@ import ManageSermonsPage from "./pages/ManageSermonsPage.tsx";
 import FavoritesPage from "./pages/FavoritesPage.tsx";
 import MyChannelPage from "./pages/MyChannelPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import FloatingBroadcasterDock from "@/components/broadcaster/FloatingBroadcasterDock";
 import { useEffect } from "react";
 import { setupSecurityMonitoring } from "@/lib/security";
 
