@@ -77,9 +77,10 @@ const SupportPage = () => {
     }
     if (!user) return;
     setCreating(true);
+    const { subject, body, category } = parsed.data;
     const { data, error } = await supabase
       .from('support_tickets')
-      .insert([{ ...parsed.data, user_id: user.id }])
+      .insert([{ subject, body, category, user_id: user.id }])
       .select()
       .single();
     setCreating(false);
