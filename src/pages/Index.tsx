@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { isPlayableLiveChannel } from '@/lib/livePlayback';
+import defaultThumbnail from '@/assets/default-thumbnail.png';
 
 const categories = ['전체', '주일말씀', '수요말씀', '특별집회'];
 
