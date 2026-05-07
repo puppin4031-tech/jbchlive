@@ -63,6 +63,8 @@ const Header = () => {
             </Button>
           </Link>
 
+          {user && <NotificationBell />}
+
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -85,6 +87,9 @@ const Header = () => {
                 </DropdownMenuItem>
                 <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/my-channel')}>
                   <Tv className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 내 채널
+                </DropdownMenuItem>
+                <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/support')}>
+                  <MessageSquare className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 문의/고객센터
                 </DropdownMenuItem>
                 <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/create-channel')}>
                   <PlusCircle className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 채널 개설
