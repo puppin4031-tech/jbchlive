@@ -122,52 +122,6 @@ const ChannelSettingsPage = () => {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const startLive = useMutation({
-    mutationFn: async () => {
-      if (!channelId) throw new Error('채널 ID가 없습니다');
-      await apiStartChannel(channelId);
-    },
-    onSuccess: () => {
-      setGcpState('STARTING');
-      setPollAttempts(0);
-      setStartingDialogOpen(true);
-      refetchChannel();
-      queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
-      queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
-      queryClient.invalidateQueries({ queryKey: ['live-channels'] });
-      queryClient.invalidateQueries({ queryKey: ['live-channels-list'] });
-      queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
-      queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
-      queryClient.invalidateQueries({ queryKey: ['live-sermon', channelId] });
-    },
-    onError: (e: Error) => toast.error('라이브 시작 실패: ' + e.message),
-  });
-
-  const stopLive = useMutation({
-    mutationFn: async () => {
-      if (!channelId) throw new Error('채널 ID가 없습니다');
-      await apiStopChannel(channelId, {
-        vodTitle: vodTitle.trim() || undefined,
-        vodCategory: vodCategory || undefined,
-        vodPreacher: vodPreacher.trim() || undefined,
-      });
-    },
-    onSuccess: () => {
-      toast.success('라이브가 종료되고 VOD로 저장되었습니다');
-      setStopDialogOpen(false);
-      setVodTitle('');
-      setVodPreacher('');
-      queryClient.invalidateQueries({ queryKey: ['channel-settings', channelId] });
-      queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
-      queryClient.invalidateQueries({ queryKey: ['live-channels'] });
-      queryClient.invalidateQueries({ queryKey: ['live-channels-list'] });
-      queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
-      queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
-      queryClient.invalidateQueries({ queryKey: ['live-sermon', channelId] });
-    },
-    onError: (e: Error) => toast.error('라이브 종료 실패: ' + e.message),
-  });
-
   if (authLoading || isLoading) return null;
   if (!user) return <Navigate to="/login" replace />;
   if (channel && !canEdit) return <Navigate to="/" replace />;
@@ -178,8 +132,6 @@ const ChannelSettingsPage = () => {
   const maskedKey = streamKey
     ? streamKey.slice(0, 4) + '****' + streamKey.slice(-4)
     : null;
-
-  const isReady = gcpState === 'AWAITING_INPUT' || gcpState === 'STREAMING';
 
   return (
     <div className="min-h-screen bg-background">
