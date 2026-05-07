@@ -212,42 +212,7 @@ const ChannelSettingsPage = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {channel?.is_live && (
-                <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3">
-                  <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-                  </span>
-                  <span className="text-sm font-medium text-destructive">라이브 중</span>
-                </div>
-              )}
-
-              {/* Live Start/Stop Button */}
-              <Button
-                onClick={() => {
-                  if (channel?.is_live) {
-                    setStopDialogOpen(true);
-                  } else {
-                    startLive.mutate();
-                  }
-                }}
-                disabled={startLive.isPending || stopLive.isPending}
-                variant={channel?.is_live ? 'destructive' : 'default'}
-                className="w-full h-12 text-base font-semibold gap-2"
-              >
-                {(startLive.isPending || stopLive.isPending) ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : channel?.is_live ? (
-                  <Square className="w-5 h-5" />
-                ) : (
-                  <Play className="w-5 h-5" />
-                )}
-                {(startLive.isPending || stopLive.isPending)
-                  ? '처리 중...'
-                  : channel?.is_live
-                    ? '라이브 종료'
-                    : '라이브 시작'}
-              </Button>
+              <BroadcasterControlPanel variant="inline" />
 
               {/* Permanent Live Share Link */}
               <div className="space-y-1.5">
