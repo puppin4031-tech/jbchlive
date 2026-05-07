@@ -1,7 +1,8 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 import { parseRtmpUri } from '@/lib/liveStreamApi';
+import { isValidRtmpUri } from '@/lib/liveStreamErrors';
 
 interface Props {
   open: boolean;
@@ -14,6 +15,7 @@ interface Props {
 const StartLiveDialog = ({ open, onOpenChange, gcpState, pollAttempts, gcpInputUri }: Props) => {
   const isReady = gcpState === 'AWAITING_INPUT' || gcpState === 'STREAMING';
   const rtmp = parseRtmpUri(gcpInputUri);
+  const rtmpInvalid = !!gcpInputUri && !isValidRtmpUri(gcpInputUri);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -29,7 +31,15 @@ const StartLiveDialog = ({ open, onOpenChange, gcpState, pollAttempts, gcpInputU
               <p className="text-sm text-foreground font-medium">
                 이제 OBS에서 [방송 시작] 버튼을 누르세요.
               </p>
-              {rtmp && (
+              {rtmpInvalid && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex gap-2 text-xs">
+                  <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                  <span className="text-destructive">
+                    송출 주소 형식이 올바르지 않습니다. 관리자에게 채널 재설정을 요청해주세요.
+                  </span>
+                </div>
+              )}
+              {rtmp && !rtmpInvalid && (
                 <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2 text-xs">
                   <div>
                     <span className="text-muted-foreground">서버:</span>

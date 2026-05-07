@@ -51,7 +51,7 @@ interface Props {
 }
 
 const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
-  const { channel, phase, gcpState, pollAttempts, startLive, stopLive } = useBroadcasterChannel();
+  const { channel, phase, gcpState, pollAttempts, startLive, stopLive, lastError, dismissError } = useBroadcasterChannel();
   const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -105,10 +105,10 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
             )}
           </div>
           <p className="text-xs text-muted-foreground line-clamp-1">{display.description}</p>
-          {channel.gcp_last_error && phase === 'error' && (
+          {(lastError || (channel.gcp_last_error && phase === 'error')) && (
             <div className="flex gap-1 text-xs text-destructive">
               <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
-              <span className="line-clamp-2">{channel.gcp_last_error}</span>
+              <span className="line-clamp-2">{lastError?.title ?? channel.gcp_last_error}</span>
             </div>
           )}
           <div className="flex gap-2">
@@ -189,10 +189,38 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
 
         <p className="text-sm text-muted-foreground">{display.description}</p>
 
-        {channel.gcp_last_error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex gap-2 text-xs">
-            <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-            <span className="text-destructive break-words">{channel.gcp_last_error}</span>
+        {(lastError || channel.gcp_last_error) && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+            <div className="flex gap-2 items-start">
+              <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+              <div className="flex-1 space-y-1">
+                <p className="text-sm font-semibold text-destructive">
+                  {lastError?.title ?? '송출 오류'}
+                </p>
+                <p className="text-xs text-foreground">
+                  {lastError?.message ?? channel.gcp_last_error}
+                </p>
+                {lastError?.hint && (
+                  <p className="text-xs text-muted-foreground">{lastError.hint}</p>
+                )}
+              </div>
+              {lastError && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs"
+                  onClick={dismissError}
+                >
+                  확인
+                </Button>
+              )}
+            </div>
+            {lastError?.raw && (
+              <details className="text-[10px] text-muted-foreground pl-6">
+                <summary className="cursor-pointer">기술 상세</summary>
+                <code className="break-all">{lastError.raw}</code>
+              </details>
+            )}
           </div>
         )}
 

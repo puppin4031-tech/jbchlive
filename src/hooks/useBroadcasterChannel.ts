@@ -7,6 +7,7 @@ import {
   stopChannel as apiStopChannel,
   getStatus as apiGetStatus,
 } from '@/lib/liveStreamApi';
+import { toFriendlyError, validateBeforeStart, type FriendlyError } from '@/lib/liveStreamErrors';
 import { toast } from 'sonner';
 
 export type BroadcastPhase =
@@ -27,6 +28,7 @@ export const useBroadcasterChannel = () => {
   const [gcpState, setGcpState] = useState<string>('');
   const [pollAttempts, setPollAttempts] = useState(0);
   const [lastPolledAt, setLastPolledAt] = useState<Date | null>(null);
+  const [lastError, setLastError] = useState<FriendlyError | null>(null);
 
   const { data: channel, refetch } = useQuery({
     queryKey: ['my-channel', user?.id],
@@ -109,16 +111,28 @@ export const useBroadcasterChannel = () => {
   const startLive = useMutation({
     mutationFn: async () => {
       if (!channelId) throw new Error('채널이 없습니다');
+      // Pre-flight validation
+      const preErr = validateBeforeStart(channel || {});
+      if (preErr) {
+        setLastError(preErr);
+        throw new Error(preErr.title);
+      }
+      setLastError(null);
       await apiStartChannel(channelId);
     },
     onSuccess: () => {
       setGcpState('STARTING');
       setPollAttempts(0);
+      setLastError(null);
       refetch();
       queryClient.invalidateQueries({ queryKey: ['live-channels'] });
       queryClient.invalidateQueries({ queryKey: ['live-channels-list'] });
     },
-    onError: (e: Error) => toast.error('라이브 시작 실패: ' + e.message),
+    onError: (e: unknown) => {
+      const fe = lastError ?? toFriendlyError(e);
+      setLastError(fe);
+      toast.error(fe.title, { description: fe.message });
+    },
   });
 
   const stopLive = useMutation({
@@ -129,12 +143,17 @@ export const useBroadcasterChannel = () => {
     onSuccess: () => {
       toast.success('라이브가 종료되고 VOD로 저장되었습니다');
       setGcpState('');
+      setLastError(null);
       refetch();
       queryClient.invalidateQueries({ queryKey: ['live-channels'] });
       queryClient.invalidateQueries({ queryKey: ['live-channels-list'] });
       queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
     },
-    onError: (e: Error) => toast.error('라이브 종료 실패: ' + e.message),
+    onError: (e: unknown) => {
+      const fe = toFriendlyError(e);
+      setLastError(fe);
+      toast.error(fe.title, { description: fe.message });
+    },
   });
 
   return {
@@ -143,6 +162,8 @@ export const useBroadcasterChannel = () => {
     gcpState,
     pollAttempts,
     lastPolledAt,
+    lastError,
+    dismissError: () => setLastError(null),
     startLive,
     stopLive,
     refresh: refetch,
