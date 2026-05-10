@@ -136,12 +136,12 @@ export const useBroadcasterChannel = () => {
   });
 
   const stopLive = useMutation({
-    mutationFn: async (vodOptions?: { vodTitle?: string; vodCategory?: string; vodPreacher?: string }) => {
+    mutationFn: async (_?: unknown) => {
       if (!channelId) throw new Error('채널이 없습니다');
-      await apiStopChannel(channelId, vodOptions);
+      await apiStopChannel(channelId);
     },
     onSuccess: () => {
-      toast.success('라이브가 종료되고 VOD로 저장되었습니다');
+      toast.success('라이브가 종료되었습니다');
       setGcpState('');
       setLastError(null);
       refetch();

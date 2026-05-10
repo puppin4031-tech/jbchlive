@@ -84,8 +84,8 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
     });
   };
 
-  const handleStop = (vodOptions: { vodTitle?: string; vodCategory?: string; vodPreacher?: string }) => {
-    stopLive.mutate(vodOptions, {
+  const handleStop = () => {
+    stopLive.mutate(undefined, {
       onSuccess: () => setStopDialogOpen(false),
     });
   };

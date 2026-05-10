@@ -509,7 +509,7 @@ serve(async (req) => {
     const authHeader = req.headers.get("authorization");
     const user = await verifyUser(authHeader);
 
-    const { channelId, vodTitle, vodCategory, vodPreacher } = body;
+    const { channelId } = body;
 
     // Validate IDs
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -579,14 +579,6 @@ serve(async (req) => {
         if (!channelId) throw new Error("channelId required");
         const gcpChannelId = gcpResourceId(channelId, "channel");
 
-        let recordingUrl: string | null = null;
-        try {
-          const hlsInfo = await getHLSUrl(gcpChannelId);
-          if (hlsInfo.hlsUrl) recordingUrl = hlsInfo.hlsUrl;
-        } catch {
-          // ok
-        }
-
         try {
           result = await stopChannelGCP(gcpChannelId);
         } catch (e) {
@@ -603,40 +595,7 @@ serve(async (req) => {
           .update({ is_live: false, gcp_channel_state: "STOPPED", stream_url: null })
           .eq("id", channelId);
 
-        // Sanitize VOD URL: must be http(s) per validate_sermon_urls trigger
-        const safeRecordingUrl =
-          recordingUrl && /^https?:\/\//.test(recordingUrl) ? recordingUrl : null;
-
-        // Auto-save VOD
-        const title =
-          typeof vodTitle === "string" && vodTitle.trim()
-            ? vodTitle.trim()
-            : `라이브 녹화 ${new Date().toLocaleDateString("ko-KR")}`;
-        const category =
-          typeof vodCategory === "string" && vodCategory.trim()
-            ? vodCategory.trim()
-            : "주일말씀";
-        const preacher =
-          typeof vodPreacher === "string" && vodPreacher.trim()
-            ? vodPreacher.trim()
-            : null;
-
-        const { data: vodData, error: vodError } = await user.serviceClient
-          .from("sermons")
-          .insert({
-            channel_id: channelId,
-            title,
-            category,
-            preacher,
-            video_url: safeRecordingUrl,
-            is_live: false,
-            sermon_date: new Date().toISOString(),
-          })
-          .select("id")
-          .single();
-
-        if (vodError) console.error("VOD auto-save error:", vodError);
-        result = { ...(result as object), vod: vodData || null };
+        // No auto-VOD: live manifest URL is ephemeral and would 404 after stop.
         break;
       }
 
