@@ -21,11 +21,9 @@ export const provisionChannel = (channelId: string) =>
 export const startChannel = (channelId: string) =>
   invoke("startChannel", { channelId });
 
-/** 채널 라이브 종료 (자동 VOD 저장) */
-export const stopChannel = (
-  channelId: string,
-  vodOptions?: { vodTitle?: string; vodCategory?: string; vodPreacher?: string }
-) => invoke("stopChannel", { channelId, ...vodOptions });
+/** 채널 라이브 종료 */
+export const stopChannel = (channelId: string) =>
+  invoke("stopChannel", { channelId });
 
 /** GCP 채널 상태 조회 (폴링용) */
 export const getStatus = (
