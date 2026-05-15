@@ -25,7 +25,7 @@ interface Ticket {
 const ticketSchema = z.object({
   subject: z.string().trim().min(2, '제목은 2자 이상').max(120, '제목은 120자 이내'),
   body: z.string().trim().min(5, '내용은 5자 이상').max(4000, '내용은 4000자 이내'),
-  category: z.enum(['general', 'bug', 'streaming', 'account', 'other']),
+  category: z.enum(['general', 'bug', 'streaming', 'account', 'channel_appeal', 'other']),
 });
 
 const STATUS_LABELS: Record<string, string> = {
