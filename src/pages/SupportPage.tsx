@@ -46,6 +46,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 const SupportPage = () => {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -59,6 +60,20 @@ const SupportPage = () => {
     }
     fetchTickets();
   }, [user]);
+
+  // Prefill from query params (e.g. ?category=channel_appeal&subject=...)
+  useEffect(() => {
+    const qCat = searchParams.get('category');
+    const qSubject = searchParams.get('subject');
+    if (qCat || qSubject) {
+      setForm((f) => ({
+        ...f,
+        category: (qCat as any) || f.category,
+        subject: qSubject || f.subject,
+      }));
+      setShowForm(true);
+    }
+  }, [searchParams]);
 
   const fetchTickets = async () => {
     setLoading(true);
