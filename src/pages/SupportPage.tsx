@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import Header from '@/components/Header';
@@ -25,7 +25,7 @@ interface Ticket {
 const ticketSchema = z.object({
   subject: z.string().trim().min(2, '제목은 2자 이상').max(120, '제목은 120자 이내'),
   body: z.string().trim().min(5, '내용은 5자 이상').max(4000, '내용은 4000자 이내'),
-  category: z.enum(['general', 'bug', 'streaming', 'account', 'other']),
+  category: z.enum(['general', 'bug', 'streaming', 'account', 'channel_appeal', 'other']),
 });
 
 const STATUS_LABELS: Record<string, string> = {
@@ -39,12 +39,14 @@ const CATEGORY_LABELS: Record<string, string> = {
   bug: '오류 신고',
   streaming: '송출 문의',
   account: '계정',
+  channel_appeal: '채널 정지 이의신청',
   other: '기타',
 };
 
 const SupportPage = () => {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -58,6 +60,20 @@ const SupportPage = () => {
     }
     fetchTickets();
   }, [user]);
+
+  // Prefill from query params (e.g. ?category=channel_appeal&subject=...)
+  useEffect(() => {
+    const qCat = searchParams.get('category');
+    const qSubject = searchParams.get('subject');
+    if (qCat || qSubject) {
+      setForm((f) => ({
+        ...f,
+        category: (qCat as any) || f.category,
+        subject: qSubject || f.subject,
+      }));
+      setShowForm(true);
+    }
+  }, [searchParams]);
 
   const fetchTickets = async () => {
     setLoading(true);
