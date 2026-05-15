@@ -110,7 +110,27 @@ const MyChannelPage = () => {
                     <Clock className="w-3.5 h-3.5" /> 승인 대기 중
                   </span>
                 )}
+                {channel.is_suspended && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-destructive bg-destructive/10 px-2.5 py-1 rounded-full">
+                    정지됨
+                  </span>
+                )}
               </div>
+
+              {/* Suspension notice + appeal */}
+              {channel.is_suspended && (
+                <div className="mt-3 p-3 rounded-md border border-destructive/40 bg-destructive/5 space-y-2">
+                  <p className="text-sm text-destructive font-medium">채널이 정지되었습니다</p>
+                  {channel.suspended_reason && (
+                    <p className="text-xs text-muted-foreground">사유: {channel.suspended_reason}</p>
+                  )}
+                  <Link
+                    to={`/support?category=channel_appeal&subject=${encodeURIComponent('정지 이의신청 - ' + channel.name)}`}
+                  >
+                    <Button size="sm" variant="outline">정지 사유 이의신청</Button>
+                  </Link>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="mt-4 flex gap-2 flex-wrap">
