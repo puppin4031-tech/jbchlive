@@ -39,6 +39,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   bug: '오류 신고',
   streaming: '송출 문의',
   account: '계정',
+  channel_appeal: '채널 정지 이의신청',
   other: '기타',
 };
 
