@@ -712,9 +712,18 @@ serve(async (req) => {
           result = { alreadyStopped: true };
         }
 
+        const forceReason = user.isAdmin && typeof reason === "string" && reason.trim()
+          ? `관리자 강제 종료: ${reason.trim().slice(0, 200)}`
+          : null;
+
         await user.serviceClient
           .from("channels")
-          .update({ is_live: false, gcp_channel_state: "STOPPED", stream_url: null })
+          .update({
+            is_live: false,
+            gcp_channel_state: "STOPPED",
+            stream_url: null,
+            ...(forceReason ? { gcp_last_error: forceReason } : {}),
+          })
           .eq("id", channelId);
 
         // No auto-VOD: live manifest URL is ephemeral and would 404 after stop.
