@@ -472,9 +472,8 @@ serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    // === Cron-triggered: autoStopIdleChannels ===
-    // Authenticated via service-role secret in body for cron use.
-    if (action === "autoStopIdleChannels") {
+    // === Cron-triggered actions ===
+    if (CRON_ACTIONS.has(action)) {
       const cronSecret = req.headers.get("x-cron-secret");
       const expected = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       if (!cronSecret || cronSecret !== expected) {
@@ -484,41 +483,155 @@ serve(async (req) => {
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
       );
-      const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-      const { data: idle } = await serviceClient
-        .from("channels")
-        .select("id")
-        .eq("is_live", true)
-        .lt("live_started_at", cutoff);
 
-      const stopped: string[] = [];
-      for (const ch of idle ?? []) {
-        const gcpChannelId = gcpResourceId(ch.id, "channel");
+      // Helper: stop a single channel (idempotent)
+      const stopOne = async (channelId: string, reason?: string) => {
+        const gcpChannelId = gcpResourceId(channelId, "channel");
         try {
-          const gcpCh = await getChannelGCP(gcpChannelId).catch(() => null);
-          const state = gcpCh?.streamingState;
-          if (state && state !== "STREAMING") {
-            await stopChannelGCP(gcpChannelId).catch(() => null);
+          await stopChannelGCP(gcpChannelId);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (!msg.includes("FAILED_PRECONDITION") && !msg.includes("not running")) {
+            throw e;
+          }
+        }
+        await serviceClient
+          .from("channels")
+          .update({
+            is_live: false,
+            gcp_channel_state: "STOPPED",
+            stream_url: null,
+            ...(reason ? { gcp_last_error: reason } : {}),
+          })
+          .eq("id", channelId);
+      };
+
+      if (action === "autoStopIdleChannels") {
+        // Stop channels that are marked live but have no RTMP input (AWAITING_INPUT)
+        // for longer than the channel's auto_stop_idle_minutes setting.
+        const { data: liveChannels } = await serviceClient
+          .from("channels")
+          .select("id, live_started_at, auto_stop_idle_minutes")
+          .eq("is_live", true);
+
+        const stopped: string[] = [];
+        const now = Date.now();
+        for (const ch of liveChannels ?? []) {
+          const idleMin = ch.auto_stop_idle_minutes ?? 15;
+          const startedAt = ch.live_started_at ? new Date(ch.live_started_at).getTime() : 0;
+          const elapsedMin = (now - startedAt) / 60000;
+          if (elapsedMin < idleMin) continue;
+
+          const gcpChannelId = gcpResourceId(ch.id, "channel");
+          try {
+            const gcpCh = await getChannelGCP(gcpChannelId).catch(() => null);
+            const state = gcpCh?.streamingState;
+            // Stop if GCP says no input flowing
+            if (state === "AWAITING_INPUT" || state === "PENDING" || !state) {
+              await stopOne(
+                ch.id,
+                `자동 종료: ${idleMin}분간 RTMP 입력 없음 (상태: ${state ?? "UNKNOWN"})`
+              );
+              stopped.push(ch.id);
+            }
+          } catch (e) {
+            console.error("autoStop error for", ch.id, e);
+          }
+        }
+        return new Response(JSON.stringify({ stopped }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (action === "scheduledStartChannels") {
+        const nowIso = new Date().toISOString();
+        const { data: toStart } = await serviceClient
+          .from("channels")
+          .select("id, name, gcp_input_uri, scheduled_start_at")
+          .eq("is_live", false)
+          .eq("is_approved", true)
+          .eq("is_suspended", false)
+          .not("scheduled_start_at", "is", null)
+          .lte("scheduled_start_at", nowIso);
+
+        const started: string[] = [];
+        const failed: string[] = [];
+        for (const ch of toStart ?? []) {
+          // Clear schedule first to prevent retry loop
+          await serviceClient
+            .from("channels")
+            .update({ scheduled_start_at: null })
+            .eq("id", ch.id);
+
+          if (!ch.gcp_input_uri) {
             await serviceClient
               .from("channels")
-              .update({ is_live: false, gcp_channel_state: "STOPPED", stream_url: null })
+              .update({ gcp_last_error: "예약 시작 실패: GCP 미프로비저닝" })
               .eq("id", ch.id);
-            stopped.push(ch.id);
+            failed.push(ch.id);
+            continue;
           }
-        } catch (e) {
-          console.error("autoStop error for", ch.id, e);
+          try {
+            const gcpChannelId = gcpResourceId(ch.id, "channel");
+            await startChannelGCP(gcpChannelId);
+            await serviceClient
+              .from("channels")
+              .update({
+                is_live: true,
+                live_started_at: new Date().toISOString(),
+                gcp_channel_state: "STARTING",
+                stream_url: null,
+                gcp_last_error: null,
+              })
+              .eq("id", ch.id);
+            started.push(ch.id);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            await serviceClient
+              .from("channels")
+              .update({ gcp_last_error: `예약 시작 실패: ${msg.slice(0, 200)}` })
+              .eq("id", ch.id);
+            failed.push(ch.id);
+          }
         }
+        return new Response(JSON.stringify({ started, failed }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-      return new Response(JSON.stringify({ stopped }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+
+      if (action === "scheduledStopChannels") {
+        const nowIso = new Date().toISOString();
+        const { data: toStop } = await serviceClient
+          .from("channels")
+          .select("id, scheduled_end_at")
+          .eq("is_live", true)
+          .not("scheduled_end_at", "is", null)
+          .lte("scheduled_end_at", nowIso);
+
+        const stopped: string[] = [];
+        for (const ch of toStop ?? []) {
+          await serviceClient
+            .from("channels")
+            .update({ scheduled_end_at: null })
+            .eq("id", ch.id);
+          try {
+            await stopOne(ch.id);
+            stopped.push(ch.id);
+          } catch (e) {
+            console.error("scheduledStop error for", ch.id, e);
+          }
+        }
+        return new Response(JSON.stringify({ stopped }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // === Authenticated user actions ===
     const authHeader = req.headers.get("authorization");
     const user = await verifyUser(authHeader);
 
-    const { channelId } = body;
+    const { channelId, reason } = body;
 
     // Validate IDs
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
