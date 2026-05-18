@@ -897,6 +897,12 @@ serve(async (req) => {
             ...(forceReason ? { gcp_last_error: forceReason } : {}),
           })
           .eq("id", channelId);
+        // History: close session (never throws)
+        await closeLiveSession(
+          user.serviceClient,
+          channelId,
+          user.isAdmin && typeof reason === "string" && reason.trim() ? "admin_forced" : "manual",
+        );
 
         // No auto-VOD: live manifest URL is ephemeral and would 404 after stop.
         break;
