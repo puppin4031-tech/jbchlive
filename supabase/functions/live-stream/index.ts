@@ -718,6 +718,8 @@ serve(async (req) => {
                 gcp_last_error: null,
               })
               .eq("id", ch.id);
+            // History: open session (never throws)
+            await openLiveSession(serviceClient, ch.id);
             started.push(ch.id);
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
