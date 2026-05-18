@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Settings, Radio, Users, PlusCircle, Clock, CheckCircle2, Video } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import BroadcasterControlPanel from '@/components/broadcaster/BroadcasterControlPanel';
+import ScheduleCard from '@/components/broadcaster/ScheduleCard';
 
 const MyChannelPage = () => {
   const { user, loading: authLoading } = useAuth();
