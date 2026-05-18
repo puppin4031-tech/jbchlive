@@ -180,6 +180,12 @@ const ChannelPage = () => {
             <p className="text-center text-muted-foreground py-8 text-sm">해당 카테고리의 말씀이 없습니다.</p>
           )}
         </section>
+
+        {/* Live broadcast history */}
+        <section>
+          <h2 className="font-semibold text-base mb-3 text-foreground">방송 기록</h2>
+          <ChannelLiveHistory channelId={channel.id} canSeeDetail={!!canEdit} />
+        </section>
       </main>
     </div>
   );
