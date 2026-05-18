@@ -663,7 +663,8 @@ serve(async (req) => {
             if (state === "AWAITING_INPUT" || state === "PENDING" || !state) {
               await stopOne(
                 ch.id,
-                `자동 종료: ${idleMin}분간 RTMP 입력 없음 (상태: ${state ?? "UNKNOWN"})`
+                `자동 종료: ${idleMin}분간 RTMP 입력 없음 (상태: ${state ?? "UNKNOWN"})`,
+                "auto_idle",
               );
               stopped.push(ch.id);
             }
