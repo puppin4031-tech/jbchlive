@@ -6,6 +6,7 @@ import VideoPlayer from '@/components/VideoPlayer';
 import SermonCard from '@/components/SermonCard';
 import { supabase } from '@/integrations/supabase/client';
 import { useViewerCount } from '@/hooks/useViewerCount';
+import { useViewerHeartbeat } from '@/hooks/useViewerHeartbeat';
 import { Share2, Users, Radio, VideoOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
