@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import SermonCard, { type SermonCardData } from '@/components/SermonCard';
 import CategoryTabs from '@/components/CategoryTabs';
+import ChannelLiveHistory from '@/components/channel/ChannelLiveHistory';
 import { Users, Heart, Radio, Settings, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
