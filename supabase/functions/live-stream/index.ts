@@ -863,6 +863,8 @@ serve(async (req) => {
             stream_url: null,
           })
           .eq("id", channelId);
+        // History: open session (never throws)
+        await openLiveSession(user.serviceClient, channelId);
         result = { ...(result as object), streamUrl: null };
         break;
       }
