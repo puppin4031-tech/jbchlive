@@ -187,6 +187,11 @@ const MyChannelPage = () => {
               </div>
             )}
 
+            {/* Live broadcast stats */}
+            {channel.is_approved && (
+              <ChannelLiveStats channelId={channel.id} />
+            )}
+
             {/* Recent Sermons */}
             {channel.is_approved && sermons && sermons.length > 0 && (
               <section>
@@ -211,6 +216,14 @@ const MyChannelPage = () => {
                   ))}
 
                 </div>
+              </section>
+            )}
+
+            {/* Live broadcast history */}
+            {channel.is_approved && (
+              <section>
+                <h3 className="font-semibold text-base mb-3 text-foreground">방송 기록</h3>
+                <ChannelLiveHistory channelId={channel.id} canSeeDetail={true} limit={10} />
               </section>
             )}
 
