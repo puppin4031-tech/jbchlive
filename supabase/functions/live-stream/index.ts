@@ -751,13 +751,20 @@ serve(async (req) => {
             .update({ scheduled_end_at: null })
             .eq("id", ch.id);
           try {
-            await stopOne(ch.id);
+            await stopOne(ch.id, undefined, "scheduled");
             stopped.push(ch.id);
           } catch (e) {
             console.error("scheduledStop error for", ch.id, e);
           }
         }
         return new Response(JSON.stringify({ stopped }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (action === "sampleLiveViewers") {
+        const sampled = await sampleViewerCounts(serviceClient);
+        return new Response(JSON.stringify({ sampled }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
