@@ -770,6 +770,33 @@ serve(async (req) => {
       }
     }
 
+    // === Public actions (no auth) ===
+    if (PUBLIC_ACTIONS.has(action)) {
+      const serviceClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+
+      if (action === "viewerHeartbeat") {
+        const { channelId: cid, viewerKey } = body as { channelId?: string; viewerKey?: string };
+        const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!cid || !UUID.test(cid)) throw new Error("Invalid channelId");
+        if (!viewerKey || typeof viewerKey !== "string" || viewerKey.length < 8 || viewerKey.length > 64) {
+          throw new Error("Invalid viewerKey");
+        }
+        // Per-viewer rate limit (4/min)
+        checkRateLimit(viewerKey, "viewerHeartbeat");
+
+        await serviceClient.from("viewer_presence").upsert(
+          { channel_id: cid, viewer_key: viewerKey, last_seen_at: new Date().toISOString() },
+          { onConflict: "channel_id,viewer_key" },
+        );
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // === Authenticated user actions ===
     const authHeader = req.headers.get("authorization");
     const user = await verifyUser(authHeader);
