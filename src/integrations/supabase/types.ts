@@ -139,6 +139,82 @@ export type Database = {
         }
         Relationships: []
       }
+      live_sessions: {
+        Row: {
+          avg_viewers: number
+          channel_id: string
+          created_at: string
+          duration_seconds: number | null
+          end_reason: string | null
+          ended_at: string | null
+          id: string
+          peak_viewers: number
+          started_at: string
+          title: string | null
+        }
+        Insert: {
+          avg_viewers?: number
+          channel_id: string
+          created_at?: string
+          duration_seconds?: number | null
+          end_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          peak_viewers?: number
+          started_at?: string
+          title?: string | null
+        }
+        Update: {
+          avg_viewers?: number
+          channel_id?: string
+          created_at?: string
+          duration_seconds?: number | null
+          end_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          peak_viewers?: number
+          started_at?: string
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_sessions_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      live_viewer_samples: {
+        Row: {
+          id: number
+          sampled_at: string
+          session_id: string
+          viewer_count: number
+        }
+        Insert: {
+          id?: number
+          sampled_at?: string
+          session_id: string
+          viewer_count?: number
+        }
+        Update: {
+          id?: number
+          sampled_at?: string
+          session_id?: string
+          viewer_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_viewer_samples_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "live_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           body: string | null
@@ -460,6 +536,24 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      viewer_presence: {
+        Row: {
+          channel_id: string
+          last_seen_at: string
+          viewer_key: string
+        }
+        Insert: {
+          channel_id: string
+          last_seen_at?: string
+          viewer_key: string
+        }
+        Update: {
+          channel_id?: string
+          last_seen_at?: string
+          viewer_key?: string
         }
         Relationships: []
       }
