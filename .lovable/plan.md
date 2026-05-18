@@ -1,88 +1,111 @@
-# 알림 확장 플랜 — 채널 & 라이브 양방향 피드백
+## 사전 영향도 분석 (Critical Path 점검)
 
-현재 알림은 `support_tickets` 흐름(생성/답변/상태변경)에만 트리거가 걸려 있고, **채널 승인·정지·삭제, 라이브 시작·종료·오류**에는 알림이 전혀 없음. 이를 채워 넣되 **중복 알림 방지**가 핵심.
+본 작업은 `mem://constraints/broadcaster-critical-path`에 정의된 보호 영역을 건드립니다:
+- `supabase/functions/live-stream/index.ts` — autoStopIdleChannels 로직 수정 필요 (버그 + 새 조건)
+- `channels` 테이블 — 새 컬럼 추가 (`scheduled_start_at`, `scheduled_end_at`, `last_active_at`)
+- `notify_channel_lifecycle()` — 변경 없음 (트리거가 이미 이력을 INSERT하므로 그대로 활용)
 
-## 1. 설계 원칙 (중복 방지)
+**리스크 및 대응**:
+- 기존 start/stop mutation, phase 머신, parseRtmpUri는 **건드리지 않음**
+- 새 컬럼은 모두 nullable + default → 기존 동작 무영향
+- autoStop 로직 수정 시 정상 송출 중인 채널이 잘못 종료되는 것을 방지하기 위해, "viewer=0 AND last_active_at 경과" 양쪽 조건 충족 시에만 종료
 
-- **DB 트리거를 단일 소스로 사용** — 프론트와 Edge Function 양쪽에서 알림을 만들면 중복됨. 상태 변화는 모두 `channels` UPDATE 트리거 한 곳에서만 알림 생성.
-- **`IS DISTINCT FROM`** 가드 — `NEW.is_approved IS DISTINCT FROM OLD.is_approved` 처럼 실제로 값이 바뀐 경우에만 INSERT.
-- **Live 오류는 "전이"만 알림** — `gcp_last_error`가 NULL→값 또는 값이 바뀐 경우만, 동일 값 반복 업데이트는 무시.
-- **자기 자신에게는 알림 보내지 않음** — 관리자가 자기 채널을 운영할 경우 owner==admin이면 1건만.
-- **알림 타입(`type`) 표준화** — 같은 type+related_id 조합은 클라이언트 측에서 최신 1건만 강조하도록 Bell UI는 그대로 두고, DB는 INSERT 그대로 둔다(이력 보존). 단, 라이브 lifecycle은 트리거 가드로 1전이=1알림 보장.
+---
 
-## 2. 알림 이벤트 매트릭스
+## 진단 결과 (3번 — 자동 종료 안 되는 원인)
 
-| 이벤트 | 트리거/위치 | 수신자 | type |
-|---|---|---|---|
-| 채널 개설 요청 (INSERT, is_approved=false) | `channels` AFTER INSERT | 모든 admin | `channel_request` |
-| 채널 승인 (false→true) | `channels` AFTER UPDATE | 채널 owner | `channel_approved` |
-| 채널 승인 취소 (true→false) | `channels` AFTER UPDATE | 채널 owner | `channel_unapproved` |
-| 채널 정지 (is_suspended false→true) | `channels` AFTER UPDATE | 채널 owner (사유 포함) | `channel_suspended` |
-| 정지 해제 (true→false) | `channels` AFTER UPDATE | 채널 owner | `channel_unsuspended` |
-| 채널 삭제 | `channels` AFTER DELETE | 채널 owner + 모든 admin | `channel_deleted` |
-| 라이브 시작 성공 | `channels` AFTER UPDATE (`is_live` false→true) | owner + 모든 admin | `live_started` |
-| 라이브 정상 종료 | `channels` AFTER UPDATE (`is_live` true→false AND `gcp_last_error` IS NULL) | owner | `live_stopped` |
-| 라이브 오류 발생 | `channels` AFTER UPDATE (`gcp_last_error`가 새 값으로 변경) | owner + 모든 admin | `live_error` |
-| 정지 사유에 대한 이의신청 | 신규 UI → `support_tickets` INSERT (category='channel_appeal') | 기존 ticket 트리거가 admin에게 알림 | `ticket_new` (재사용) |
-| 사이트 사용 문제 제기/피드백 | 기존 `/support` 활용, category 추가만 | 기존 트리거 재사용 | `ticket_new` |
+`cron.job` 확인 결과 **2개의 명확한 버그**:
 
-## 3. 구현 단계
+1. **인증 실패**: cron이 호출하는 `x-cron-secret` 값이 `PLACEHOLDER_TO_BE_REPLACED` 문자열로 등록되어 있어 매 5분마다 호출은 가나 인증 거부됨. 로그에 흔적 없음.
+2. **로직 결함** (`index.ts:478-498`):
+   - `cutoff = live_started_at < 30분 전` → "송출 시작 30분 후"만 보고 활동 여부 무관
+   - `if (state && state !== "STREAMING")` → 정상 STREAMING이면 절대 종료 안 함. 즉 "STREAMING이지만 아무도 안 보는" 케이스는 영원히 안 잡힘
 
-### 3.1 DB 마이그레이션 — 트리거 함수 3개 + 트리거 부착
+---
 
-**(a) `notify_channel_lifecycle()` — `channels` AFTER INSERT/UPDATE/DELETE**
+## 작업 1: 채널 이력 타임라인 (관리자)
 
-- INSERT: `is_approved=false`면 모든 admin에게 `channel_request` 알림(link `/admin`).
-- UPDATE 가드:
-  - `is_approved` false→true: owner에게 `channel_approved`.
-  - `is_approved` true→false: owner에게 `channel_unapproved`.
-  - `is_suspended` false→true: owner에게 `channel_suspended` (body에 `suspended_reason`).
-  - `is_suspended` true→false: owner에게 `channel_unsuspended`.
-- DELETE: owner + admin 들에게 `channel_deleted`(link 없이, 채널명 body).
-- 모든 INSERT는 `SECURITY DEFINER` 함수에서 수행(현재 notifications RLS는 INSERT 차단됨 → DEFINER로 우회).
+이미 `notifications` 테이블이 모든 라이프사이클(요청/승인/정지/삭제/이의신청/라이브 시작·종료·오류)을 기록 중. 별도 audit 테이블 만들지 않고 활용.
 
-**(b) `notify_live_lifecycle()` — `channels` AFTER UPDATE OF is_live, gcp_last_error**
+- `AdminPage.tsx`에 새 탭 "활동 이력" 추가
+- 쿼리: `notifications`에서 `type IN (channel_*, live_*, ticket_*)` + `related_id`로 그룹핑
+- UI: 시간순 타임라인 (날짜 헤더 + 채널명 + 액션 배지 + 사유)
+- 필터: 채널별 / 액션 종류별 / 기간
 
-- `is_live` false→true: owner+admin에게 `live_started` (link `/live/{id}`).
-- `is_live` true→false AND (NEW.gcp_last_error IS NULL OR NEW.gcp_last_error = OLD.gcp_last_error): owner에게 `live_stopped`.
-- `gcp_last_error` IS DISTINCT FROM OLD AND NEW IS NOT NULL: owner+admin에게 `live_error` (body=에러 메시지 80자 자르기).
-- 같은 트랜잭션에서 두 컬럼이 동시 변할 수 있으므로 위 분기로 1알림만 발생.
+## 작업 2: 관리자 강제 종료 (무활동 채널)
 
-**(c) RLS 보강** — `notifications`에 INSERT 정책은 추가하지 않음(트리거 함수가 DEFINER로 실행되므로 불필요). 단 시스템 안전을 위해 `WITH CHECK (false)` 명시 INSERT 정책은 두지 않음(현재처럼 정책 없음 = 일반 사용자 INSERT 불가, DEFINER만 가능).
+- `AdminPage.tsx` "라이브 현황" 섹션에 현재 라이브 채널 리스트
+- 각 행에 viewer count (Presence 조회) + 송출 경과 시간 + **[강제 종료]** 버튼
+- 버튼 → 확인 다이얼로그 (사유 입력) → `stopChannel` Edge Function 호출 + `gcp_last_error`에 "관리자 강제 종료: {사유}" 기록
+- 관리자 권한은 Edge Function 내 `has_role` 체크 추가 (현재 owner_id만 체크)
 
-### 3.2 Edge Function — 알림은 만들지 않음
+## 작업 3: 자동 종료 버그 수정
 
-`live-stream/index.ts`는 **`channels` 테이블만 업데이트**하면 위 트리거가 알아서 알림 생성. `start/stop/provision`에서 직접 `notifications.insert()` 호출하지 않음(중복 방지). 단, 시작·종료·에러 시 `gcp_last_error`/`is_live`를 정확히 업데이트하도록 기존 코드만 점검.
+**DB**:
+- `channels.last_active_at TIMESTAMPTZ` 컬럼 추가
+- Presence sync 시 채널별로 viewer가 있으면 last_active_at 업데이트 (Edge Function `heartbeat` 액션 신설, 또는 viewer 카운트 hook에서 1분마다 호출)
 
-### 3.3 프론트 변경 (최소)
+**Cron 재등록** (`supabase--insert`로):
+- 기존 job unschedule 후 실제 service role key로 재등록
+- 주기: 매 2분
 
-- **이의신청 진입점**: `ChannelPage`/`MyChannelPage`에서 `is_suspended`일 때 "정지 사유 이의신청" 버튼 → `/support/new?category=channel_appeal&subject=정지%20이의신청%20-%20{channel.name}` 프리필. 별도 백엔드 변경 없음(기존 ticket 트리거 재사용).
-- **알림 link 라우팅**: `NotificationBell`은 이미 `n.link`로 navigate. 추가 라우트 없이 `/admin`, `/live/:id`, `/channel/:id`, `/support/:id` 모두 기존 라우트 사용.
-- **AdminPage `deleteChannel`/`toggleApproval`/`toggleSuspend` 등 mutation은 변경 불필요** — 토스트만 유지, 알림은 트리거가 처리.
+**Edge Function `autoStopIdleChannels` 재작성**:
+```ts
+// 종료 조건: is_live=true AND
+//   (last_active_at < now-15min OR last_active_at IS NULL AND live_started_at < now-15min)
+//   AND GCP state in ('AWAITING_INPUT', 'STREAMING')
+// → GCP stopChannel + DB update + (트리거가 알림 자동 발송)
+```
 
-### 3.4 메모리 업데이트
+## 작업 4: 시작/종료 예약
 
-`mem://features/live-notifications`에 "채널 라이프사이클·라이브 lifecycle 알림은 channels 트리거에서만 생성(중복 방지). Edge Function/프론트는 직접 INSERT 금지" 명시.
+**DB 스키마**:
+- `channels.scheduled_start_at TIMESTAMPTZ NULL`
+- `channels.scheduled_end_at TIMESTAMPTZ NULL`
 
-## 4. 중복·누락 방지 체크리스트
+**UI** (`ChannelSettingsPage.tsx` 또는 `BroadcasterControlPanel.tsx`):
+- "예약 송출" 카드 → datetime-local 2개 + 저장 버튼
+- 예약 있으면 메인 패널에 "⏰ 14:30 시작 예정" 배지
 
-- [ ] 모든 UPDATE 분기는 `IS DISTINCT FROM` 사용 — 같은 값 재저장 시 알림 없음.
-- [ ] `live_started`는 `is_live false→true` 1회만; `gcp_channel_state` 변화에는 미반응.
-- [ ] `live_stopped`와 `live_error`는 상호배타(에러 동반 정지면 `live_error`만).
-- [ ] owner=admin인 경우 `live_started`/`live_error` fan-out 시 중복 INSERT 방지(`WHERE user_id <> channel.owner_id` 또는 `ON CONFLICT DO NOTHING` + unique index 없이 단순 분리).
-- [ ] DELETE 트리거는 OLD 행 사용; owner·admin 동일인이면 admin 루프에서 owner 제외.
-- [ ] 알림 INSERT는 모두 SECURITY DEFINER 함수 내부에서 → RLS 우회 OK.
+**Cron 추가** (매 1분):
+- `scheduledStartChannels`: `scheduled_start_at <= now AND is_live=false` → startChannel 실행 후 컬럼 NULL로 리셋
+- `scheduledStopChannels`: `scheduled_end_at <= now AND is_live=true` → stopChannel 실행 후 NULL로 리셋
 
-## 5. 검증
+---
 
-1. 신규 채널 생성 → admin 알림 1건만 도착.
-2. admin 승인 → owner 알림 1건. 같은 값으로 재저장해도 알림 없음.
-3. 정지 사유 입력 후 정지 → owner 알림(사유 포함). 해제 시 1건. 
-4. owner가 "이의신청" 클릭 → `/support/new` 프리필 → 제출 → admin 알림(기존 trigger).
-5. 라이브 시작 → owner+admin 각 1건. 정상 종료 → owner 1건. 강제 오류 시 `live_error`만 발생, `live_stopped` 미발생.
-6. 같은 에러 메시지로 두 번 update → 알림 1건만.
+## 변경 파일 요약
 
-## 영향 범위
+```text
+DB migration (스키마만):
+  + channels.last_active_at, scheduled_start_at, scheduled_end_at
 
-- 라이브/VOD 재생, RTMP, 채널 카드, 검색 등 **기존 정상 동작에 영향 없음**.
-- 알림 폭주 방지를 위해 트리거 가드가 핵심 — DB 마이그레이션 1회로 모든 게이팅 완료.
+DB insert (cron 재등록):
+  - 기존 auto-stop job 재등록 (실제 키)
+  + scheduled-start job
+  + scheduled-stop job
+
+supabase/functions/live-stream/index.ts:
+  - autoStopIdleChannels 로직 재작성
+  + heartbeat 액션
+  + scheduledStart/Stop 액션
+  + 강제 종료 시 관리자 권한 허용
+
+src/pages/AdminPage.tsx:
+  + 활동 이력 탭
+  + 라이브 현황 + 강제 종료 버튼
+
+src/components/admin/ForceStopDialog.tsx (신규)
+src/components/admin/ActivityTimeline.tsx (신규)
+src/components/broadcaster/ScheduleCard.tsx (신규)
+
+src/hooks/useViewerCount.ts:
+  + heartbeat 호출 (1분 주기)
+```
+
+## 확인 사항
+
+1. 자동 종료 **무활동 기준 시간**: 기본값 제안 = **15분** (현재 30분에서 단축). 변경 원하시면 알려주세요.
+2. 관리자 강제 종료 시 송출자에게 알림 본문에 사유 노출 OK? (기본 OK로 진행 예정)
+3. 예약 시간이 지난 후 시작 실패 시 동작: 1회 재시도 후 취소 + 알림 발송 (기본안)
+
+위 3개는 기본값으로 진행해도 되면 바로 구현하고, 변경하실 부분 있으면 말씀해 주세요.

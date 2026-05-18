@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Settings, Radio, Users, PlusCircle, Clock, CheckCircle2, Video } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import BroadcasterControlPanel from '@/components/broadcaster/BroadcasterControlPanel';
+import ScheduleCard from '@/components/broadcaster/ScheduleCard';
 
 const MyChannelPage = () => {
   const { user, loading: authLoading } = useAuth();
@@ -156,6 +157,15 @@ const MyChannelPage = () => {
 
             {/* Broadcaster Control */}
             {channel.is_approved && <BroadcasterControlPanel variant="inline" />}
+
+            {/* Schedule */}
+            {channel.is_approved && !channel.is_suspended && (
+              <ScheduleCard
+                channelId={channel.id}
+                scheduledStartAt={(channel as { scheduled_start_at?: string | null }).scheduled_start_at ?? null}
+                scheduledEndAt={(channel as { scheduled_end_at?: string | null }).scheduled_end_at ?? null}
+              />
+            )}
 
             {/* Quick Stats */}
             {channel.is_approved && (

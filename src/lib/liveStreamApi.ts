@@ -21,9 +21,9 @@ export const provisionChannel = (channelId: string) =>
 export const startChannel = (channelId: string) =>
   invoke("startChannel", { channelId });
 
-/** 채널 라이브 종료 */
-export const stopChannel = (channelId: string) =>
-  invoke("stopChannel", { channelId });
+/** 채널 라이브 종료 (admin can pass reason for force-stop) */
+export const stopChannel = (channelId: string, reason?: string) =>
+  invoke("stopChannel", { channelId, reason });
 
 /** GCP 채널 상태 조회 (폴링용) */
 export const getStatus = (

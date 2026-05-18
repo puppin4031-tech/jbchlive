@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Check, X, Trash2, Radio, Loader2, Ban, EyeOff, Flag } from 'lucide-react';
 import { toast } from 'sonner';
 import * as liveApi from '@/lib/liveStreamApi';
+import ActivityTimeline from '@/components/admin/ActivityTimeline';
+import LiveNowPanel from '@/components/admin/LiveNowPanel';
 
 const AdminPage = () => {
   const { isAdmin, loading, user } = useAuth();
@@ -237,9 +239,21 @@ const AdminPage = () => {
             <TabsTrigger value="reports">
               신고 관리 {openReports.length > 0 && <Badge variant="destructive" className="ml-1 text-xs">{openReports.length}</Badge>}
             </TabsTrigger>
+            <TabsTrigger value="live">
+              라이브 현황 {liveChannels > 0 && <Badge className="bg-live text-live-foreground ml-1 text-xs">{liveChannels}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="channels">전체 채널</TabsTrigger>
+            <TabsTrigger value="activity">활동 이력</TabsTrigger>
             <TabsTrigger value="new">새 채널</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="live" className="mt-4">
+            <LiveNowPanel />
+          </TabsContent>
+
+          <TabsContent value="activity" className="mt-4">
+            <ActivityTimeline />
+          </TabsContent>
 
           <TabsContent value="pending" className="space-y-3 mt-4">
             {pendingChannels.length === 0 ? (
