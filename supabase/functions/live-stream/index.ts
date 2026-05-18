@@ -426,7 +426,16 @@ const RATE_LIMITS: Record<string, { max: number; windowSec: number }> = {
   getStatus: { max: 60, windowSec: 60 },
   getHLSUrl: { max: 30, windowSec: 60 },
   autoStopIdleChannels: { max: 30, windowSec: 60 },
+  scheduledStartChannels: { max: 30, windowSec: 60 },
+  scheduledStopChannels: { max: 30, windowSec: 60 },
 };
+
+// Cron-triggered actions: bypass user auth, require x-cron-secret header
+const CRON_ACTIONS = new Set([
+  "autoStopIdleChannels",
+  "scheduledStartChannels",
+  "scheduledStopChannels",
+]);
 
 function checkRateLimit(userId: string, action: string) {
   const limit = RATE_LIMITS[action] || { max: 10, windowSec: 60 };
