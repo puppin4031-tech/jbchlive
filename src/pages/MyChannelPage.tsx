@@ -158,6 +158,15 @@ const MyChannelPage = () => {
             {/* Broadcaster Control */}
             {channel.is_approved && <BroadcasterControlPanel variant="inline" />}
 
+            {/* Schedule */}
+            {channel.is_approved && !channel.is_suspended && (
+              <ScheduleCard
+                channelId={channel.id}
+                scheduledStartAt={(channel as { scheduled_start_at?: string | null }).scheduled_start_at ?? null}
+                scheduledEndAt={(channel as { scheduled_end_at?: string | null }).scheduled_end_at ?? null}
+              />
+            )}
+
             {/* Quick Stats */}
             {channel.is_approved && (
               <div className="grid grid-cols-3 gap-3">
