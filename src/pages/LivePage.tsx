@@ -75,6 +75,7 @@ const LivePage = () => {
 
   // Viewer count (must be called unconditionally before any early return)
   const viewerCount = useViewerCount(channelId, !!channel?.is_live);
+  useViewerHeartbeat(channelId, !!channel?.is_live);
 
   // Update document title for sharing
   useEffect(() => {
