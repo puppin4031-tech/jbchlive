@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Check, X, Trash2, Radio, Loader2, Ban, EyeOff, Flag } from 'lucide-react';
 import { toast } from 'sonner';
 import * as liveApi from '@/lib/liveStreamApi';
+import ActivityTimeline from '@/components/admin/ActivityTimeline';
+import LiveNowPanel from '@/components/admin/LiveNowPanel';
 
 const AdminPage = () => {
   const { isAdmin, loading, user } = useAuth();
