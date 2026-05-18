@@ -414,6 +414,131 @@ async function provisionChannel(
   }
 }
 
+// --- Live Session helpers (history & viewer stats) ---
+// IMPORTANT: These run AFTER the existing start/stop logic succeeds. They never
+// throw outward so a session-recording failure cannot break the broadcaster
+// critical path.
+
+async function openLiveSession(
+  serviceClient: ReturnType<typeof createClient>,
+  channelId: string,
+) {
+  try {
+    // If a session is already open for this channel, do nothing (idempotent)
+    const { data: existing } = await serviceClient
+      .from("live_sessions")
+      .select("id")
+      .eq("channel_id", channelId)
+      .is("ended_at", null)
+      .maybeSingle();
+    if (existing) return existing.id as string;
+
+    const { data: ch } = await serviceClient
+      .from("channels")
+      .select("name")
+      .eq("id", channelId)
+      .single();
+
+    const now = new Date();
+    const title = `${ch?.name ?? "라이브"} - ${now.toISOString().slice(0, 16).replace("T", " ")}`;
+
+    const { data: inserted } = await serviceClient
+      .from("live_sessions")
+      .insert({ channel_id: channelId, title, started_at: now.toISOString() })
+      .select("id")
+      .single();
+    return inserted?.id as string | undefined;
+  } catch (e) {
+    console.error("openLiveSession failed:", e);
+  }
+}
+
+async function closeLiveSession(
+  serviceClient: ReturnType<typeof createClient>,
+  channelId: string,
+  endReason: string,
+) {
+  try {
+    const { data: session } = await serviceClient
+      .from("live_sessions")
+      .select("id, started_at")
+      .eq("channel_id", channelId)
+      .is("ended_at", null)
+      .maybeSingle();
+    if (!session) return;
+
+    // Aggregate viewer samples
+    const { data: samples } = await serviceClient
+      .from("live_viewer_samples")
+      .select("viewer_count")
+      .eq("session_id", session.id);
+
+    let peak = 0;
+    let avg = 0;
+    if (samples && samples.length > 0) {
+      const counts = samples.map((s: { viewer_count: number }) => s.viewer_count);
+      peak = Math.max(...counts);
+      avg = counts.reduce((a: number, b: number) => a + b, 0) / counts.length;
+    }
+
+    const now = new Date();
+    const duration = Math.max(
+      0,
+      Math.round((now.getTime() - new Date(session.started_at).getTime()) / 1000),
+    );
+
+    await serviceClient
+      .from("live_sessions")
+      .update({
+        ended_at: now.toISOString(),
+        duration_seconds: duration,
+        peak_viewers: peak,
+        avg_viewers: Number(avg.toFixed(2)),
+        end_reason: endReason,
+      })
+      .eq("id", session.id);
+  } catch (e) {
+    console.error("closeLiveSession failed:", e);
+  }
+}
+
+async function sampleViewerCounts(serviceClient: ReturnType<typeof createClient>) {
+  // Cleanup stale presence first (>5 minutes)
+  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  await serviceClient.from("viewer_presence").delete().lt("last_seen_at", fiveMinAgo);
+
+  const { data: liveChannels } = await serviceClient
+    .from("channels")
+    .select("id")
+    .eq("is_live", true);
+
+  const ninetySecAgo = new Date(Date.now() - 90 * 1000).toISOString();
+  const samples: { session_id: string; viewer_count: number }[] = [];
+
+  for (const ch of liveChannels ?? []) {
+    const { data: session } = await serviceClient
+      .from("live_sessions")
+      .select("id")
+      .eq("channel_id", ch.id)
+      .is("ended_at", null)
+      .maybeSingle();
+    if (!session) continue;
+
+    const { count } = await serviceClient
+      .from("viewer_presence")
+      .select("viewer_key", { count: "exact", head: true })
+      .eq("channel_id", ch.id)
+      .gte("last_seen_at", ninetySecAgo);
+
+    samples.push({ session_id: session.id, viewer_count: count ?? 0 });
+  }
+
+  if (samples.length > 0) {
+    await serviceClient.from("live_viewer_samples").insert(samples);
+  }
+  return samples.length;
+}
+
 // --- In-memory Rate Limiter ---
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
@@ -425,9 +550,11 @@ const RATE_LIMITS: Record<string, { max: number; windowSec: number }> = {
   stopChannel: { max: 5, windowSec: 60 },
   getStatus: { max: 60, windowSec: 60 },
   getHLSUrl: { max: 30, windowSec: 60 },
+  viewerHeartbeat: { max: 4, windowSec: 60 },
   autoStopIdleChannels: { max: 30, windowSec: 60 },
   scheduledStartChannels: { max: 30, windowSec: 60 },
   scheduledStopChannels: { max: 30, windowSec: 60 },
+  sampleLiveViewers: { max: 30, windowSec: 60 },
 };
 
 // Cron-triggered actions: bypass user auth, require x-cron-secret header
@@ -435,7 +562,11 @@ const CRON_ACTIONS = new Set([
   "autoStopIdleChannels",
   "scheduledStartChannels",
   "scheduledStopChannels",
+  "sampleLiveViewers",
 ]);
+
+// Public actions: no auth required (used by all viewers, including anonymous)
+const PUBLIC_ACTIONS = new Set(["viewerHeartbeat"]);
 
 function checkRateLimit(userId: string, action: string) {
   const limit = RATE_LIMITS[action] || { max: 10, windowSec: 60 };
