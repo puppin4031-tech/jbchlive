@@ -616,7 +616,7 @@ serve(async (req) => {
       );
 
       // Helper: stop a single channel (idempotent)
-      const stopOne = async (channelId: string, reason?: string) => {
+      const stopOne = async (channelId: string, reason?: string, endReason: string = "auto") => {
         const gcpChannelId = gcpResourceId(channelId, "channel");
         try {
           await stopChannelGCP(gcpChannelId);
@@ -635,6 +635,8 @@ serve(async (req) => {
             ...(reason ? { gcp_last_error: reason } : {}),
           })
           .eq("id", channelId);
+        // History: close session (never throws)
+        await closeLiveSession(serviceClient, channelId, endReason);
       };
 
       if (action === "autoStopIdleChannels") {
