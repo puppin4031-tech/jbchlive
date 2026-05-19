@@ -503,16 +503,17 @@ async function closeLiveSession(
 }
 
 async function sampleViewerCounts(serviceClient: ReturnType<typeof createClient>) {
-  // Cleanup stale presence first (>5 minutes)
-  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-  await serviceClient.from("viewer_presence").delete().lt("last_seen_at", fiveMinAgo);
+  // Heartbeat interval is 5min — cleanup stale presence >12 minutes (2 missed beats)
+  const staleCutoff = new Date(Date.now() - 12 * 60 * 1000).toISOString();
+  await serviceClient.from("viewer_presence").delete().lt("last_seen_at", staleCutoff);
 
   const { data: liveChannels } = await serviceClient
     .from("channels")
     .select("id")
     .eq("is_live", true);
 
-  const ninetySecAgo = new Date(Date.now() - 90 * 1000).toISOString();
+  // Count viewers with heartbeats in the last 6min (5min interval + 1min grace)
+  const recentCutoff = new Date(Date.now() - 6 * 60 * 1000).toISOString();
   const samples: { session_id: string; viewer_count: number }[] = [];
 
   for (const ch of liveChannels ?? []) {
@@ -528,7 +529,7 @@ async function sampleViewerCounts(serviceClient: ReturnType<typeof createClient>
       .from("viewer_presence")
       .select("viewer_key", { count: "exact", head: true })
       .eq("channel_id", ch.id)
-      .gte("last_seen_at", ninetySecAgo);
+      .gte("last_seen_at", recentCutoff);
 
     samples.push({ session_id: session.id, viewer_count: count ?? 0 });
   }
