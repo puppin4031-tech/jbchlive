@@ -5,7 +5,7 @@ import Header from '@/components/Header';
 import SermonCard, { type SermonCardData } from '@/components/SermonCard';
 import ChannelCard from '@/components/ChannelCard';
 import CategoryTabs from '@/components/CategoryTabs';
-import VideoPlayer from '@/components/VideoPlayer';
+
 import { Radio, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -148,8 +148,6 @@ const Index = () => {
   });
 
   const playableLiveChannels = (liveChannels || []).filter(isPlayableLiveChannel);
-  const currentLiveChannel = playableLiveChannels[0];
-  const currentLiveSermon = liveSermons?.find(s => s.channel_id === currentLiveChannel?.id);
 
   const mapSermon = (s: any): SermonCardData => ({
     id: s.id,
