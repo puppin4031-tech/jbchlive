@@ -18,9 +18,9 @@ function getOrCreateViewerKey(): string {
 }
 
 /**
- * Sends a viewer heartbeat to the live-stream edge function every 30s while
- * a live stream is active. Used by the server to sample concurrent viewer
- * counts for channel history (live_sessions).
+ * Sends a viewer heartbeat to the live-stream edge function every 5 minutes
+ * while a live stream is active. Used by the server to sample concurrent
+ * viewer counts for channel history (live_sessions).
  */
 export const useViewerHeartbeat = (channelId: string | undefined, isLive: boolean) => {
   useEffect(() => {
@@ -38,7 +38,7 @@ export const useViewerHeartbeat = (channelId: string | undefined, isLive: boolea
     };
 
     beat();
-    const id = setInterval(beat, 30_000);
+    const id = setInterval(beat, 300_000);
     return () => clearInterval(id);
   }, [channelId, isLive]);
 };
