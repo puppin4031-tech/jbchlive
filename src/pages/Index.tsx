@@ -5,7 +5,7 @@ import Header from '@/components/Header';
 import SermonCard, { type SermonCardData } from '@/components/SermonCard';
 import ChannelCard from '@/components/ChannelCard';
 import CategoryTabs from '@/components/CategoryTabs';
-import VideoPlayer from '@/components/VideoPlayer';
+
 import { Radio, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -148,8 +148,6 @@ const Index = () => {
   });
 
   const playableLiveChannels = (liveChannels || []).filter(isPlayableLiveChannel);
-  const currentLiveChannel = playableLiveChannels[0];
-  const currentLiveSermon = liveSermons?.find(s => s.channel_id === currentLiveChannel?.id);
 
   const mapSermon = (s: any): SermonCardData => ({
     id: s.id,
@@ -216,35 +214,36 @@ const Index = () => {
               <h2 className="font-semibold text-xl md:text-base text-foreground">교회 라이브 링크</h2>
               <span className="text-xs text-muted-foreground ml-1">영구 링크 · 클릭하여 시청</span>
             </div>
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
               {allChannels.map((ch) => (
                 <Link
                   key={ch.id}
                   to={`/live/${ch.id}`}
-                  className="shrink-0 w-36 md:w-40 snap-start rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow"
+                  className="shrink-0 w-32 md:w-36 snap-start rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow"
                 >
-                  <div className="relative aspect-square bg-muted flex items-center justify-center">
+                  <div className="relative aspect-[4/3] bg-muted flex items-center justify-center">
                     <img
                       src={ch.is_live ? (ch.logo_url || defaultThumbnail) : defaultThumbnail}
                       alt={ch.name}
                       className="w-full h-full object-cover"
                     />
                     {ch.is_live ? (
-                      <span className="absolute top-2 left-2 flex items-center gap-1 bg-live text-live-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">
+                      <span className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-live text-live-foreground text-[10px] font-bold px-1 py-0.5 rounded">
                         <Radio className="w-2.5 h-2.5 animate-pulse" /> LIVE
                       </span>
                     ) : (
-                      <span className="absolute top-2 left-2 bg-muted text-muted-foreground text-[10px] font-bold px-1.5 py-0.5 rounded border border-border">
+                      <span className="absolute top-1.5 left-1.5 bg-muted text-muted-foreground text-[10px] font-bold px-1 py-0.5 rounded border border-border">
                         OFFLINE
                       </span>
                     )}
                   </div>
-                  <div className="p-2">
-                    <p className="font-semibold text-sm text-foreground truncate">{ch.name}</p>
+                  <div className="p-1.5">
+                    <p className="font-semibold text-xs text-foreground truncate">{ch.name}</p>
                   </div>
                 </Link>
               ))}
             </div>
+
           </section>
         )}
 
@@ -286,39 +285,8 @@ const Index = () => {
           </section>
         )}
 
-        {/* Live Now Section */}
-        {currentLiveChannel && currentLiveChannel.stream_url && (
-          <section>
-            <Link to={`/live/${currentLiveChannel.id}`}>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="flex items-center gap-1 bg-live text-live-foreground text-base md:text-xs font-bold px-3 py-1.5 md:px-2.5 md:py-1 rounded-md">
-                  <Radio className="w-5 h-5 md:w-3.5 md:h-3.5 animate-pulse" /> LIVE NOW
-                </span>
-              </div>
-              <VideoPlayer src={currentLiveChannel.stream_url || ''} />
-              <div className="mt-3 flex items-start gap-3">
-                <img src={currentLiveChannel.logo_url || '/placeholder.svg'} alt={currentLiveChannel.name} className="w-12 h-12 md:w-10 md:h-10 rounded-full object-cover" />
-                <div>
-                  <h2 className="font-semibold text-lg md:text-base text-foreground">{currentLiveSermon?.title || currentLiveChannel.name}</h2>
-                  <p className="text-base md:text-sm text-muted-foreground">{currentLiveChannel.name}{currentLiveSermon?.preacher && ` · ${currentLiveSermon.preacher}`}</p>
-                </div>
-              </div>
-            </Link>
-          </section>
-        )}
+        {/* Option A: 홈은 맛보기 — 라이브는 위 스트립에서만 노출, 메인 플레이어 없음 */}
 
-        {/* Other Live */}
-        {playableLiveChannels.length > 1 && (
-          <section>
-            <h2 className="font-semibold text-xl md:text-base mb-3 text-foreground">다른 라이브</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {playableLiveChannels.slice(1).map(ch => {
-                const sermon = liveSermons?.find(s => s.channel_id === ch.id);
-                return sermon ? <SermonCard key={ch.id} sermon={mapSermon(sermon)} /> : null;
-              })}
-            </div>
-          </section>
-        )}
 
         {/* Popular / Recent Sermons */}
         <section>
