@@ -293,14 +293,15 @@ const Index = () => {
           <h2 className="font-semibold text-xl md:text-base mb-3 text-foreground">말씀 다시보기</h2>
           <CategoryTabs categories={categories} active={activeCategory} onSelect={setActiveCategory} />
           {vodsLoading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mt-3">
               {[1,2,3,4].map(i => <Skeleton key={i} className="aspect-video rounded-xl" />)}
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mt-3">
               {vodSermons?.map(s => <SermonCard key={s.id} sermon={mapSermon(s)} />)}
             </div>
           )}
+
           {vodSermons?.length === 0 && (
             <p className="text-center text-muted-foreground py-8 text-base md:text-sm">등록된 말씀이 없습니다.</p>
           )}
