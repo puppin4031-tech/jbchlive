@@ -255,7 +255,7 @@ const ThumbnailPicker = ({ videoUrl, value, onChange }: ThumbnailPickerProps) =>
 interface UploadButtonProps {
   onPick: () => void;
   uploading: boolean;
-  fileInputRef: React.RefObject<HTMLInputElement>;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
   onFile: (file: File) => void;
   customUrl: string;
   value: string;
