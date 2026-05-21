@@ -50,7 +50,7 @@ export const useBroadcasterChannel = () => {
   useEffect(() => {
     if (!channelId) return;
     const ch = supabase
-      .channel(`broadcaster-channel-${channelId}`)
+      .channel(`broadcaster-channel-${channelId}-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'channels', filter: `id=eq.${channelId}` },
