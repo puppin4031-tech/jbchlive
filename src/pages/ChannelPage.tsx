@@ -99,7 +99,7 @@ const ChannelPage = () => {
     duration: s.duration || undefined,
     channelId: s.channel_id,
     channelName: channel.name,
-    channelLogoUrl: channel.logo_url,
+    channelLogoUrl: channel.logo_url ?? undefined,
   });
 
   return (

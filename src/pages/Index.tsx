@@ -19,7 +19,7 @@ const Index = () => {
   const [activeCategory, setActiveCategory] = useState('전체');
   const [liveAlert, setLiveAlert] = useState<{ id: string; name: string; logoUrl: string | null } | null>(null);
   const queryClient = useQueryClient();
-  const alertTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const alertTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Realtime: listen for channels going live
   useEffect(() => {

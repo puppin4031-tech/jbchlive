@@ -211,7 +211,7 @@ const MyChannelPage = () => {
                       category: s.category,
                       isLive: s.is_live,
                       channelName: channel.name,
-                      channelLogoUrl: channel.logo_url,
+                      channelLogoUrl: channel.logo_url ?? undefined,
                     }} />
                   ))}
 
