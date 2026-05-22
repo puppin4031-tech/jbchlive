@@ -5,7 +5,6 @@ import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import SermonCard, { type SermonCardData } from '@/components/SermonCard';
 import CategoryTabs from '@/components/CategoryTabs';
-import ChannelLiveHistory from '@/components/channel/ChannelLiveHistory';
 import { Users, Heart, Radio, Settings, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -99,7 +98,7 @@ const ChannelPage = () => {
     duration: s.duration || undefined,
     channelId: s.channel_id,
     channelName: channel.name,
-    channelLogoUrl: channel.logo_url ?? undefined,
+    channelLogoUrl: channel.logo_url,
   });
 
   return (
@@ -179,12 +178,6 @@ const ChannelPage = () => {
           {!sermonsLoading && sermons?.length === 0 && (
             <p className="text-center text-muted-foreground py-8 text-sm">해당 카테고리의 말씀이 없습니다.</p>
           )}
-        </section>
-
-        {/* Live broadcast history */}
-        <section>
-          <h2 className="font-semibold text-base mb-3 text-foreground">방송 기록</h2>
-          <ChannelLiveHistory channelId={channel.id} canSeeDetail={!!canEdit} />
         </section>
       </main>
     </div>

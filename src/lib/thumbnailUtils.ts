@@ -37,60 +37,66 @@ export function getDriveThumbnails(fileId: string): string[] {
   ];
 }
 
-export function captureVideoThumbnailAt(videoUrl: string, percentage: number): Promise<string | null> {
+export function captureVideoThumbnails(videoUrl: string): Promise<string[]> {
   return new Promise((resolve) => {
     const video = document.createElement('video');
     video.crossOrigin = 'anonymous';
     video.muted = true;
     video.preload = 'auto';
 
-    let settled = false;
-    const finish = (val: string | null) => {
-      if (settled) return;
-      settled = true;
-      video.remove();
-      resolve(val);
-    };
+    const captures: string[] = [];
+    const percentages = [0.01, 0.25, 0.5, 0.75];
+    let idx = 0;
 
-    video.addEventListener('seeked', () => {
+    const capture = () => {
       try {
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth || 640;
         canvas.height = video.videoHeight || 360;
         const ctx = canvas.getContext('2d');
-        if (!ctx) return finish(null);
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        finish(canvas.toDataURL('image/jpeg', 0.85));
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          captures.push(canvas.toDataURL('image/jpeg', 0.8));
+        }
       } catch {
-        finish(null);
+        // CORS or other error — skip this frame
       }
-    });
+
+      idx++;
+      if (idx < percentages.length) {
+        video.currentTime = video.duration * percentages[idx];
+      } else {
+        video.remove();
+        resolve(captures);
+      }
+    };
+
+    video.addEventListener('seeked', capture);
 
     video.addEventListener('loadedmetadata', () => {
       if (video.duration && isFinite(video.duration)) {
-        const pct = Math.max(0, Math.min(1, percentage));
-        // Avoid seeking past end
-        video.currentTime = Math.min(video.duration * pct, Math.max(0, video.duration - 0.1));
+        video.currentTime = video.duration * percentages[0];
       } else {
-        finish(null);
+        video.remove();
+        resolve([]);
       }
     });
 
-    video.addEventListener('error', () => finish(null));
+    video.addEventListener('error', () => {
+      video.remove();
+      resolve([]);
+    });
 
-    setTimeout(() => finish(null), 15000);
+    // Timeout after 15s
+    setTimeout(() => {
+      video.remove();
+      if (captures.length > 0) resolve(captures);
+      else resolve([]);
+    }, 15000);
 
     video.src = videoUrl;
   });
 }
-
-// Legacy multi-capture (kept for backward compatibility if needed elsewhere)
-export async function captureVideoThumbnails(videoUrl: string): Promise<string[]> {
-  const points = [0.1, 0.5, 0.9];
-  const results = await Promise.all(points.map((p) => captureVideoThumbnailAt(videoUrl, p)));
-  return results.filter((x): x is string => !!x);
-}
-
 
 export type ThumbnailSource = 'youtube' | 'drive' | 'direct' | 'unsupported';
 

@@ -5,13 +5,11 @@ import Header from '@/components/Header';
 import SermonCard, { type SermonCardData } from '@/components/SermonCard';
 import ChannelCard from '@/components/ChannelCard';
 import CategoryTabs from '@/components/CategoryTabs';
-
+import VideoPlayer from '@/components/VideoPlayer';
 import { Radio, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { isPlayableLiveChannel } from '@/lib/livePlayback';
-import defaultThumbnail from '@/assets/default-thumbnail.png';
 
 const categories = ['전체', '주일말씀', '수요말씀', '특별집회'];
 
@@ -19,7 +17,7 @@ const Index = () => {
   const [activeCategory, setActiveCategory] = useState('전체');
   const [liveAlert, setLiveAlert] = useState<{ id: string; name: string; logoUrl: string | null } | null>(null);
   const queryClient = useQueryClient();
-  const alertTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const alertTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Realtime: listen for channels going live
   useEffect(() => {
@@ -34,21 +32,25 @@ const Index = () => {
           filter: 'is_approved=eq.true',
         },
         (payload) => {
-          const newRow = (payload.new ?? {}) as any;
-          const oldRow = (payload.old ?? {}) as any;
-          // Always invalidate on any channel update — UI relies on fresh state
-          queryClient.invalidateQueries({ queryKey: ['live-channels'] });
-          queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
-          queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
-          // Show alert only on false/undefined → true transition
-          if (newRow.is_live === true && oldRow.is_live !== true) {
+          const newRow = payload.new as any;
+          const oldRow = payload.old as any;
+          // Only show alert when is_live changes from false to true
+          if (newRow.is_live && !oldRow.is_live) {
             setLiveAlert({
               id: newRow.id,
               name: newRow.name,
               logoUrl: newRow.logo_url,
             });
+            // Auto-dismiss after 10 seconds
             if (alertTimeoutRef.current) clearTimeout(alertTimeoutRef.current);
             alertTimeoutRef.current = setTimeout(() => setLiveAlert(null), 10000);
+            // Refresh live channels query
+            queryClient.invalidateQueries({ queryKey: ['live-channels'] });
+            queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+          }
+          if (!newRow.is_live && oldRow.is_live) {
+            queryClient.invalidateQueries({ queryKey: ['live-channels'] });
+            queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
           }
         }
       )
@@ -72,9 +74,6 @@ const Index = () => {
       if (error) throw error;
       return data;
     },
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
-    staleTime: 0,
   });
 
   // Fetch live sermons (for metadata)
@@ -89,9 +88,6 @@ const Index = () => {
       if (error) throw error;
       return data;
     },
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
-    staleTime: 0,
   });
 
   // Fetch VOD sermons with channel info
@@ -128,26 +124,8 @@ const Index = () => {
     },
   });
 
-  // Fetch ALL approved channels for permanent live links strip
-  const { data: allChannels } = useQuery({
-    queryKey: ['all-approved-channels'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('channels')
-        .select('id, name, logo_url, is_live')
-        .eq('is_approved', true)
-        .eq('is_suspended', false)
-        .order('is_live', { ascending: false })
-        .order('subscriber_count', { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
-    staleTime: 0,
-  });
-
-  const playableLiveChannels = (liveChannels || []).filter(isPlayableLiveChannel);
+  const currentLiveChannel = liveChannels?.[0];
+  const currentLiveSermon = liveSermons?.find(s => s.channel_id === currentLiveChannel?.id);
 
   const mapSermon = (s: any): SermonCardData => ({
     id: s.id,
@@ -207,101 +185,53 @@ const Index = () => {
       )}
 
       <main className="container px-4 py-4 max-w-5xl mx-auto space-y-6">
-        {/* Permanent Church Live Links — always visible */}
-        {allChannels && allChannels.length > 0 && (
+        {/* Live Now Section */}
+        {currentLiveChannel && currentLiveChannel.stream_url && (
           <section>
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="font-semibold text-xl md:text-base text-foreground">교회 라이브 링크</h2>
-              <span className="text-xs text-muted-foreground ml-1">영구 링크 · 클릭하여 시청</span>
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
-              {allChannels.map((ch) => (
-                <Link
-                  key={ch.id}
-                  to={`/live/${ch.id}`}
-                  className="shrink-0 w-32 md:w-36 snap-start rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow"
-                >
-                  <div className="relative aspect-[4/3] bg-muted flex items-center justify-center">
-                    <img
-                      src={ch.is_live ? (ch.logo_url || defaultThumbnail) : defaultThumbnail}
-                      alt={ch.name}
-                      className="w-full h-full object-cover"
-                    />
-                    {ch.is_live ? (
-                      <span className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-live text-live-foreground text-[10px] font-bold px-1 py-0.5 rounded">
-                        <Radio className="w-2.5 h-2.5 animate-pulse" /> LIVE
-                      </span>
-                    ) : (
-                      <span className="absolute top-1.5 left-1.5 bg-muted text-muted-foreground text-[10px] font-bold px-1 py-0.5 rounded border border-border">
-                        OFFLINE
-                      </span>
-                    )}
-                  </div>
-                  <div className="p-1.5">
-                    <p className="font-semibold text-xs text-foreground truncate">{ch.name}</p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-
+            <Link to={`/live/${currentLiveChannel.id}`}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="flex items-center gap-1 bg-live text-live-foreground text-base md:text-xs font-bold px-3 py-1.5 md:px-2.5 md:py-1 rounded-md">
+                  <Radio className="w-5 h-5 md:w-3.5 md:h-3.5 animate-pulse" /> LIVE NOW
+                </span>
+              </div>
+              <VideoPlayer src={currentLiveChannel.stream_url || ''} />
+              <div className="mt-3 flex items-start gap-3">
+                <img src={currentLiveChannel.logo_url || '/placeholder.svg'} alt={currentLiveChannel.name} className="w-12 h-12 md:w-10 md:h-10 rounded-full object-cover" />
+                <div>
+                  <h2 className="font-semibold text-lg md:text-base text-foreground">{currentLiveSermon?.title || currentLiveChannel.name}</h2>
+                  <p className="text-base md:text-sm text-muted-foreground">{currentLiveChannel.name}{currentLiveSermon?.preacher && ` · ${currentLiveSermon.preacher}`}</p>
+                </div>
+              </div>
+            </Link>
           </section>
         )}
 
-        {/* Live Channels Strip */}
-        {playableLiveChannels.length > 0 && (
+        {/* Other Live */}
+        {liveChannels && liveChannels.length > 1 && (
           <section>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="flex items-center gap-1 bg-live text-live-foreground text-sm font-bold px-3 py-1 rounded-md">
-                <Radio className="w-4 h-4 animate-pulse" /> 지금 라이브 중
-              </span>
-              <Link to="/live" className="ml-auto text-sm text-primary hover:underline">
-                전체 보기 →
-              </Link>
-            </div>
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
-              {playableLiveChannels.map((ch) => (
-                <Link
-                  key={ch.id}
-                  to={`/live/${ch.id}`}
-                  className="shrink-0 w-44 md:w-52 snap-start rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow"
-                >
-                  <div className="relative aspect-video bg-muted flex items-center justify-center">
-                    {ch.logo_url ? (
-                      <img src={ch.logo_url} alt={ch.name} className="w-16 h-16 rounded-full object-cover" />
-                    ) : (
-                      <Radio className="w-10 h-10 text-muted-foreground" />
-                    )}
-                    <span className="absolute top-2 left-2 flex items-center gap-1 bg-live text-live-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">
-                      <Radio className="w-2.5 h-2.5 animate-pulse" /> LIVE
-                    </span>
-                  </div>
-                  <div className="p-2">
-                    <p className="font-semibold text-sm text-foreground truncate">{ch.name}</p>
-                    <p className="text-xs text-muted-foreground">지금 시청하기 →</p>
-                  </div>
-                </Link>
-              ))}
+            <h2 className="font-semibold text-xl md:text-base mb-3 text-foreground">다른 라이브</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {liveChannels.slice(1).map(ch => {
+                const sermon = liveSermons?.find(s => s.channel_id === ch.id);
+                return sermon ? <SermonCard key={ch.id} sermon={mapSermon(sermon)} /> : null;
+              })}
             </div>
           </section>
         )}
-
-        {/* Option A: 홈은 맛보기 — 라이브는 위 스트립에서만 노출, 메인 플레이어 없음 */}
-
 
         {/* Popular / Recent Sermons */}
         <section>
           <h2 className="font-semibold text-xl md:text-base mb-3 text-foreground">말씀 다시보기</h2>
           <CategoryTabs categories={categories} active={activeCategory} onSelect={setActiveCategory} />
           {vodsLoading ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mt-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3">
               {[1,2,3,4].map(i => <Skeleton key={i} className="aspect-video rounded-xl" />)}
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mt-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3">
               {vodSermons?.map(s => <SermonCard key={s.id} sermon={mapSermon(s)} />)}
             </div>
           )}
-
           {vodSermons?.length === 0 && (
             <p className="text-center text-muted-foreground py-8 text-base md:text-sm">등록된 말씀이 없습니다.</p>
           )}

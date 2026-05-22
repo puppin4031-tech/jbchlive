@@ -6,13 +6,10 @@ import VideoPlayer from '@/components/VideoPlayer';
 import SermonCard from '@/components/SermonCard';
 import { supabase } from '@/integrations/supabase/client';
 import { useViewerCount } from '@/hooks/useViewerCount';
-import { useViewerHeartbeat } from '@/hooks/useViewerHeartbeat';
 import { Share2, Users, Radio, VideoOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { isPlayableLiveChannel, isPreparingLiveChannel } from '@/lib/livePlayback';
-import { getPublicLiveUrl } from '@/lib/publicUrl';
 
 const LivePage = () => {
   const { channelId } = useParams();
@@ -31,9 +28,6 @@ const LivePage = () => {
       return data;
     },
     enabled: !!channelId,
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
-    staleTime: 0,
   });
 
   // Fetch current live sermon for this channel
@@ -52,9 +46,6 @@ const LivePage = () => {
       return data;
     },
     enabled: !!channelId && !!channel?.is_live,
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
-    staleTime: 0,
   });
 
   // Fetch recent VODs
@@ -73,20 +64,6 @@ const LivePage = () => {
     },
     enabled: !!channelId,
   });
-
-  // Viewer count (must be called unconditionally before any early return)
-  const viewerCount = useViewerCount(channelId, !!channel?.is_live);
-  useViewerHeartbeat(channelId, !!channel?.is_live);
-
-  // Update document title for sharing
-  useEffect(() => {
-    if (channel?.name) {
-      document.title = `${channel.name} 라이브 - Live Word Mission`;
-    }
-    return () => {
-      document.title = 'Live Word Mission';
-    };
-  }, [channel?.name]);
 
   // Realtime subscription for live status changes
   useEffect(() => {
@@ -115,7 +92,7 @@ const LivePage = () => {
   }, [channelId, queryClient]);
 
   const handleShare = () => {
-    const url = getPublicLiveUrl(channelId!);
+    const url = `${window.location.origin}/live/${channelId}`;
     navigator.clipboard.writeText(url);
     toast.success('링크가 복사되었습니다!');
   };
@@ -151,54 +128,22 @@ const LivePage = () => {
 
   const isLive = channel.is_live;
   const streamUrl = channel.stream_url;
-  const canPlayLive = isPlayableLiveChannel(channel);
-  const isWaitingForBroadcaster = isPreparingLiveChannel(channel);
-  const permanentUrl = getPublicLiveUrl(channelId!);
+  const viewerCount = useViewerCount(channelId, isLive);
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container px-4 py-4 max-w-4xl mx-auto space-y-4">
         {/* Live or Offline Player Area */}
-        {canPlayLive && streamUrl ? (
+        {isLive && streamUrl ? (
           <VideoPlayer src={streamUrl} autoPlay />
-        ) : isWaitingForBroadcaster ? (
-          <div className="relative w-full aspect-video bg-card border border-border rounded-xl overflow-hidden flex flex-col items-center justify-center gap-4 p-6">
-            <span className="relative flex h-4 w-4">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-4 w-4 bg-destructive"></span>
-            </span>
-            <div className="text-center space-y-2">
-              <h2 className="font-semibold text-lg text-foreground">방송 준비 중입니다</h2>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                방송자가 송출을 시작하는 즉시 자동으로 재생됩니다.<br />
-                잠시만 기다려주세요.
-              </p>
-            </div>
-          </div>
         ) : (
-          <div className="relative w-full aspect-video bg-card border border-border rounded-xl overflow-hidden flex flex-col items-center justify-center gap-4 p-6">
-            <img
-              src={channel.logo_url || '/placeholder.svg'}
-              alt={channel.name}
-              className="w-20 h-20 rounded-full object-cover border-2 border-border"
-            />
-            <div className="text-center space-y-2">
-              <span className="inline-flex items-center gap-1 bg-muted text-muted-foreground text-xs font-bold px-2 py-1 rounded">
-                <VideoOff className="w-3 h-3" /> 현재 오프라인
-              </span>
-              <h2 className="font-semibold text-lg text-foreground">{channel.name}</h2>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                라이브가 시작되면 이 페이지에서 자동으로 재생됩니다.<br />
-                아래 링크를 공유하여 시청자를 초대하세요.
-              </p>
-            </div>
-            <div className="w-full max-w-md flex items-center gap-2 bg-muted/50 border border-border rounded-lg px-3 py-2">
-              <code className="flex-1 text-xs text-foreground truncate">{permanentUrl}</code>
-              <Button size="sm" variant="outline" onClick={handleShare}>
-                <Share2 className="w-3 h-3 mr-1" /> 복사
-              </Button>
-            </div>
+          <div className="relative w-full aspect-video bg-muted rounded-xl overflow-hidden flex flex-col items-center justify-center gap-3">
+            <VideoOff className="w-12 h-12 text-muted-foreground" />
+            <p className="text-muted-foreground text-sm text-center px-4">
+              현재 라이브가 아닙니다.<br />
+              라이브가 시작되면 여기서 자동으로 시청할 수 있습니다.
+            </p>
           </div>
         )}
 
@@ -256,7 +201,7 @@ const LivePage = () => {
                   duration: s.duration || undefined,
                   channelId: s.channel_id,
                   channelName: channel.name,
-                  channelLogoUrl: channel.logo_url ?? undefined,
+                  channelLogoUrl: channel.logo_url,
                 }} />
               ))}
             </div>

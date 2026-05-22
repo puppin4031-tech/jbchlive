@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, Radio, X, Heart, LogIn, LogOut, Shield, User, PlusCircle, Tv, MessageSquare } from 'lucide-react';
+import { Search, Radio, X, Heart, LogIn, LogOut, Shield, User, PlusCircle, Tv } from 'lucide-react';
 import logoImage from '@/assets/logo.png';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import NotificationBell from '@/components/NotificationBell';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,8 +62,6 @@ const Header = () => {
             </Button>
           </Link>
 
-          {user && <NotificationBell />}
-
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -87,9 +84,6 @@ const Header = () => {
                 </DropdownMenuItem>
                 <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/my-channel')}>
                   <Tv className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 내 채널
-                </DropdownMenuItem>
-                <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/support')}>
-                  <MessageSquare className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 문의/고객센터
                 </DropdownMenuItem>
                 <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/create-channel')}>
                   <PlusCircle className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 채널 개설
