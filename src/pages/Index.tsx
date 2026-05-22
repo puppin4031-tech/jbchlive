@@ -5,7 +5,7 @@ import Header from '@/components/Header';
 import SermonCard, { type SermonCardData } from '@/components/SermonCard';
 import ChannelCard from '@/components/ChannelCard';
 import CategoryTabs from '@/components/CategoryTabs';
-import VideoPlayer from '@/components/VideoPlayer';
+
 import { Radio, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -148,8 +148,6 @@ const Index = () => {
   });
 
   const playableLiveChannels = (liveChannels || []).filter(isPlayableLiveChannel);
-  const currentLiveChannel = playableLiveChannels[0];
-  const currentLiveSermon = liveSermons?.find(s => s.channel_id === currentLiveChannel?.id);
 
   const mapSermon = (s: any): SermonCardData => ({
     id: s.id,
@@ -223,7 +221,7 @@ const Index = () => {
                   to={`/live/${ch.id}`}
                   className="shrink-0 w-36 md:w-40 snap-start rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow"
                 >
-                  <div className="relative aspect-square bg-muted flex items-center justify-center">
+                  <div className="relative aspect-[4/3] bg-muted flex items-center justify-center">
                     <img
                       src={ch.is_live ? (ch.logo_url || defaultThumbnail) : defaultThumbnail}
                       alt={ch.name}
@@ -239,8 +237,8 @@ const Index = () => {
                       </span>
                     )}
                   </div>
-                  <div className="p-2">
-                    <p className="font-semibold text-sm text-foreground truncate">{ch.name}</p>
+                  <div className="p-1.5">
+                    <p className="font-semibold text-xs text-foreground truncate">{ch.name}</p>
                   </div>
                 </Link>
               ))}
@@ -264,11 +262,11 @@ const Index = () => {
                 <Link
                   key={ch.id}
                   to={`/live/${ch.id}`}
-                  className="shrink-0 w-44 md:w-52 snap-start rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow"
+                  className="shrink-0 w-56 md:w-64 snap-start rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow"
                 >
                   <div className="relative aspect-video bg-muted flex items-center justify-center">
                     {ch.logo_url ? (
-                      <img src={ch.logo_url} alt={ch.name} className="w-16 h-16 rounded-full object-cover" />
+                      <img src={ch.logo_url} alt={ch.name} className="w-20 h-20 rounded-full object-cover" />
                     ) : (
                       <Radio className="w-10 h-10 text-muted-foreground" />
                     )}
@@ -282,40 +280,6 @@ const Index = () => {
                   </div>
                 </Link>
               ))}
-            </div>
-          </section>
-        )}
-
-        {/* Live Now Section */}
-        {currentLiveChannel && currentLiveChannel.stream_url && (
-          <section>
-            <Link to={`/live/${currentLiveChannel.id}`}>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="flex items-center gap-1 bg-live text-live-foreground text-base md:text-xs font-bold px-3 py-1.5 md:px-2.5 md:py-1 rounded-md">
-                  <Radio className="w-5 h-5 md:w-3.5 md:h-3.5 animate-pulse" /> LIVE NOW
-                </span>
-              </div>
-              <VideoPlayer src={currentLiveChannel.stream_url || ''} />
-              <div className="mt-3 flex items-start gap-3">
-                <img src={currentLiveChannel.logo_url || '/placeholder.svg'} alt={currentLiveChannel.name} className="w-12 h-12 md:w-10 md:h-10 rounded-full object-cover" />
-                <div>
-                  <h2 className="font-semibold text-lg md:text-base text-foreground">{currentLiveSermon?.title || currentLiveChannel.name}</h2>
-                  <p className="text-base md:text-sm text-muted-foreground">{currentLiveChannel.name}{currentLiveSermon?.preacher && ` · ${currentLiveSermon.preacher}`}</p>
-                </div>
-              </div>
-            </Link>
-          </section>
-        )}
-
-        {/* Other Live */}
-        {playableLiveChannels.length > 1 && (
-          <section>
-            <h2 className="font-semibold text-xl md:text-base mb-3 text-foreground">다른 라이브</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {playableLiveChannels.slice(1).map(ch => {
-                const sermon = liveSermons?.find(s => s.channel_id === ch.id);
-                return sermon ? <SermonCard key={ch.id} sermon={mapSermon(sermon)} /> : null;
-              })}
             </div>
           </section>
         )}
