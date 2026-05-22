@@ -45,42 +45,72 @@ export type Database = {
       }
       channels: {
         Row: {
+          auto_stop_idle_minutes: number
           created_at: string
           description: string | null
+          gcp_channel_state: string | null
+          gcp_input_uri: string | null
+          gcp_last_error: string | null
+          gcp_provisioned_at: string | null
           id: string
           is_approved: boolean
           is_live: boolean
+          is_suspended: boolean
+          live_started_at: string | null
           logo_url: string | null
           name: string
           owner_id: string | null
+          scheduled_end_at: string | null
+          scheduled_start_at: string | null
           stream_url: string | null
           subscriber_count: number
+          suspended_reason: string | null
           updated_at: string
         }
         Insert: {
+          auto_stop_idle_minutes?: number
           created_at?: string
           description?: string | null
+          gcp_channel_state?: string | null
+          gcp_input_uri?: string | null
+          gcp_last_error?: string | null
+          gcp_provisioned_at?: string | null
           id?: string
           is_approved?: boolean
           is_live?: boolean
+          is_suspended?: boolean
+          live_started_at?: string | null
           logo_url?: string | null
           name: string
           owner_id?: string | null
+          scheduled_end_at?: string | null
+          scheduled_start_at?: string | null
           stream_url?: string | null
           subscriber_count?: number
+          suspended_reason?: string | null
           updated_at?: string
         }
         Update: {
+          auto_stop_idle_minutes?: number
           created_at?: string
           description?: string | null
+          gcp_channel_state?: string | null
+          gcp_input_uri?: string | null
+          gcp_last_error?: string | null
+          gcp_provisioned_at?: string | null
           id?: string
           is_approved?: boolean
           is_live?: boolean
+          is_suspended?: boolean
+          live_started_at?: string | null
           logo_url?: string | null
           name?: string
           owner_id?: string | null
+          scheduled_end_at?: string | null
+          scheduled_start_at?: string | null
           stream_url?: string | null
           subscriber_count?: number
+          suspended_reason?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -105,6 +135,118 @@ export type Database = {
           id?: string
           item_id?: string
           item_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      live_sessions: {
+        Row: {
+          avg_viewers: number
+          channel_id: string
+          created_at: string
+          duration_seconds: number | null
+          end_reason: string | null
+          ended_at: string | null
+          id: string
+          peak_viewers: number
+          started_at: string
+          title: string | null
+        }
+        Insert: {
+          avg_viewers?: number
+          channel_id: string
+          created_at?: string
+          duration_seconds?: number | null
+          end_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          peak_viewers?: number
+          started_at?: string
+          title?: string | null
+        }
+        Update: {
+          avg_viewers?: number
+          channel_id?: string
+          created_at?: string
+          duration_seconds?: number | null
+          end_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          peak_viewers?: number
+          started_at?: string
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_sessions_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      live_viewer_samples: {
+        Row: {
+          id: number
+          sampled_at: string
+          session_id: string
+          viewer_count: number
+        }
+        Insert: {
+          id?: number
+          sampled_at?: string
+          session_id: string
+          viewer_count?: number
+        }
+        Update: {
+          id?: number
+          sampled_at?: string
+          session_id?: string
+          viewer_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_viewer_samples_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "live_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          is_read: boolean
+          link: string | null
+          related_id: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link?: string | null
+          related_id?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link?: string | null
+          related_id?: string | null
+          title?: string
+          type?: string
           user_id?: string
         }
         Relationships: []
@@ -142,6 +284,107 @@ export type Database = {
         }
         Relationships: []
       }
+      sermon_notes: {
+        Row: {
+          content: string | null
+          created_at: string
+          id: string
+          image_url: string | null
+          sermon_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          sermon_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          sermon_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      sermon_report_replies: {
+        Row: {
+          author_id: string
+          author_role: string
+          body: string
+          created_at: string
+          id: string
+          report_id: string
+        }
+        Insert: {
+          author_id: string
+          author_role: string
+          body: string
+          created_at?: string
+          id?: string
+          report_id: string
+        }
+        Update: {
+          author_id?: string
+          author_role?: string
+          body?: string
+          created_at?: string
+          id?: string
+          report_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sermon_report_replies_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "sermon_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sermon_reports: {
+        Row: {
+          admin_note: string | null
+          created_at: string
+          detail: string | null
+          id: string
+          reason: string
+          reporter_id: string
+          sermon_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          admin_note?: string | null
+          created_at?: string
+          detail?: string | null
+          id?: string
+          reason: string
+          reporter_id: string
+          sermon_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          admin_note?: string | null
+          created_at?: string
+          detail?: string | null
+          id?: string
+          reason?: string
+          reporter_id?: string
+          sermon_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sermons: {
         Row: {
           category: string
@@ -149,7 +392,9 @@ export type Database = {
           created_at: string
           description: string | null
           duration: string | null
+          hidden_reason: string | null
           id: string
+          is_hidden: boolean
           is_live: boolean
           preacher: string | null
           sermon_date: string
@@ -165,7 +410,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           duration?: string | null
+          hidden_reason?: string | null
           id?: string
+          is_hidden?: boolean
           is_live?: boolean
           preacher?: string | null
           sermon_date?: string
@@ -181,7 +428,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           duration?: string | null
+          hidden_reason?: string | null
           id?: string
+          is_hidden?: boolean
           is_live?: boolean
           preacher?: string | null
           sermon_date?: string
@@ -201,6 +450,77 @@ export type Database = {
           },
         ]
       }
+      support_ticket_replies: {
+        Row: {
+          author_id: string
+          author_role: string
+          body: string
+          created_at: string
+          id: string
+          ticket_id: string
+        }
+        Insert: {
+          author_id: string
+          author_role?: string
+          body: string
+          created_at?: string
+          id?: string
+          ticket_id: string
+        }
+        Update: {
+          author_id?: string
+          author_role?: string
+          body?: string
+          created_at?: string
+          id?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_ticket_replies_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_tickets: {
+        Row: {
+          body: string
+          category: string
+          created_at: string
+          id: string
+          priority: string
+          status: string
+          subject: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          category?: string
+          created_at?: string
+          id?: string
+          priority?: string
+          status?: string
+          subject: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          category?: string
+          created_at?: string
+          id?: string
+          priority?: string
+          status?: string
+          subject?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -219,16 +539,51 @@ export type Database = {
         }
         Relationships: []
       }
+      viewer_presence: {
+        Row: {
+          channel_id: string
+          last_seen_at: string
+          viewer_key: string
+        }
+        Insert: {
+          channel_id: string
+          last_seen_at?: string
+          viewer_key: string
+        }
+        Update: {
+          channel_id?: string
+          last_seen_at?: string
+          viewer_key?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      can_access_report: {
+        Args: { _report_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_access_ticket: {
+        Args: { _ticket_id: string; _user_id: string }
+        Returns: boolean
+      }
+      gc_realtime_tables: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      is_sermon_channel_owner: {
+        Args: { _sermon_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_sermon_channel_owner_by_id: {
+        Args: { _sermon_id: string; _user_id: string }
         Returns: boolean
       }
     }
