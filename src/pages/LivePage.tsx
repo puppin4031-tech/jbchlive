@@ -153,7 +153,7 @@ const LivePage = () => {
   const streamUrl = channel.stream_url;
   const canPlayLive = isPlayableLiveChannel(channel);
   const isWaitingForBroadcaster = isPreparingLiveChannel(channel);
-  const permanentUrl = `${window.location.origin}/live/${channelId}`;
+  const permanentUrl = getPublicLiveUrl(channelId!);
 
   return (
     <div className="min-h-screen bg-background">
