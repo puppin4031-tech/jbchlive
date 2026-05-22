@@ -513,6 +513,7 @@ const ManageSermonsPage = () => {
                   videoUrl={form.video_url}
                   value={form.thumbnail_url}
                   onChange={(url) => setForm(f => ({ ...f, thumbnail_url: url }))}
+                  channelId={channelId}
                 />
               </div>
               <div>
