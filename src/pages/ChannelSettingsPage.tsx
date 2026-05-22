@@ -220,13 +220,13 @@ const ChannelSettingsPage = () => {
                 <div className="flex items-center gap-2">
                   <div className="flex-1 rounded-md border border-border bg-muted/50 px-3 py-2.5 min-w-0">
                     <code className="text-xs font-mono text-foreground break-all">
-                      {`${window.location.origin}/live/${channelId}`}
+                      {getPublicLiveUrl(channelId!)}
                     </code>
                   </div>
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => handleCopy(`${window.location.origin}/live/${channelId}`, 'liveUrl')}
+                    onClick={() => handleCopy(getPublicLiveUrl(channelId!), 'liveUrl')}
                     className="shrink-0 h-10 w-10"
                     title="복사"
                   >
