@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { isPlayableLiveChannel, isPreparingLiveChannel } from '@/lib/livePlayback';
+import { getPublicLiveUrl } from '@/lib/publicUrl';
 
 const LivePage = () => {
   const { channelId } = useParams();
