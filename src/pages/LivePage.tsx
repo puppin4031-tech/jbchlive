@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { isPlayableLiveChannel, isPreparingLiveChannel } from '@/lib/livePlayback';
+import { getPublicLiveUrl } from '@/lib/publicUrl';
 
 const LivePage = () => {
   const { channelId } = useParams();
@@ -114,7 +115,7 @@ const LivePage = () => {
   }, [channelId, queryClient]);
 
   const handleShare = () => {
-    const url = `${window.location.origin}/live/${channelId}`;
+    const url = getPublicLiveUrl(channelId!);
     navigator.clipboard.writeText(url);
     toast.success('링크가 복사되었습니다!');
   };
@@ -152,7 +153,7 @@ const LivePage = () => {
   const streamUrl = channel.stream_url;
   const canPlayLive = isPlayableLiveChannel(channel);
   const isWaitingForBroadcaster = isPreparingLiveChannel(channel);
-  const permanentUrl = `${window.location.origin}/live/${channelId}`;
+  const permanentUrl = getPublicLiveUrl(channelId!);
 
   return (
     <div className="min-h-screen bg-background">
