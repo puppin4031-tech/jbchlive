@@ -1,37 +1,34 @@
-# 홈 라이브 UI 정리 + 다중 채널 대응
+# 설교 썸네일 직접 업로드 기능 추가
 
-기존 결정사항 반영: 모바일/데스크탑 모두 영상 40% 축소, 다중 라이브는 옵션 A (메인 플레이어 제거, 가로 스트립으로 통일).
+## 목표
+ManageSermonsPage의 설교 등록/수정 폼에서 자동 추출된 썸네일 후보와 함께 사용자가 직접 이미지를 업로드하여 썸네일로 사용할 수 있게 한다.
 
-## 변경 요약
+## 변경 사항
 
-### 1. 교회 라이브 링크 박스 (세로 30% 축소)
-`src/pages/Index.tsx` 라인 226 영역:
-- `aspect-square` → `aspect-[4/3]` (세로 약 25% 감소)
-- 하단 텍스트 영역 `p-2` → `p-1.5`, `text-sm` → `text-xs`
-- LIVE/OFFLINE 배지 동일 유지 (이미 작음)
+### 1. Storage 버킷 (마이그레이션)
+- 신규 public 버킷 `sermon-thumbnails` 생성 (이미 존재함 — 확인 후 재사용)
+- RLS 정책:
+  - SELECT: 모두 허용 (public)
+  - INSERT/UPDATE/DELETE: 인증된 사용자 중 해당 채널 owner 또는 admin
+- 파일 제한: 5MB, image/* MIME만 허용
 
-### 2. "LIVE NOW" 메인 플레이어 → 옵션 A로 전환
-- **메인 VideoPlayer 섹션(290~308라인)을 완전히 제거**
-- 대신 "지금 라이브 중" 스트립(252~287라인)을 메인 진입점으로 사용
-- 이 스트립은 이미 모든 라이브 채널을 가로 카드로 노출하며 클릭 시 `/live/{id}`로 이동 → 다중 채널 동시 라이브에도 자연스럽게 대응
-- 스트립 카드를 살짝 키워 메인 존재감을 보강: `w-44 md:w-52` → `w-56 md:w-64`, 카드 내 로고 `w-16 h-16` → `w-20 h-20`
-- "다른 라이브"(311~321라인) 섹션은 중복되므로 제거 (스트립이 이미 전부 보여줌)
+### 2. `src/components/ThumbnailPicker.tsx` 수정
+- 상단에 **"직접 업로드"** 영역 추가 (파일 선택 + 드래그&드롭)
+- 업로드된 이미지는 자동 추출 후보 그리드의 첫 번째 항목으로 표시되고 자동 선택됨
+- 업로드 진행 상태 / 에러 처리 / 5MB 초과 검증
+- 업로드 성공 시 Storage public URL을 `onChange`로 전달
+- 자동 추출 후보와 동일한 선택 UI(체크 표시) 유지
 
-### 3. 결과 레이아웃 (홈)
-```text
-[교회 라이브 링크 — 영구 링크 스트립]
-[지금 라이브 중 — 실라이브 채널 가로 스트립]  ← 클릭 시 라이브 페이지로
-[말씀 다시보기 (VOD)]
-[교회 채널]
-```
+### 3. `src/pages/ManageSermonsPage.tsx`
+- 별도 수정 없음 — 기존 `<ThumbnailPicker>` 통합으로 자동 적용
+- 필요 시 업로드된 URL이 외부 검증 트리거(`validate_sermon_urls`)를 통과하는지 확인 (Supabase Storage URL은 https이므로 OK)
 
-홈은 "맛보기 + 진입" 역할만 하고, 실제 시청은 `/live/{id}`에서 1채널 집중 시청.
+## 기술 메모 (개발자용)
+- 업로드 경로: `sermon-thumbnails/{channel_id}/{timestamp}-{random}.{ext}`
+- `supabase.storage.from('sermon-thumbnails').upload(...)` → `getPublicUrl(...)`
+- 기존 자동 추출 로직(`detectSource`, `getYouTubeThumbnails` 등)은 그대로 유지
+- 업로드 영역은 비디오 URL이 비어있어도 사용 가능하도록 컴포넌트 가드 조정
 
-## 기술 메모
-
-- `VideoPlayer` import 및 `currentLiveChannel`/`currentLiveSermon` 계산 로직 제거 가능 → 홈 번들 약간 감소, HLS.js 초기 로드 회피
-- 다중 라이브 시 홈에서 동시 재생되는 HLS 스트림이 0개가 되므로 네트워크/CPU 부담 크게 감소 (특히 모바일/노년층 기기)
-- 라이브 페이지(`/live/:channelId`)는 변경 없음 — 시청자당 항상 1개 스트림만 재생
-
-## 영향 파일
-- `src/pages/Index.tsx` (유일)
+## 변경 파일
+- `supabase/migrations/*.sql` (storage 정책 — 버킷이 이미 있으면 정책만 갱신)
+- `src/components/ThumbnailPicker.tsx`
