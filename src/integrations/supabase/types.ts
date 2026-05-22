@@ -570,7 +570,6 @@ export type Database = {
         Args: { _ticket_id: string; _user_id: string }
         Returns: boolean
       }
-      gc_realtime_tables: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

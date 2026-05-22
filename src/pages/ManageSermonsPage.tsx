@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, Navigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,14 +13,21 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Video, ArrowLeft, ExternalLink } from 'lucide-react';
+import { Plus, Pencil, Trash2, Video, ArrowLeft, ExternalLink, Flag, EyeOff } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { clientRateLimit } from '@/lib/security';
 import ThumbnailPicker from '@/components/ThumbnailPicker';
+
+const CATEGORIES = ['주일말씀', '전도집회', '조각말씀', '수련회', '동계수련회'];
+const PRE_2010 = 'pre-2010';
+const NONE = '__none__';
 
 interface SermonForm {
   title: string;
   preacher: string;
-  sermon_date: string;
+  sermon_year: string;   // "" | "pre-2010" | "2026"~"2010"
+  sermon_month: string;  // "" | "1"~"12"
+  sermon_day: string;    // "" | "1"~"31"
   category: string;
   description: string;
   video_url: string;
@@ -30,7 +37,9 @@ interface SermonForm {
 const emptyForm: SermonForm = {
   title: '',
   preacher: '',
-  sermon_date: new Date().toISOString().slice(0, 10),
+  sermon_year: '',
+  sermon_month: '',
+  sermon_day: '',
   category: '주일말씀',
   description: '',
   video_url: '',
@@ -45,9 +54,21 @@ const validateForm = (form: SermonForm): string | null => {
   if (title.length > 200) return '제목은 200자 이하여야 합니다.';
   if (form.preacher.trim().length > 100) return '설교자 이름은 100자 이하여야 합니다.';
   if (form.video_url.trim() && !URL_REGEX.test(form.video_url.trim())) return '유효한 영상 URL을 입력해주세요 (http:// 또는 https://)';
-  
   if (form.description.trim().length > 2000) return '설명은 2000자 이하여야 합니다.';
   return null;
+};
+
+const computeSermonDate = (form: SermonForm): string => {
+  if (form.sermon_year === PRE_2010) {
+    return new Date('2009-12-31T00:00:00Z').toISOString();
+  }
+  if (form.sermon_year && form.sermon_month && form.sermon_day) {
+    const y = parseInt(form.sermon_year, 10);
+    const m = parseInt(form.sermon_month, 10);
+    const d = parseInt(form.sermon_day, 10);
+    return new Date(y, m - 1, d).toISOString();
+  }
+  return new Date().toISOString();
 };
 
 const ManageSermonsPage = () => {
@@ -57,6 +78,25 @@ const ManageSermonsPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SermonForm>(emptyForm);
+
+  const currentYear = new Date().getFullYear();
+  const yearOptions = useMemo(() => {
+    const arr: string[] = [];
+    for (let y = currentYear; y >= 2010; y--) arr.push(String(y));
+    return arr;
+  }, [currentYear]);
+
+  const dayOptions = useMemo(() => {
+    if (!form.sermon_year || form.sermon_year === PRE_2010 || !form.sermon_month) {
+      return Array.from({ length: 31 }, (_, i) => String(i + 1));
+    }
+    const y = parseInt(form.sermon_year, 10);
+    const m = parseInt(form.sermon_month, 10);
+    const last = new Date(y, m, 0).getDate();
+    return Array.from({ length: last }, (_, i) => String(i + 1));
+  }, [form.sermon_year, form.sermon_month]);
+
+  const monthDayDisabled = form.sermon_year === PRE_2010;
 
   const { data: channel, isLoading: channelLoading } = useQuery({
     queryKey: ['channel', channelId],
@@ -86,13 +126,62 @@ const ManageSermonsPage = () => {
     enabled: !!channelId,
   });
 
+  // Reports received on my channel's sermons
+  const sermonIds = (sermons || []).map(s => s.id);
+  const { data: receivedReports = [] } = useQuery({
+    queryKey: ['received-reports', channelId, sermonIds.join(',')],
+    queryFn: async () => {
+      if (sermonIds.length === 0) return [];
+      const { data } = await supabase
+        .from('sermon_reports')
+        .select('*, sermons(id, title), sermon_report_replies(*)')
+        .in('sermon_id', sermonIds)
+        .order('created_at', { ascending: false });
+      return data ?? [];
+    },
+    enabled: sermonIds.length > 0,
+  });
+
+  const reportCountBySermon = receivedReports.reduce<Record<string, number>>((acc, r: any) => {
+    if (r.status === 'open') acc[r.sermon_id] = (acc[r.sermon_id] || 0) + 1;
+    return acc;
+  }, {});
+
+  const [replyTexts, setReplyTexts] = useState<Record<string, string>>({});
+
+  const postOwnerReply = useMutation({
+    mutationFn: async ({ reportId, body }: { reportId: string; body: string }) => {
+      if (!user) throw new Error('로그인 필요');
+      const { error } = await supabase.from('sermon_report_replies').insert({
+        report_id: reportId,
+        author_id: user.id,
+        author_role: 'owner',
+        body: body.trim().slice(0, 2000),
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      setReplyTexts(p => ({ ...p, [vars.reportId]: '' }));
+      queryClient.invalidateQueries({ queryKey: ['received-reports', channelId] });
+      toast.success('답변이 등록되었습니다.');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const REASON_LABELS: Record<string, string> = {
+    heresy: '이단 교리',
+    inappropriate: '부적절한 영상',
+    copyright: '저작권 침해',
+    other: '기타',
+  };
+
   const upsertMutation = useMutation({
     mutationFn: async (data: SermonForm & { id?: string }) => {
       const payload = {
         channel_id: channelId!,
         title: data.title.trim(),
         preacher: data.preacher.trim() || null,
-        sermon_date: data.sermon_date,
+        sermon_date: computeSermonDate(data),
         category: data.category,
         description: data.description.trim() || null,
         video_url: data.video_url.trim() || null,
@@ -132,11 +221,24 @@ const ManageSermonsPage = () => {
 
   const openEdit = (sermon: any) => {
     setEditingId(sermon.id);
+    let sy = '', sm = '', sd = '';
+    if (sermon.sermon_date) {
+      const dt = new Date(sermon.sermon_date);
+      if (dt.getFullYear() < 2010) {
+        sy = PRE_2010;
+      } else {
+        sy = String(dt.getFullYear());
+        sm = String(dt.getMonth() + 1);
+        sd = String(dt.getDate());
+      }
+    }
     setForm({
       title: sermon.title,
       preacher: sermon.preacher || '',
-      sermon_date: sermon.sermon_date?.slice(0, 10) || '',
-      category: sermon.category,
+      sermon_year: sy,
+      sermon_month: sm,
+      sermon_day: sd,
+      category: CATEGORIES.includes(sermon.category) ? sermon.category : '주일말씀',
       description: sermon.description || '',
       video_url: sermon.video_url || '',
       thumbnail_url: sermon.thumbnail_url || '',
@@ -231,7 +333,13 @@ const ManageSermonsPage = () => {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{s.title}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium text-foreground truncate">{s.title}</p>
+                    {s.is_hidden && <Badge variant="outline" className="text-[10px]"><EyeOff className="w-3 h-3 mr-0.5" />비공개</Badge>}
+                    {reportCountBySermon[s.id] > 0 && (
+                      <Badge variant="destructive" className="text-[10px]"><Flag className="w-3 h-3 mr-0.5" />{reportCountBySermon[s.id]}</Badge>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {s.preacher && `${s.preacher} · `}{s.category} · {s.sermon_date?.slice(0, 10)}
                   </p>
@@ -262,6 +370,59 @@ const ManageSermonsPage = () => {
           </div>
         )}
 
+        {receivedReports.length > 0 && (
+          <section className="space-y-3 pt-4">
+            <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
+              <Flag className="w-4 h-4 text-destructive" /> 받은 신고 ({receivedReports.length})
+            </h2>
+            {receivedReports.map((r: any) => (
+              <Card key={r.id} className="p-4 space-y-3">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant="outline" className="text-xs">{REASON_LABELS[r.reason] || r.reason}</Badge>
+                    <Badge variant={r.status === 'open' ? 'destructive' : 'secondary'} className="text-xs">
+                      {r.status === 'open' ? '처리 대기' : r.status === 'resolved' ? '처리됨' : '기각됨'}
+                    </Badge>
+                  </div>
+                  <p className="text-sm font-medium mt-2">{r.sermons?.title}</p>
+                  {r.detail && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{r.detail}</p>}
+                  <p className="text-xs text-muted-foreground mt-1">{new Date(r.created_at).toLocaleString('ko-KR')}</p>
+                </div>
+
+                {r.sermon_report_replies?.length > 0 && (
+                  <div className="space-y-2 pl-3 border-l-2 border-muted">
+                    {r.sermon_report_replies.map((rep: any) => (
+                      <div key={rep.id} className="text-sm">
+                        <span className="text-xs font-semibold text-muted-foreground">
+                          {rep.author_role === 'admin' ? '관리자' : rep.author_role === 'owner' ? '나 (담당자)' : '신고자'}
+                        </span>
+                        <p className="whitespace-pre-wrap">{rep.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="답변 입력..."
+                    value={replyTexts[r.id] || ''}
+                    onChange={e => setReplyTexts(p => ({ ...p, [r.id]: e.target.value }))}
+                    maxLength={2000}
+                    className="text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => postOwnerReply.mutate({ reportId: r.id, body: replyTexts[r.id] || '' })}
+                    disabled={!replyTexts[r.id]?.trim() || postOwnerReply.isPending}
+                  >
+                    답변
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </section>
+        )}
+
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -276,22 +437,70 @@ const ManageSermonsPage = () => {
                 <Label>설교자</Label>
                 <Input value={form.preacher} onChange={e => setForm(f => ({ ...f, preacher: e.target.value }))} placeholder="설교자 이름" maxLength={100} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>날짜</Label>
-                  <Input type="date" value={form.sermon_date} onChange={e => setForm(f => ({ ...f, sermon_date: e.target.value }))} />
-                </div>
-                <div>
-                  <Label>카테고리</Label>
-                  <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+              <div>
+                <Label>카테고리</Label>
+                <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>날짜 (선택)</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <Select
+                    value={form.sermon_year || NONE}
+                    onValueChange={v => {
+                      const newY = v === NONE ? '' : v;
+                      setForm(f => ({
+                        ...f,
+                        sermon_year: newY,
+                        ...(newY === PRE_2010 ? { sermon_month: '', sermon_day: '' } : {}),
+                      }));
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="년" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="주일말씀">주일말씀</SelectItem>
-                      <SelectItem value="수요말씀">수요말씀</SelectItem>
-                      <SelectItem value="특별집회">특별집회</SelectItem>
+                      <SelectItem value={NONE}>선택 안함</SelectItem>
+                      {yearOptions.map(y => (
+                        <SelectItem key={y} value={y}>{y}년</SelectItem>
+                      ))}
+                      <SelectItem value={PRE_2010}>2010년 이전</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={form.sermon_month || NONE}
+                    onValueChange={v => setForm(f => ({ ...f, sermon_month: v === NONE ? '' : v, sermon_day: '' }))}
+                    disabled={monthDayDisabled}
+                  >
+                    <SelectTrigger><SelectValue placeholder="월" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE}>선택 안함</SelectItem>
+                      {Array.from({ length: 12 }, (_, i) => String(i + 1)).map(m => (
+                        <SelectItem key={m} value={m}>{m}월</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={form.sermon_day || NONE}
+                    onValueChange={v => setForm(f => ({ ...f, sermon_day: v === NONE ? '' : v }))}
+                    disabled={monthDayDisabled}
+                  >
+                    <SelectTrigger><SelectValue placeholder="일" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE}>선택 안함</SelectItem>
+                      {dayOptions.map(d => (
+                        <SelectItem key={d} value={d}>{d}일</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  비워두면 등록 시각으로 저장되어 최신순으로 정렬됩니다.
+                </p>
               </div>
               <div>
                 <Label>영상 URL</Label>

@@ -6,18 +6,23 @@ import { Navigate } from 'react-router-dom';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Check, X, Trash2, Radio, Loader2 } from 'lucide-react';
+import { Plus, Check, X, Trash2, Radio, Loader2, Ban, EyeOff, Flag } from 'lucide-react';
 import { toast } from 'sonner';
 import * as liveApi from '@/lib/liveStreamApi';
+import ActivityTimeline from '@/components/admin/ActivityTimeline';
+import LiveNowPanel from '@/components/admin/LiveNowPanel';
 
 const AdminPage = () => {
   const { isAdmin, loading, user } = useAuth();
   const queryClient = useQueryClient();
   const [newChannel, setNewChannel] = useState({ name: '', description: '', stream_url: '', logo_url: '' });
-  const [streamSetup, setStreamSetup] = useState<Record<string, { inputId: string; gcpChannelId: string }>>({});
+  const [suspendReasons, setSuspendReasons] = useState<Record<string, string>>({});
+  const [hideReasons, setHideReasons] = useState<Record<string, string>>({});
+  const [replyTexts, setReplyTexts] = useState<Record<string, string>>({});
 
   const { data: channels = [] } = useQuery({
     queryKey: ['admin-channels'],
@@ -67,56 +72,38 @@ const AdminPage = () => {
 
   const toggleApproval = useMutation({
     mutationFn: async ({ id, approved }: { id: string; approved: boolean }) => {
-      await supabase.from('channels').update({ is_approved: approved }).eq('id', id);
+      const { error } = await supabase.from('channels').update({ is_approved: approved }).eq('id', id);
+      if (error) throw error;
+      // 승인 시 자동 GCP 프로비저닝
+      if (approved) {
+        try {
+          await liveApi.provisionChannel(id);
+        } catch (e) {
+          throw new Error(`승인은 됐지만 GCP 프로비저닝 실패: ${(e as Error).message}`);
+        }
+      }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-channels'] }),
-  });
-
-  const setupAndStartLive = useMutation({
-    mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      const sanitized = name.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase().slice(0, 50);
-      const inputId = `input-${sanitized}-${Date.now()}`;
-      const gcpChannelId = `ch-${sanitized}-${Date.now()}`;
-
-      toast.info('RTMP 입력을 생성하는 중...');
-      const inputResult = await liveApi.createInput(inputId);
-
-      toast.info('라이브 채널을 생성하는 중...');
-      await liveApi.createChannel(gcpChannelId, inputId);
-
-      toast.info('라이브를 시작하는 중...');
-      await liveApi.startChannel(gcpChannelId);
-
-      // Get HLS URL and save to DB
-      const hlsInfo = await liveApi.getHLSUrl(gcpChannelId);
-      await supabase.from('channels').update({
-        is_live: true,
-        stream_url: hlsInfo.hlsUrl || '',
-      }).eq('id', id);
-
-      setStreamSetup(prev => ({ ...prev, [id]: { inputId, gcpChannelId } }));
-
-      // Extract RTMP URL from input result
-      const rtmpUri = inputResult?.inputStreamProperty?.rtmpPushUri ||
-        inputResult?.metadata?.inputStreamProperty?.rtmpPushUri ||
-        '(RTMP URL 확인 필요)';
-
-      return { rtmpUri, hlsUrl: hlsInfo.hlsUrl };
-    },
-    onSuccess: (data) => {
-      toast.success(`라이브 시작됨!\nRTMP: ${data.rtmpUri}`, { duration: 10000 });
+    onSuccess: (_d, vars) => {
+      toast.success(vars.approved ? '승인 완료 + GCP 라이브 인프라 생성됨' : '승인 취소됨');
       queryClient.invalidateQueries({ queryKey: ['admin-channels'] });
     },
-    onError: (e: Error) => toast.error(`라이브 시작 실패: ${e.message}`),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const reprovisionChannel = useMutation({
+    mutationFn: async (id: string) => {
+      await liveApi.provisionChannel(id);
+    },
+    onSuccess: () => {
+      toast.success('GCP 재프로비저닝 완료. 채널 설정에서 RTMP 정보를 확인하세요.');
+      queryClient.invalidateQueries({ queryKey: ['admin-channels'] });
+    },
+    onError: (e: Error) => toast.error(`재프로비저닝 실패: ${e.message}`),
   });
 
   const stopLive = useMutation({
     mutationFn: async ({ id }: { id: string }) => {
-      const setup = streamSetup[id];
-      if (setup?.gcpChannelId) {
-        await liveApi.stopChannel(setup.gcpChannelId);
-      }
-      await supabase.from('channels').update({ is_live: false }).eq('id', id);
+      await liveApi.stopChannel(id);
     },
     onSuccess: () => {
       toast.success('라이브가 종료되었습니다');
@@ -134,6 +121,87 @@ const AdminPage = () => {
       queryClient.invalidateQueries({ queryKey: ['admin-channels'] });
     },
   });
+
+  // Channel suspension
+  const toggleSuspend = useMutation({
+    mutationFn: async ({ id, suspend, reason }: { id: string; suspend: boolean; reason?: string }) => {
+      const { error } = await supabase.from('channels').update({
+        is_suspended: suspend,
+        suspended_reason: suspend ? (reason?.trim() || null) : null,
+      }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('채널 상태가 변경되었습니다.');
+      queryClient.invalidateQueries({ queryKey: ['admin-channels'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // Reports
+  const { data: reports = [] } = useQuery({
+    queryKey: ['admin-reports'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('sermon_reports')
+        .select('*, sermons(id, title, channel_id, is_hidden), sermon_report_replies(*)')
+        .order('created_at', { ascending: false });
+      return data ?? [];
+    },
+  });
+
+  const openReports = reports.filter((r: any) => r.status === 'open');
+
+  const updateReportStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase.from('sermon_reports').update({ status }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('신고 상태가 변경되었습니다.');
+      queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
+    },
+  });
+
+  const hideSermon = useMutation({
+    mutationFn: async ({ id, hide, reason }: { id: string; hide: boolean; reason?: string }) => {
+      const { error } = await supabase.from('sermons').update({
+        is_hidden: hide,
+        hidden_reason: hide ? (reason?.trim() || null) : null,
+      }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('영상 노출 상태가 변경되었습니다.');
+      queryClient.invalidateQueries({ queryKey: ['admin-sermons'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
+    },
+  });
+
+  const postReply = useMutation({
+    mutationFn: async ({ reportId, body }: { reportId: string; body: string }) => {
+      if (!user) throw new Error('로그인 필요');
+      const { error } = await supabase.from('sermon_report_replies').insert({
+        report_id: reportId,
+        author_id: user.id,
+        author_role: 'admin',
+        body: body.trim().slice(0, 2000),
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      setReplyTexts(p => ({ ...p, [vars.reportId]: '' }));
+      queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const REASON_LABELS: Record<string, string> = {
+    heresy: '이단 교리',
+    inappropriate: '부적절한 영상',
+    copyright: '저작권 침해',
+    other: '기타',
+  };
 
   if (loading) return null;
   if (!isAdmin) return <Navigate to="/" replace />;
@@ -163,14 +231,29 @@ const AdminPage = () => {
           ))}
         </div>
 
-        <Tabs defaultValue={pendingChannels.length > 0 ? "pending" : "channels"}>
-          <TabsList>
+        <Tabs defaultValue={openReports.length > 0 ? "reports" : (pendingChannels.length > 0 ? "pending" : "channels")}>
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="pending">
               승인 대기 {pendingChannels.length > 0 && <Badge variant="destructive" className="ml-1 text-xs">{pendingChannels.length}</Badge>}
             </TabsTrigger>
+            <TabsTrigger value="reports">
+              신고 관리 {openReports.length > 0 && <Badge variant="destructive" className="ml-1 text-xs">{openReports.length}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="live">
+              라이브 현황 {liveChannels > 0 && <Badge className="bg-live text-live-foreground ml-1 text-xs">{liveChannels}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="channels">전체 채널</TabsTrigger>
+            <TabsTrigger value="activity">활동 이력</TabsTrigger>
             <TabsTrigger value="new">새 채널</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="live" className="mt-4">
+            <LiveNowPanel />
+          </TabsContent>
+
+          <TabsContent value="activity" className="mt-4">
+            <ActivityTimeline />
+          </TabsContent>
 
           <TabsContent value="pending" className="space-y-3 mt-4">
             {pendingChannels.length === 0 ? (
@@ -194,59 +277,187 @@ const AdminPage = () => {
             ))}
           </TabsContent>
 
-          <TabsContent value="channels" className="space-y-3 mt-4">
-            {channels.map(ch => {
-              const isStarting = setupAndStartLive.isPending && setupAndStartLive.variables?.id === ch.id;
-              const isStopping = stopLive.isPending && stopLive.variables?.id === ch.id;
-
-              return (
-                <Card key={ch.id} className="p-4 flex items-center justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-foreground truncate">{ch.name}</span>
-                      {ch.is_approved ? (
-                        <Badge variant="secondary" className="text-xs">승인됨</Badge>
-                      ) : (
-                        <Badge variant="destructive" className="text-xs">미승인</Badge>
-                      )}
-                      {ch.is_live && <Badge className="bg-live text-live-foreground text-xs">LIVE</Badge>}
+          <TabsContent value="reports" className="space-y-3 mt-4">
+            {reports.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">접수된 신고가 없습니다.</p>
+            ) : reports.map((r: any) => (
+              <Card key={r.id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Flag className="w-4 h-4 text-destructive shrink-0" />
+                      <Badge variant="outline" className="text-xs">{REASON_LABELS[r.reason] || r.reason}</Badge>
+                      <Badge variant={r.status === 'open' ? 'destructive' : 'secondary'} className="text-xs">
+                        {r.status === 'open' ? '처리 대기' : r.status === 'resolved' ? '처리됨' : '기각됨'}
+                      </Badge>
+                      {r.sermons?.is_hidden && <Badge variant="outline" className="text-xs"><EyeOff className="w-3 h-3 mr-1" />비공개</Badge>}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate mt-1">{ch.stream_url || '스트림 URL 없음'}</p>
+                    <p className="text-sm font-medium mt-2 truncate">{r.sermons?.title || '(삭제된 영상)'}</p>
+                    {r.detail && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{r.detail}</p>}
+                    <p className="text-xs text-muted-foreground mt-1">{new Date(r.created_at).toLocaleString('ko-KR')}</p>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => toggleApproval.mutate({ id: ch.id, approved: !ch.is_approved })}
-                      title={ch.is_approved ? '승인 취소' : '승인'}
-                    >
-                      {ch.is_approved ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-                    </Button>
-                    {ch.is_live ? (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => stopLive.mutate({ id: ch.id })}
-                        disabled={isStopping}
-                      >
-                        {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-                        라이브 종료
+                </div>
+
+                {r.sermon_report_replies?.length > 0 && (
+                  <div className="space-y-2 pl-3 border-l-2 border-muted">
+                    {r.sermon_report_replies.map((rep: any) => (
+                      <div key={rep.id} className="text-sm">
+                        <span className="text-xs font-semibold text-muted-foreground">
+                          {rep.author_role === 'admin' ? '관리자' : rep.author_role === 'owner' ? '채널 담당자' : '신고자'}
+                        </span>
+                        <p className="whitespace-pre-wrap">{rep.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Textarea
+                    placeholder="답변 작성..."
+                    value={replyTexts[r.id] || ''}
+                    onChange={e => setReplyTexts(p => ({ ...p, [r.id]: e.target.value }))}
+                    rows={2}
+                    className="text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => postReply.mutate({ reportId: r.id, body: replyTexts[r.id] || '' })}
+                    disabled={!replyTexts[r.id]?.trim() || postReply.isPending}
+                  >
+                    답변
+                  </Button>
+                </div>
+
+                {r.sermons && (
+                  <div className="flex gap-2 flex-wrap">
+                    {r.sermons.is_hidden ? (
+                      <Button size="sm" variant="outline" onClick={() => hideSermon.mutate({ id: r.sermons.id, hide: false })}>
+                        영상 공개 복원
                       </Button>
                     ) : (
                       <Button
                         size="sm"
-                        variant="default"
-                        onClick={() => setupAndStartLive.mutate({ id: ch.id, name: ch.name })}
-                        disabled={isStarting}
+                        variant="destructive"
+                        onClick={() => hideSermon.mutate({ id: r.sermons.id, hide: true, reason: REASON_LABELS[r.reason] })}
                       >
-                        {isStarting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Radio className="w-4 h-4 mr-1" />}
-                        라이브 시작
+                        <EyeOff className="w-3.5 h-3.5 mr-1" /> 영상 비공개
                       </Button>
                     )}
-                    <Button size="icon" variant="ghost" onClick={() => deleteChannel.mutate(ch.id)}>
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                    {r.status === 'open' && (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => updateReportStatus.mutate({ id: r.id, status: 'resolved' })}>
+                          처리 완료
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => updateReportStatus.mutate({ id: r.id, status: 'dismissed' })}>
+                          기각
+                        </Button>
+                      </>
+                    )}
+                    {r.status !== 'open' && (
+                      <Button size="sm" variant="ghost" onClick={() => updateReportStatus.mutate({ id: r.id, status: 'open' })}>
+                        다시 열기
+                      </Button>
+                    )}
                   </div>
+                )}
+              </Card>
+            ))}
+          </TabsContent>
+
+          <TabsContent value="channels" className="space-y-3 mt-4">
+            {channels.map(ch => {
+              const isStopping = stopLive.isPending && stopLive.variables?.id === ch.id;
+              const isReprov = reprovisionChannel.isPending && reprovisionChannel.variables === ch.id;
+
+              return (
+                <Card key={ch.id} className={`p-4 space-y-2 ${ch.is_suspended ? 'border-destructive/50' : ''}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-foreground truncate">{ch.name}</span>
+                        {ch.is_approved ? (
+                          <Badge variant="secondary" className="text-xs">승인됨</Badge>
+                        ) : (
+                          <Badge variant="destructive" className="text-xs">미승인</Badge>
+                        )}
+                        {ch.is_live && <Badge className="bg-live text-live-foreground text-xs">LIVE</Badge>}
+                        {ch.is_suspended && <Badge variant="destructive" className="text-xs">정지됨</Badge>}
+                        {ch.gcp_input_uri ? (
+                          <Badge variant="outline" className="text-xs">GCP ✓</Badge>
+                        ) : ch.is_approved ? (
+                          <Badge variant="destructive" className="text-xs">GCP 미설정</Badge>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate mt-1">{ch.stream_url || '스트림 URL 없음'}</p>
+                      {ch.gcp_last_error && (
+                        <p className="text-xs text-destructive mt-1 break-words">⚠️ GCP: {ch.gcp_last_error}</p>
+                      )}
+                      {ch.is_suspended && ch.suspended_reason && (
+                        <p className="text-xs text-destructive mt-1">사유: {ch.suspended_reason}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => toggleApproval.mutate({ id: ch.id, approved: !ch.is_approved })}
+                        title={ch.is_approved ? '승인 취소' : '승인'}
+                      >
+                        {ch.is_approved ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                      </Button>
+                      {ch.is_approved && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => reprovisionChannel.mutate(ch.id)}
+                          disabled={isReprov}
+                          title="GCP 재프로비저닝"
+                        >
+                          {isReprov ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />}
+                        </Button>
+                      )}
+                      {ch.is_live && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => stopLive.mutate({ id: ch.id })}
+                          disabled={isStopping}
+                        >
+                          {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                          라이브 종료
+                        </Button>
+                      )}
+                      <Button size="icon" variant="ghost" onClick={() => deleteChannel.mutate(ch.id)}>
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                  {ch.is_suspended ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => toggleSuspend.mutate({ id: ch.id, suspend: false })}
+                    >
+                      정지 해제
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="정지 사유 (선택)"
+                        value={suspendReasons[ch.id] || ''}
+                        onChange={e => setSuspendReasons(p => ({ ...p, [ch.id]: e.target.value }))}
+                        className="text-xs h-8"
+                      />
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => toggleSuspend.mutate({ id: ch.id, suspend: true, reason: suspendReasons[ch.id] })}
+                      >
+                        <Ban className="w-3.5 h-3.5 mr-1" /> 정지
+                      </Button>
+                    </div>
+                  )}
                 </Card>
               );
             })}

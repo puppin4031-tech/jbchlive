@@ -1,0 +1,1 @@
+ALTER TABLE public.channels REPLICA IDENTITY FULL;

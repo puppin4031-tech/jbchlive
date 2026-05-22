@@ -19,6 +19,9 @@ import ManageSermonsPage from "./pages/ManageSermonsPage.tsx";
 import FavoritesPage from "./pages/FavoritesPage.tsx";
 import MyChannelPage from "./pages/MyChannelPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import SupportPage from "./pages/SupportPage.tsx";
+import SupportTicketPage from "./pages/SupportTicketPage.tsx";
+import FloatingBroadcasterDock from "@/components/broadcaster/FloatingBroadcasterDock";
 import { useEffect } from "react";
 import { setupSecurityMonitoring } from "@/lib/security";
 
@@ -65,6 +68,15 @@ const App = () => (
               <Route path="/my-channel" element={
                 <ProtectedRoute><MyChannelPage /></ProtectedRoute>
               } />
+              <Route path="/support" element={
+                <ProtectedRoute><SupportPage /></ProtectedRoute>
+              } />
+              <Route path="/support/:ticketId" element={
+                <ProtectedRoute><SupportTicketPage /></ProtectedRoute>
+              } />
+              <Route path="/admin/support/:ticketId" element={
+                <ProtectedRoute><SupportTicketPage /></ProtectedRoute>
+              } />
 
               {/* Admin-only route (server-verified admin role) */}
               <Route path="/admin" element={
@@ -73,6 +85,7 @@ const App = () => (
 
               <Route path="*" element={<NotFound />} />
             </Routes>
+            <FloatingBroadcasterDock />
           </BrowserRouter>
         </SecurityInit>
       </TooltipProvider>
