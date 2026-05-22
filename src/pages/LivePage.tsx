@@ -115,7 +115,7 @@ const LivePage = () => {
   }, [channelId, queryClient]);
 
   const handleShare = () => {
-    const url = `${window.location.origin}/live/${channelId}`;
+    const url = getPublicLiveUrl(channelId!);
     navigator.clipboard.writeText(url);
     toast.success('링크가 복사되었습니다!');
   };
