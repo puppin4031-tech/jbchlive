@@ -13,8 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Video, ArrowLeft, ExternalLink, Flag, EyeOff } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Plus, Pencil, Trash2, Video, ArrowLeft, ExternalLink } from 'lucide-react';
 import { clientRateLimit } from '@/lib/security';
 import ThumbnailPicker from '@/components/ThumbnailPicker';
 
@@ -125,55 +124,6 @@ const ManageSermonsPage = () => {
     },
     enabled: !!channelId,
   });
-
-  // Reports received on my channel's sermons
-  const sermonIds = (sermons || []).map(s => s.id);
-  const { data: receivedReports = [] } = useQuery({
-    queryKey: ['received-reports', channelId, sermonIds.join(',')],
-    queryFn: async () => {
-      if (sermonIds.length === 0) return [];
-      const { data } = await supabase
-        .from('sermon_reports')
-        .select('*, sermons(id, title), sermon_report_replies(*)')
-        .in('sermon_id', sermonIds)
-        .order('created_at', { ascending: false });
-      return data ?? [];
-    },
-    enabled: sermonIds.length > 0,
-  });
-
-  const reportCountBySermon = receivedReports.reduce<Record<string, number>>((acc, r: any) => {
-    if (r.status === 'open') acc[r.sermon_id] = (acc[r.sermon_id] || 0) + 1;
-    return acc;
-  }, {});
-
-  const [replyTexts, setReplyTexts] = useState<Record<string, string>>({});
-
-  const postOwnerReply = useMutation({
-    mutationFn: async ({ reportId, body }: { reportId: string; body: string }) => {
-      if (!user) throw new Error('로그인 필요');
-      const { error } = await supabase.from('sermon_report_replies').insert({
-        report_id: reportId,
-        author_id: user.id,
-        author_role: 'owner',
-        body: body.trim().slice(0, 2000),
-      });
-      if (error) throw error;
-    },
-    onSuccess: (_d, vars) => {
-      setReplyTexts(p => ({ ...p, [vars.reportId]: '' }));
-      queryClient.invalidateQueries({ queryKey: ['received-reports', channelId] });
-      toast.success('답변이 등록되었습니다.');
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const REASON_LABELS: Record<string, string> = {
-    heresy: '이단 교리',
-    inappropriate: '부적절한 영상',
-    copyright: '저작권 침해',
-    other: '기타',
-  };
 
   const upsertMutation = useMutation({
     mutationFn: async (data: SermonForm & { id?: string }) => {
@@ -333,13 +283,7 @@ const ManageSermonsPage = () => {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-medium text-foreground truncate">{s.title}</p>
-                    {s.is_hidden && <Badge variant="outline" className="text-[10px]"><EyeOff className="w-3 h-3 mr-0.5" />비공개</Badge>}
-                    {reportCountBySermon[s.id] > 0 && (
-                      <Badge variant="destructive" className="text-[10px]"><Flag className="w-3 h-3 mr-0.5" />{reportCountBySermon[s.id]}</Badge>
-                    )}
-                  </div>
+                  <p className="text-sm font-medium text-foreground truncate">{s.title}</p>
                   <p className="text-xs text-muted-foreground">
                     {s.preacher && `${s.preacher} · `}{s.category} · {s.sermon_date?.slice(0, 10)}
                   </p>
@@ -368,59 +312,6 @@ const ManageSermonsPage = () => {
               </Card>
             ))}
           </div>
-        )}
-
-        {receivedReports.length > 0 && (
-          <section className="space-y-3 pt-4">
-            <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-              <Flag className="w-4 h-4 text-destructive" /> 받은 신고 ({receivedReports.length})
-            </h2>
-            {receivedReports.map((r: any) => (
-              <Card key={r.id} className="p-4 space-y-3">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="outline" className="text-xs">{REASON_LABELS[r.reason] || r.reason}</Badge>
-                    <Badge variant={r.status === 'open' ? 'destructive' : 'secondary'} className="text-xs">
-                      {r.status === 'open' ? '처리 대기' : r.status === 'resolved' ? '처리됨' : '기각됨'}
-                    </Badge>
-                  </div>
-                  <p className="text-sm font-medium mt-2">{r.sermons?.title}</p>
-                  {r.detail && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{r.detail}</p>}
-                  <p className="text-xs text-muted-foreground mt-1">{new Date(r.created_at).toLocaleString('ko-KR')}</p>
-                </div>
-
-                {r.sermon_report_replies?.length > 0 && (
-                  <div className="space-y-2 pl-3 border-l-2 border-muted">
-                    {r.sermon_report_replies.map((rep: any) => (
-                      <div key={rep.id} className="text-sm">
-                        <span className="text-xs font-semibold text-muted-foreground">
-                          {rep.author_role === 'admin' ? '관리자' : rep.author_role === 'owner' ? '나 (담당자)' : '신고자'}
-                        </span>
-                        <p className="whitespace-pre-wrap">{rep.body}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="답변 입력..."
-                    value={replyTexts[r.id] || ''}
-                    onChange={e => setReplyTexts(p => ({ ...p, [r.id]: e.target.value }))}
-                    maxLength={2000}
-                    className="text-sm"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={() => postOwnerReply.mutate({ reportId: r.id, body: replyTexts[r.id] || '' })}
-                    disabled={!replyTexts[r.id]?.trim() || postOwnerReply.isPending}
-                  >
-                    답변
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </section>
         )}
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

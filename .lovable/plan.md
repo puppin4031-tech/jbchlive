@@ -1,27 +1,43 @@
 
 
-## Google Drive 썸네일 자동 추출 적용
+## 영상 등록 - 날짜(년/월/일) + 카테고리 (수정안)
 
-### 변경 파일 (2개)
+### 변경 요약
+**파일 1개**: `src/pages/ManageSermonsPage.tsx`
 
-**1. `src/lib/thumbnailUtils.ts`**
-- `extractDriveId(url)` 추가 — `/file/d/{ID}/`, `?id={ID}`, `/folders/{ID}` 패턴 매칭
-- `getDriveThumbnails(fileId)` 추가 — 4가지 사이즈 후보 반환:
-  ```
-  https://drive.google.com/thumbnail?id={ID}&sz=w1920
-  https://drive.google.com/thumbnail?id={ID}&sz=w1280
-  https://drive.google.com/thumbnail?id={ID}&sz=w640
-  https://drive.google.com/thumbnail?id={ID}&sz=w320
-  ```
-- `detectSource()`에 `'drive'` 케이스 신설 (현재는 `unsupported`로 떨어짐)
-- `ThumbnailSource` 타입에 `'drive'` 추가
+### 1. 카테고리 드롭다운
+옵션: **주일말씀 / 전도집회 / 조각말씀 / 수련회 / 동계수련회**
 
-**2. `src/components/ThumbnailPicker.tsx`**
-- `useEffect` 분기에 `source === 'drive'` 처리 추가 (YouTube와 동일하게 즉시 후보 제공)
-- `unsupported` 안내 문구는 유지 (다른 외부 서비스용)
-- 드라이브 안내 문구 추가: *"공유 설정이 '링크가 있는 모든 사용자에게 공개'여야 썸네일이 표시됩니다"*
+### 2. 날짜 입력 (년/월/일 드롭다운 3개)
 
-### 동작
-- 사용자가 구글드라이브 URL 입력 → 즉시 4종 썸네일 후보 노출 → 클릭 선택 → DB 저장
-- 라이브 / 직접 URL / 수동 입력은 이번 범위 외 (다음 단계)
+**년 옵션** (수정됨):
+- "선택 안함"
+- 현재 연도(2026) → 2010 까지 한 해씩
+- **"2010년 이전"** (특수값)
+
+**월 옵션**: 선택 안함 / 1~12
+**일 옵션**: 선택 안함 / 1~말일 (선택된 년·월 기준 자동 조정)
+
+### 3. 저장 로직
+- **년/월/일 모두 선택** → `new Date(y, m-1, d).toISOString()` 저장
+- **"2010년 이전" 선택** → `2009-12-31T00:00:00Z` 로 저장 (정렬 시 가장 오래된 영상으로 묶임)
+  - 월/일 드롭다운은 비활성화
+- **하나라도 "선택 안함"** → `new Date()` (등록 시각) 저장 → 업로드 순서대로 최신에 위치
+
+### 4. 수정 모드
+기존 `sermon_date` 파싱:
+- `< 2010-01-01` → "2010년 이전"으로 표시
+- 그 외 → 년/월/일 분해해서 드롭다운 채움
+
+### 5. 정렬
+기존 `sermon_date DESC` 유지. 사용자 의도대로 동작:
+- 날짜 입력 → 그 날짜 위치
+- 2010년 이전 → 맨 뒤
+- 비움 → 최신 (업로드 시각)
+
+### 기술 메모
+- 폼 임시 상태: `sermon_year` (string, "" | "pre-2010" | "2026"~"2010"), `sermon_month`, `sermon_day`
+- `sermon_year === "pre-2010"` 일 때 월/일 Select disabled + 값 강제 ""
+- 일 옵션은 `useMemo`로 `new Date(y, m, 0).getDate()` 계산
+- DB 마이그레이션 불필요 (`sermon_date`는 timestamptz)
 

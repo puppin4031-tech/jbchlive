@@ -14,29 +14,6 @@ export function getYouTubeThumbnails(videoId: string): string[] {
   ];
 }
 
-export function extractDriveId(url: string): string | null {
-  // Patterns: /file/d/{ID}/, ?id={ID}, /folders/{ID}
-  const patterns = [
-    /\/file\/d\/([a-zA-Z0-9_-]+)/,
-    /[?&]id=([a-zA-Z0-9_-]+)/,
-    /\/folders\/([a-zA-Z0-9_-]+)/,
-  ];
-  for (const p of patterns) {
-    const m = url.match(p);
-    if (m) return m[1];
-  }
-  return null;
-}
-
-export function getDriveThumbnails(fileId: string): string[] {
-  return [
-    `https://drive.google.com/thumbnail?id=${fileId}&sz=w1920`,
-    `https://drive.google.com/thumbnail?id=${fileId}&sz=w1280`,
-    `https://drive.google.com/thumbnail?id=${fileId}&sz=w640`,
-    `https://drive.google.com/thumbnail?id=${fileId}&sz=w320`,
-  ];
-}
-
 export function captureVideoThumbnails(videoUrl: string): Promise<string[]> {
   return new Promise((resolve) => {
     const video = document.createElement('video');
@@ -98,14 +75,12 @@ export function captureVideoThumbnails(videoUrl: string): Promise<string[]> {
   });
 }
 
-export type ThumbnailSource = 'youtube' | 'drive' | 'direct' | 'unsupported';
+export type ThumbnailSource = 'youtube' | 'direct' | 'unsupported';
 
 export function detectSource(url: string): ThumbnailSource {
   if (!url.trim()) return 'unsupported';
   if (extractYouTubeId(url)) return 'youtube';
-  if (/drive\.google\.com/i.test(url)) {
-    return extractDriveId(url) ? 'drive' : 'unsupported';
-  }
+  if (/drive\.google\.com/i.test(url)) return 'unsupported';
   if (/^https?:\/\/.+/i.test(url)) return 'direct';
   return 'unsupported';
 }

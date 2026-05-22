@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Loader2, ImageOff, Check } from 'lucide-react';
-import { detectSource, extractYouTubeId, getYouTubeThumbnails, captureVideoThumbnails, extractDriveId, getDriveThumbnails } from '@/lib/thumbnailUtils';
+import { detectSource, extractYouTubeId, getYouTubeThumbnails, captureVideoThumbnails } from '@/lib/thumbnailUtils';
 
 interface ThumbnailPickerProps {
   videoUrl: string;
@@ -25,15 +25,6 @@ const ThumbnailPicker = ({ videoUrl, value, onChange }: ThumbnailPickerProps) =>
       const id = extractYouTubeId(url);
       if (id) {
         const thumbs = getYouTubeThumbnails(id);
-        setThumbnails(thumbs);
-        if (!value) onChange(thumbs[0]);
-      }
-      setLoading(false);
-      setLastUrl(url);
-    } else if (source === 'drive') {
-      const id = extractDriveId(url);
-      if (id) {
-        const thumbs = getDriveThumbnails(id);
         setThumbnails(thumbs);
         if (!value) onChange(thumbs[0]);
       }
@@ -87,11 +78,6 @@ const ThumbnailPicker = ({ videoUrl, value, onChange }: ThumbnailPickerProps) =>
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">썸네일을 선택하세요</p>
-      {source === 'drive' && (
-        <p className="text-xs text-muted-foreground">
-          ※ 구글드라이브 공유 설정이 "링크가 있는 모든 사용자에게 공개"여야 썸네일이 표시됩니다.
-        </p>
-      )}
       <div className="grid grid-cols-2 gap-2">
         {thumbnails.map((thumb, i) => (
           <button
