@@ -12,6 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ImagePlus, Loader2, ArrowLeft, Copy, Check, ChevronDown, Radio, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseRtmpUri } from '@/lib/liveStreamApi';
+import { getPublicLiveUrl } from '@/lib/publicUrl';
 import BroadcasterControlPanel from '@/components/broadcaster/BroadcasterControlPanel';
 
 const ChannelSettingsPage = () => {
