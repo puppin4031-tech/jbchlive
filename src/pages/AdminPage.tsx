@@ -28,15 +28,7 @@ const AdminPage = () => {
     queryKey: ['admin-channels'],
     queryFn: async () => {
       const { data } = await supabase.from('channels').select('*').order('created_at', { ascending: false });
-      const rows = data ?? [];
-      // Hydrate RTMP ingest URL via admin/owner RPC (column-level restricted)
-      const withRtmp = await Promise.all(
-        rows.map(async (ch: any) => {
-          const { data: rtmp } = await supabase.rpc('get_channel_rtmp', { _channel_id: ch.id });
-          return { ...ch, gcp_input_uri: rtmp ?? null };
-        })
-      );
-      return withRtmp;
+      return data ?? [];
     },
   });
 
