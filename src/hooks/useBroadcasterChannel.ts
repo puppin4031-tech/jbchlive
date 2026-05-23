@@ -39,6 +39,11 @@ export const useBroadcasterChannel = () => {
         .eq('owner_id', user!.id)
         .maybeSingle();
       if (error) throw error;
+      if (data) {
+        // Fetch sensitive RTMP ingest URL via owner/admin RPC
+        const { data: rtmp } = await supabase.rpc('get_channel_rtmp', { _channel_id: data.id });
+        (data as any).gcp_input_uri = rtmp ?? null;
+      }
       return data;
     },
     enabled: !!user,
