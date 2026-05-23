@@ -38,6 +38,10 @@ const ChannelSettingsPage = () => {
         .eq('id', channelId!)
         .single();
       if (error) throw error;
+      if (data) {
+        const { data: rtmp } = await supabase.rpc('get_channel_rtmp', { _channel_id: data.id });
+        (data as any).gcp_input_uri = rtmp ?? null;
+      }
       return data;
     },
     enabled: !!channelId,
