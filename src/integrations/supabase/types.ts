@@ -571,6 +571,7 @@ export type Database = {
         Returns: boolean
       }
       gc_realtime_tables: { Args: never; Returns: undefined }
+      get_channel_rtmp: { Args: { _channel_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
