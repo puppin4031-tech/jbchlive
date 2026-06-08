@@ -294,7 +294,7 @@ const Index = () => {
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3">
-              {vodSermons?.map(s => <SermonCard key={s.id} sermon={mapSermon(s)} />)}
+              {vodSermons?.map(s => <SermonCard key={s.id} sermon={mapSermon(s)} compact />)}
             </div>
           )}
           {vodSermons?.length === 0 && (

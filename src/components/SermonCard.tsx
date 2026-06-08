@@ -29,13 +29,13 @@ export interface SermonCardData {
 
 interface SermonCardProps {
   sermon: SermonCardData;
+  compact?: boolean;
 }
 
-const SermonCard = ({ sermon }: SermonCardProps) => {
+const SermonCard = ({ sermon, compact = false }: SermonCardProps) => {
   const link = sermon.isLive ? `/live/${sermon.channelId}` : `/vod/${sermon.id}`;
   const [reportOpen, setReportOpen] = useState(false);
 
-  // Auto-derive thumbnail: stored → YouTube video URL → placeholder
   let thumbnail = sermon.thumbnailUrl;
   if (!thumbnail && sermon.videoUrl) {
     const ytId = extractYouTubeId(sermon.videoUrl);
@@ -71,9 +71,11 @@ const SermonCard = ({ sermon }: SermonCardProps) => {
             <p className="text-base md:text-xs text-muted-foreground mt-1 md:mt-0.5">
               {sermon.channelName}{sermon.preacher && ` · ${sermon.preacher}`}
             </p>
-            <p className="text-base md:text-xs text-muted-foreground flex items-center gap-1 mt-1 md:mt-0.5">
-              <Eye className="w-5 h-5 md:w-3 md:h-3" /> {(sermon.views || 0).toLocaleString()}회 · {sermon.date?.slice(0, 10)}
-            </p>
+            {!compact && (
+              <p className="text-base md:text-xs text-muted-foreground flex items-center gap-1 mt-1 md:mt-0.5">
+                <Eye className="w-5 h-5 md:w-3 md:h-3" /> {(sermon.views || 0).toLocaleString()}회 · {sermon.date?.slice(0, 10)}
+              </p>
+            )}
           </div>
         </div>
       </Link>

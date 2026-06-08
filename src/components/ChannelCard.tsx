@@ -1,6 +1,9 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Users, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useSubscriptions } from '@/hooks/useSubscriptions';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 export interface ChannelCardData {
   id: string;
@@ -16,6 +19,25 @@ interface ChannelCardProps {
 }
 
 const ChannelCard = ({ channel }: ChannelCardProps) => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { isSubscribed, toggleSubscription } = useSubscriptions();
+  const subscribed = isSubscribed(channel.id);
+
+  const handleSubscribe = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user) {
+      toast.info('구독은 로그인 후 사용 가능합니다.');
+      navigate('/login');
+      return;
+    }
+    toggleSubscription.mutate(channel.id, {
+      onSuccess: () => toast.success(subscribed ? '구독이 취소되었습니다.' : '구독되었습니다!'),
+      onError: () => toast.error('처리에 실패했습니다.'),
+    });
+  };
+
   return (
     <Link to={`/channel/${channel.id}`} className="flex items-center gap-4 md:gap-3 p-5 md:p-3 rounded-xl bg-card hover:bg-accent/50 transition-colors">
       <div className="relative shrink-0">
@@ -32,8 +54,13 @@ const ChannelCard = ({ channel }: ChannelCardProps) => {
           <Users className="w-4 h-4 md:w-3 md:h-3" /> {channel.subscriber_count.toLocaleString()}명
         </p>
       </div>
-      <Button variant="outline" className="shrink-0 text-base md:text-xs h-12 md:h-8 px-6 md:px-3" onClick={e => e.preventDefault()}>
-        구독
+      <Button
+        variant={subscribed ? 'secondary' : 'outline'}
+        className="shrink-0 text-base md:text-xs h-12 md:h-8 px-6 md:px-3"
+        onClick={handleSubscribe}
+        disabled={toggleSubscription.isPending}
+      >
+        {subscribed ? '구독중' : '구독'}
       </Button>
     </Link>
   );
