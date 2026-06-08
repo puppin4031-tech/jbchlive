@@ -1,18 +1,24 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import VideoPlayer from '@/components/VideoPlayer';
 import SermonCard from '@/components/SermonCard';
-import { Eye, Calendar, Share2 } from 'lucide-react';
+import { Eye, Calendar, Share2, Heart } from 'lucide-react';
 import SermonChat from '@/components/SermonChat';
 import SermonNotes from '@/components/SermonNotes';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { useFavorites } from '@/hooks/useFavorites';
 
 const VodPage = () => {
   const { sermonId } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { isFavorited, toggleFavorite } = useFavorites();
+  const favorited = sermonId ? isFavorited('sermon', sermonId) : false;
 
   const { data: sermon, isLoading: sermonLoading } = useQuery({
     queryKey: ['sermon', sermonId],
@@ -115,9 +121,33 @@ const VodPage = () => {
               </div>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(window.location.href); toast.success('링크가 복사되었습니다!'); }}>
-            <Share2 className="w-4 h-4 mr-1" /> 공유
-          </Button>
+          <div className="flex gap-2 shrink-0">
+            <Button
+              variant={favorited ? 'secondary' : 'outline'}
+              size="sm"
+              onClick={() => {
+                if (!user) {
+                  toast.info('즐겨찾기는 로그인 후 사용 가능합니다.');
+                  navigate('/login');
+                  return;
+                }
+                if (!sermonId) return;
+                toggleFavorite.mutate(
+                  { itemType: 'sermon', itemId: sermonId },
+                  {
+                    onSuccess: () => toast.success(favorited ? '즐겨찾기에서 제거했습니다.' : '즐겨찾기에 추가했습니다.'),
+                    onError: () => toast.error('처리에 실패했습니다.'),
+                  }
+                );
+              }}
+            >
+              <Heart className={`w-4 h-4 mr-1 ${favorited ? 'fill-destructive text-destructive' : ''}`} />
+              {favorited ? '저장됨' : '즐겨찾기'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(window.location.href); toast.success('링크가 복사되었습니다!'); }}>
+              <Share2 className="w-4 h-4 mr-1" /> 공유
+            </Button>
+          </div>
         </div>
 
         {sermon.description && (
