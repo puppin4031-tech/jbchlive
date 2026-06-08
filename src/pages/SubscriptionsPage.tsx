@@ -45,8 +45,6 @@ const SubscriptionsPage = () => {
     isLive: s.is_live,
     duration: s.duration || undefined,
     channelId: s.channel_id,
-    channelName: s.channels?.name,
-    channelLogoUrl: s.channels?.logo_url,
   });
 
   return (
