@@ -135,7 +135,12 @@ const VodPage = () => {
                 toggleFavorite.mutate(
                   { itemType: 'sermon', itemId: sermonId },
                   {
-                    onSuccess: () => toast.success(favorited ? '즐겨찾기에서 제거했습니다.' : '즐겨찾기에 추가했습니다.'),
+                    onSuccess: () =>
+                      favorited
+                        ? toast.success('즐겨찾기에서 제거했습니다.')
+                        : toast.success('즐겨찾기에 추가했습니다.', {
+                            action: { label: '즐겨찾기 목록', onClick: () => navigate('/favorites') },
+                          }),
                     onError: () => toast.error('처리에 실패했습니다.'),
                   }
                 );

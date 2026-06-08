@@ -33,7 +33,12 @@ const ChannelCard = ({ channel }: ChannelCardProps) => {
       return;
     }
     toggleSubscription.mutate(channel.id, {
-      onSuccess: () => toast.success(subscribed ? '구독이 취소되었습니다.' : '구독되었습니다!'),
+      onSuccess: () =>
+        subscribed
+          ? toast.success('구독이 취소되었습니다.')
+          : toast.success('구독되었습니다!', {
+              action: { label: '구독 목록', onClick: () => navigate('/subscriptions') },
+            }),
       onError: () => toast.error('처리에 실패했습니다.'),
     });
   };

@@ -21,7 +21,8 @@ const SubscriptionsPage = () => {
         .select('*, channels!inner(name, logo_url)')
         .in('channel_id', channelIds)
         .eq('is_live', false)
-        .order('sermon_date', { ascending: false })
+        .order('sermon_date', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
         .limit(60);
       if (error) throw error;
       return data;
@@ -44,8 +45,6 @@ const SubscriptionsPage = () => {
     isLive: s.is_live,
     duration: s.duration || undefined,
     channelId: s.channel_id,
-    channelName: s.channels?.name,
-    channelLogoUrl: s.channels?.logo_url,
   });
 
   return (
