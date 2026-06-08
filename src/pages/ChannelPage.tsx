@@ -6,11 +6,12 @@ import Header from '@/components/Header';
 import SermonCard, { type SermonCardData } from '@/components/SermonCard';
 import CategoryTabs from '@/components/CategoryTabs';
 import ChannelLiveHistory from '@/components/channel/ChannelLiveHistory';
-import { Users, Heart, Radio, Settings, AlertTriangle } from 'lucide-react';
+import { Users, Radio, Settings, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSubscriptions } from '@/hooks/useSubscriptions';
 
 const categories = ['전체', '주일말씀', '수요말씀', '특별집회'];
 
@@ -19,7 +20,8 @@ const ChannelPage = () => {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState('전체');
-  const [subscribed, setSubscribed] = useState(false);
+  const { isSubscribed, toggleSubscription } = useSubscriptions();
+  const subscribed = channelId ? isSubscribed(channelId) : false;
 
   const requireLogin = (action: string) => {
     if (!user) {
@@ -140,19 +142,17 @@ const ChannelPage = () => {
         <div className="flex gap-2">
           <Button
             className={subscribed ? 'bg-muted text-muted-foreground hover:bg-muted/80' : ''}
+            disabled={toggleSubscription.isPending}
             onClick={() => {
               if (requireLogin('구독')) return;
-              setSubscribed(!subscribed);
-              toast.success(subscribed ? '구독이 취소되었습니다.' : '구독되었습니다!');
+              if (!channelId) return;
+              toggleSubscription.mutate(channelId, {
+                onSuccess: () => toast.success(subscribed ? '구독이 취소되었습니다.' : '구독되었습니다!'),
+                onError: () => toast.error('처리에 실패했습니다.'),
+              });
             }}
           >
             {subscribed ? '구독중' : '구독'}
-          </Button>
-          <Button variant="outline" onClick={() => {
-            if (requireLogin('즐겨찾기')) return;
-            toast.info('즐겨찾기 기능 준비 중입니다.');
-          }}>
-            <Heart className="w-4 h-4 mr-1" /> 즐겨찾기
           </Button>
           {canEdit && (
             <Link to={`/channel/${channelId}/settings`}>
@@ -173,7 +173,7 @@ const ChannelPage = () => {
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
-              {sermons?.map(s => <SermonCard key={s.id} sermon={mapSermon(s)} />)}
+              {sermons?.map(s => <SermonCard key={s.id} sermon={mapSermon(s)} compact />)}
             </div>
           )}
           {!sermonsLoading && sermons?.length === 0 && (

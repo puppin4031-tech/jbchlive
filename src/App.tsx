@@ -17,6 +17,7 @@ import CreateChannelPage from "./pages/CreateChannelPage.tsx";
 import ChannelSettingsPage from "./pages/ChannelSettingsPage.tsx";
 import ManageSermonsPage from "./pages/ManageSermonsPage.tsx";
 import FavoritesPage from "./pages/FavoritesPage.tsx";
+import SubscriptionsPage from "./pages/SubscriptionsPage.tsx";
 import MyChannelPage from "./pages/MyChannelPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import SupportPage from "./pages/SupportPage.tsx";
@@ -64,6 +65,9 @@ const App = () => (
               } />
               <Route path="/favorites" element={
                 <ProtectedRoute><FavoritesPage /></ProtectedRoute>
+              } />
+              <Route path="/subscriptions" element={
+                <ProtectedRoute><SubscriptionsPage /></ProtectedRoute>
               } />
               <Route path="/my-channel" element={
                 <ProtectedRoute><MyChannelPage /></ProtectedRoute>

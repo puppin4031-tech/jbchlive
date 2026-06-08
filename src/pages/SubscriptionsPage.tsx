@@ -1,29 +1,32 @@
-import { useAuth } from '@/contexts/AuthContext';
-import { useFavorites } from '@/hooks/useFavorites';
-import { Navigate } from 'react-router-dom';
+import { Navigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import SermonCard, { type SermonCardData } from '@/components/SermonCard';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const FavoritesPage = () => {
+const SubscriptionsPage = () => {
   const { user, loading } = useAuth();
-  const { favorites } = useFavorites();
-
-  const sermonIds = favorites.filter((f) => f.item_type === 'sermon').map((f) => f.item_id);
+  const { subscriptions } = useSubscriptions();
+  const channelIds = subscriptions.map((s) => s.channel_id);
 
   const { data: sermons, isLoading } = useQuery({
-    queryKey: ['fav-sermons-full', sermonIds],
+    queryKey: ['subscribed-sermons', channelIds],
     queryFn: async () => {
-      if (sermonIds.length === 0) return [];
-      const { data } = await supabase
+      if (channelIds.length === 0) return [];
+      const { data, error } = await supabase
         .from('sermons')
         .select('*, channels!inner(name, logo_url)')
-        .in('id', sermonIds);
-      return data || [];
+        .in('channel_id', channelIds)
+        .eq('is_live', false)
+        .order('sermon_date', { ascending: false })
+        .limit(60);
+      if (error) throw error;
+      return data;
     },
-    enabled: sermonIds.length > 0,
+    enabled: channelIds.length > 0,
   });
 
   if (loading) return null;
@@ -49,24 +52,29 @@ const FavoritesPage = () => {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container px-4 py-6 max-w-5xl mx-auto space-y-5">
-        <h1 className="text-xl font-bold text-foreground">즐겨찾기 영상</h1>
+        <h1 className="text-xl font-bold text-foreground">구독한 채널의 새 영상</h1>
 
-        {sermonIds.length === 0 ? (
+        {channelIds.length === 0 ? (
           <p className="text-muted-foreground text-base py-12 text-center">
-            아직 즐겨찾기한 영상이 없습니다.
+            아직 구독한 채널이 없습니다.{' '}
+            <Link to="/" className="text-primary underline">홈에서 채널을 둘러보세요</Link>.
           </p>
         ) : isLoading ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="aspect-video rounded-xl" />)}
           </div>
-        ) : (
+        ) : sermons && sermons.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {sermons?.map((s) => <SermonCard key={s.id} sermon={mapSermon(s)} compact />)}
+            {sermons.map((s) => <SermonCard key={s.id} sermon={mapSermon(s)} compact />)}
           </div>
+        ) : (
+          <p className="text-muted-foreground text-base py-12 text-center">
+            구독한 채널에 업로드된 영상이 없습니다.
+          </p>
         )}
       </main>
     </div>
   );
 };
 
-export default FavoritesPage;
+export default SubscriptionsPage;

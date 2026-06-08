@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, Radio, X, Heart, LogIn, LogOut, Shield, User, PlusCircle, Tv, MessageSquare } from 'lucide-react';
+import { Search, Radio, X, Heart, LogIn, LogOut, Shield, User, PlusCircle, Tv, MessageSquare, Bell } from 'lucide-react';
 import logoImage from '@/assets/logo.png';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -82,6 +82,9 @@ const Header = () => {
                   <p className="text-base md:text-xs text-muted-foreground truncate">{user.email}</p>
                 </div>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/subscriptions')}>
+                  <Bell className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 구독
+                </DropdownMenuItem>
                 <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/favorites')}>
                   <Heart className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 즐겨찾기
                 </DropdownMenuItem>
