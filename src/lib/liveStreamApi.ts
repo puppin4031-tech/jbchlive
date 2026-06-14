@@ -38,6 +38,11 @@ export const getStatus = (
 /** HLS 재생 URL 조회 */
 export const getHLSUrl = (channelId: string) => invoke("getHLSUrl", { channelId });
 
+/** 장시간+저시청자 자동 종료 확인 프롬프트에 [계속 송출] 응답 */
+export const confirmKeepalive = (channelId: string) =>
+  invoke("confirmKeepalive", { channelId });
+
+
 /**
  * 저장된 RTMP URI를 OBS용 (서버 / 스트림 키)로 분리.
  * 예: rtmp://1.2.3.4:1935/live/abc123 → { server: "rtmp://1.2.3.4:1935/live", streamKey: "abc123" }
