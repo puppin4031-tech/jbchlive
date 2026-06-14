@@ -46,6 +46,7 @@ export type Database = {
       channels: {
         Row: {
           auto_stop_idle_minutes: number
+          auto_stop_max_minutes: number
           created_at: string
           description: string | null
           gcp_channel_state: string | null
@@ -56,8 +57,12 @@ export type Database = {
           is_approved: boolean
           is_live: boolean
           is_suspended: boolean
+          keepalive_confirmed_at: string | null
+          keepalive_grace_minutes: number
+          keepalive_prompt_sent_at: string | null
           live_started_at: string | null
           logo_url: string | null
+          low_viewer_threshold: number
           name: string
           owner_id: string | null
           scheduled_end_at: string | null
@@ -69,6 +74,7 @@ export type Database = {
         }
         Insert: {
           auto_stop_idle_minutes?: number
+          auto_stop_max_minutes?: number
           created_at?: string
           description?: string | null
           gcp_channel_state?: string | null
@@ -79,8 +85,12 @@ export type Database = {
           is_approved?: boolean
           is_live?: boolean
           is_suspended?: boolean
+          keepalive_confirmed_at?: string | null
+          keepalive_grace_minutes?: number
+          keepalive_prompt_sent_at?: string | null
           live_started_at?: string | null
           logo_url?: string | null
+          low_viewer_threshold?: number
           name: string
           owner_id?: string | null
           scheduled_end_at?: string | null
@@ -92,6 +102,7 @@ export type Database = {
         }
         Update: {
           auto_stop_idle_minutes?: number
+          auto_stop_max_minutes?: number
           created_at?: string
           description?: string | null
           gcp_channel_state?: string | null
@@ -102,8 +113,12 @@ export type Database = {
           is_approved?: boolean
           is_live?: boolean
           is_suspended?: boolean
+          keepalive_confirmed_at?: string | null
+          keepalive_grace_minutes?: number
+          keepalive_prompt_sent_at?: string | null
           live_started_at?: string | null
           logo_url?: string | null
+          low_viewer_threshold?: number
           name?: string
           owner_id?: string | null
           scheduled_end_at?: string | null
