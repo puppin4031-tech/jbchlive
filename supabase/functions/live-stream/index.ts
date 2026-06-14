@@ -641,42 +641,108 @@ serve(async (req) => {
       };
 
       if (action === "autoStopIdleChannels") {
-        // Stop channels that are marked live but have no RTMP input (AWAITING_INPUT)
+        // (A) Stop channels that are marked live but have no RTMP input (AWAITING_INPUT)
         // for longer than the channel's auto_stop_idle_minutes setting.
+        // (B) Long-running + low-viewer keepalive prompt + auto-stop on no response.
         const { data: liveChannels } = await serviceClient
           .from("channels")
-          .select("id, live_started_at, auto_stop_idle_minutes")
+          .select(
+            "id, owner_id, name, live_started_at, auto_stop_idle_minutes, auto_stop_max_minutes, low_viewer_threshold, keepalive_grace_minutes, keepalive_prompt_sent_at, keepalive_confirmed_at",
+          )
           .eq("is_live", true);
 
         const stopped: string[] = [];
-        const now = Date.now();
+        const prompted: string[] = [];
+        const nowMs = Date.now();
+        const presenceCutoff = new Date(nowMs - 2 * 60 * 1000).toISOString();
+
         for (const ch of liveChannels ?? []) {
           const idleMin = ch.auto_stop_idle_minutes ?? 15;
           const startedAt = ch.live_started_at ? new Date(ch.live_started_at).getTime() : 0;
-          const elapsedMin = (now - startedAt) / 60000;
-          if (elapsedMin < idleMin) continue;
+          const elapsedMin = (nowMs - startedAt) / 60000;
 
-          const gcpChannelId = gcpResourceId(ch.id, "channel");
-          try {
-            const gcpCh = await getChannelGCP(gcpChannelId).catch(() => null);
-            const state = gcpCh?.streamingState;
-            // Stop if GCP says no input flowing
-            if (state === "AWAITING_INPUT" || state === "PENDING" || !state) {
+          // --- (A) RTMP-idle auto-stop (existing behavior) ---
+          let didIdleStop = false;
+          if (elapsedMin >= idleMin) {
+            const gcpChannelId = gcpResourceId(ch.id, "channel");
+            try {
+              const gcpCh = await getChannelGCP(gcpChannelId).catch(() => null);
+              const state = gcpCh?.streamingState;
+              if (state === "AWAITING_INPUT" || state === "PENDING" || !state) {
+                await stopOne(
+                  ch.id,
+                  `자동 종료: ${idleMin}분간 RTMP 입력 없음 (상태: ${state ?? "UNKNOWN"})`,
+                  "auto_idle",
+                );
+                stopped.push(ch.id);
+                didIdleStop = true;
+              }
+            } catch (e) {
+              console.error("autoStop(idle) error for", ch.id, e);
+            }
+          }
+          if (didIdleStop) continue;
+
+          // --- (B) Long-running + low-viewer keepalive prompt ---
+          const maxMin = ch.auto_stop_max_minutes ?? 180;
+          const graceMin = ch.keepalive_grace_minutes ?? 10;
+          const threshold = ch.low_viewer_threshold ?? 2;
+          const confirmedAt = ch.keepalive_confirmed_at
+            ? new Date(ch.keepalive_confirmed_at).getTime()
+            : 0;
+          const effectiveStart = Math.max(startedAt, confirmedAt);
+          const effectiveElapsedMin = (nowMs - effectiveStart) / 60000;
+          if (effectiveElapsedMin < maxMin) continue;
+
+          // Count active viewers (last 2 min)
+          const { count: viewerCount } = await serviceClient
+            .from("viewer_presence")
+            .select("viewer_key", { count: "exact", head: true })
+            .eq("channel_id", ch.id)
+            .gt("last_seen_at", presenceCutoff);
+          if ((viewerCount ?? 0) > threshold) continue;
+
+          const promptSentAt = ch.keepalive_prompt_sent_at
+            ? new Date(ch.keepalive_prompt_sent_at).getTime()
+            : 0;
+          const promptActive = promptSentAt > confirmedAt;
+
+          if (!promptActive) {
+            // First time: send notification + mark prompt sent
+            if (ch.owner_id) {
+              await serviceClient.from("notifications").insert({
+                user_id: ch.owner_id,
+                type: "live_keepalive_prompt",
+                title: "라이브 계속 진행하시겠습니까?",
+                body: `${Math.floor(effectiveElapsedMin)}분째 송출 중이며 시청자가 거의 없습니다. ${graceMin}분 내 응답이 없으면 자동 종료됩니다.`,
+                link: "/my-channel",
+                related_id: ch.id,
+              });
+            }
+            await serviceClient
+              .from("channels")
+              .update({ keepalive_prompt_sent_at: new Date().toISOString() })
+              .eq("id", ch.id);
+            prompted.push(ch.id);
+          } else if ((nowMs - promptSentAt) / 60000 >= graceMin) {
+            // Grace expired: auto-stop
+            try {
               await stopOne(
                 ch.id,
-                `자동 종료: ${idleMin}분간 RTMP 입력 없음 (상태: ${state ?? "UNKNOWN"})`,
-                "auto_idle",
+                `${graceMin}분간 응답 없음으로 자동 종료 (저시청 + 장시간 송출)`,
+                "auto_unattended",
               );
               stopped.push(ch.id);
+            } catch (e) {
+              console.error("autoStop(unattended) error for", ch.id, e);
             }
-          } catch (e) {
-            console.error("autoStop error for", ch.id, e);
           }
         }
-        return new Response(JSON.stringify({ stopped }), {
+        return new Response(JSON.stringify({ stopped, prompted }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
 
       if (action === "scheduledStartChannels") {
         const nowIso = new Date().toISOString();
