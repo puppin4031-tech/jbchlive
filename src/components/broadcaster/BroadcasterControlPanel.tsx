@@ -183,7 +183,16 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
   // ---------- Inline (MyChannelPage card) ----------
   return (
     <>
+      {isLive && (
+        <KeepaliveDialog
+          channelId={channel.id}
+          promptSentAt={channel.keepalive_prompt_sent_at}
+          confirmedAt={channel.keepalive_confirmed_at}
+          graceMinutes={channel.keepalive_grace_minutes ?? 10}
+        />
+      )}
       <Card className="p-5 space-y-4">
+
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <Badge className={`${display.badgeClass} text-sm px-3 py-1`}>{display.label}</Badge>
