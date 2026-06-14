@@ -1023,7 +1023,22 @@ serve(async (req) => {
         break;
       }
 
+      case "confirmKeepalive": {
+        if (!channelId) throw new Error("channelId required");
+        await verifyChannelAccess(user, channelId);
+        await user.serviceClient
+          .from("channels")
+          .update({
+            keepalive_confirmed_at: new Date().toISOString(),
+            keepalive_prompt_sent_at: null,
+          })
+          .eq("id", channelId);
+        result = { ok: true };
+        break;
+      }
+
       default:
+
         throw new Error(`Unknown action: ${action}`);
     }
 
