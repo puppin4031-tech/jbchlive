@@ -7,6 +7,8 @@ import { Play, Square, Loader2, Settings, AlertTriangle, Radio } from 'lucide-re
 import { useBroadcasterChannel, formatElapsed, type BroadcastPhase } from '@/hooks/useBroadcasterChannel';
 import StartLiveDialog from './StartLiveDialog';
 import StopLiveDialog from './StopLiveDialog';
+import KeepaliveDialog from './KeepaliveDialog';
+
 
 interface PhaseDisplay {
   label: string;
@@ -94,7 +96,16 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
   if (variant === 'compact') {
     return (
       <>
+        {isLive && (
+          <KeepaliveDialog
+            channelId={channel.id}
+            promptSentAt={channel.keepalive_prompt_sent_at}
+            confirmedAt={channel.keepalive_confirmed_at}
+            graceMinutes={channel.keepalive_grace_minutes ?? 10}
+          />
+        )}
         <Card className="p-3 shadow-lg border-2 min-w-[16rem] max-w-xs space-y-2 bg-card/95 backdrop-blur">
+
           <div className="flex items-center justify-between gap-2">
             <Badge className={`${display.badgeClass} text-xs px-2 py-0.5`}>
               <Radio className="w-3 h-3 mr-1" />
@@ -172,7 +183,16 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
   // ---------- Inline (MyChannelPage card) ----------
   return (
     <>
+      {isLive && (
+        <KeepaliveDialog
+          channelId={channel.id}
+          promptSentAt={channel.keepalive_prompt_sent_at}
+          confirmedAt={channel.keepalive_confirmed_at}
+          graceMinutes={channel.keepalive_grace_minutes ?? 10}
+        />
+      )}
       <Card className="p-5 space-y-4">
+
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <Badge className={`${display.badgeClass} text-sm px-3 py-1`}>{display.label}</Badge>
