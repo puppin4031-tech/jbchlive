@@ -7,6 +7,8 @@ import { Play, Square, Loader2, Settings, AlertTriangle, Radio } from 'lucide-re
 import { useBroadcasterChannel, formatElapsed, type BroadcastPhase } from '@/hooks/useBroadcasterChannel';
 import StartLiveDialog from './StartLiveDialog';
 import StopLiveDialog from './StopLiveDialog';
+import KeepaliveDialog from './KeepaliveDialog';
+
 
 interface PhaseDisplay {
   label: string;
