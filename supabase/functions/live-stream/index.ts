@@ -643,18 +643,20 @@ serve(async (req) => {
       };
 
       if (action === "autoStopIdleChannels") {
-        // (A) Stop channels that are marked live but have no RTMP input (AWAITING_INPUT)
-        // for longer than the channel's auto_stop_idle_minutes setting.
+        // (A) Stop channels marked live with no RTMP input (AWAITING_INPUT) > auto_stop_idle_minutes.
         // (B) Long-running + low-viewer keepalive prompt + auto-stop on no response.
+        // (C) OBS disconnect detection: once RTMP has streamed, dropping to AWAITING_INPUT
+        //     triggers a 1-minute (configurable) grace then auto-stop.
         const { data: liveChannels } = await serviceClient
           .from("channels")
           .select(
-            "id, owner_id, name, live_started_at, auto_stop_idle_minutes, auto_stop_max_minutes, low_viewer_threshold, keepalive_grace_minutes, keepalive_prompt_sent_at, keepalive_confirmed_at",
+            "id, owner_id, name, live_started_at, stream_url, auto_stop_idle_minutes, auto_stop_max_minutes, auto_stop_disconnect_minutes, rtmp_disconnected_at, low_viewer_threshold, keepalive_grace_minutes, keepalive_prompt_sent_at, keepalive_confirmed_at",
           )
           .eq("is_live", true);
 
         const stopped: string[] = [];
         const prompted: string[] = [];
+        const disconnected: string[] = [];
         const nowMs = Date.now();
         const presenceCutoff = new Date(nowMs - 2 * 60 * 1000).toISOString();
 
@@ -663,13 +665,65 @@ serve(async (req) => {
           const startedAt = ch.live_started_at ? new Date(ch.live_started_at).getTime() : 0;
           const elapsedMin = (nowMs - startedAt) / 60000;
 
-          // --- (A) RTMP-idle auto-stop (existing behavior) ---
+          // Fetch current GCP state once per channel (used by both A and C)
+          const gcpChannelId = gcpResourceId(ch.id, "channel");
+          const gcpCh = await getChannelGCP(gcpChannelId).catch(() => null);
+          const state = gcpCh?.streamingState;
+
+          // --- (C) OBS disconnect fast-path ---
+          // Only applies if RTMP was actually streaming at some point (stream_url set).
+          const hadStream = !!ch.stream_url;
+          const disconnectMin = ch.auto_stop_disconnect_minutes ?? 1;
+          const isAwaiting = state === "AWAITING_INPUT" || state === "PENDING";
+          const disconnectedAtMs = ch.rtmp_disconnected_at
+            ? new Date(ch.rtmp_disconnected_at).getTime()
+            : 0;
+
+          if (hadStream && state === "STREAMING" && disconnectedAtMs > 0) {
+            // Reconnected — clear flag
+            await serviceClient
+              .from("channels")
+              .update({ rtmp_disconnected_at: null })
+              .eq("id", ch.id);
+          } else if (hadStream && isAwaiting && disconnectedAtMs === 0) {
+            // First disconnect detection — mark + warn broadcaster
+            await serviceClient
+              .from("channels")
+              .update({ rtmp_disconnected_at: new Date().toISOString() })
+              .eq("id", ch.id);
+            if (ch.owner_id) {
+              await serviceClient.from("notifications").insert({
+                user_id: ch.owner_id,
+                type: "live_disconnect_warning",
+                title: "OBS 연결이 끊겼습니다",
+                body: `${disconnectMin}분 내 재연결되지 않으면 라이브가 자동 종료됩니다.`,
+                link: "/my-channel",
+                related_id: ch.id,
+              });
+            }
+            disconnected.push(ch.id);
+            continue;
+          } else if (hadStream && isAwaiting && disconnectedAtMs > 0) {
+            // Still disconnected — check grace
+            if ((nowMs - disconnectedAtMs) / 60000 >= disconnectMin) {
+              try {
+                await stopOne(
+                  ch.id,
+                  "OBS 연결 끊김으로 자동 종료",
+                  "auto_disconnect",
+                );
+                stopped.push(ch.id);
+              } catch (e) {
+                console.error("autoStop(disconnect) error for", ch.id, e);
+              }
+              continue;
+            }
+          }
+
+          // --- (A) RTMP-idle fallback (never-connected case) ---
           let didIdleStop = false;
           if (elapsedMin >= idleMin) {
-            const gcpChannelId = gcpResourceId(ch.id, "channel");
             try {
-              const gcpCh = await getChannelGCP(gcpChannelId).catch(() => null);
-              const state = gcpCh?.streamingState;
               if (state === "AWAITING_INPUT" || state === "PENDING" || !state) {
                 await stopOne(
                   ch.id,
@@ -740,7 +794,7 @@ serve(async (req) => {
             }
           }
         }
-        return new Response(JSON.stringify({ stopped, prompted }), {
+        return new Response(JSON.stringify({ stopped, prompted, disconnected }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
