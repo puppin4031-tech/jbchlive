@@ -117,6 +117,13 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
             )}
           </div>
           <p className="text-xs text-muted-foreground line-clamp-1">{display.description}</p>
+          {isLive && (
+            <DisconnectWarning
+              disconnectedAt={(channel as any).rtmp_disconnected_at}
+              graceMinutes={(channel as any).auto_stop_disconnect_minutes ?? 1}
+              compact
+            />
+          )}
           {(lastError || (channel.gcp_last_error && phase === 'error')) && (
             <div className="flex gap-1 text-xs text-destructive">
               <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
