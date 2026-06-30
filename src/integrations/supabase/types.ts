@@ -45,6 +45,7 @@ export type Database = {
       }
       channels: {
         Row: {
+          auto_stop_disconnect_minutes: number
           auto_stop_idle_minutes: number
           auto_stop_max_minutes: number
           created_at: string
@@ -65,6 +66,7 @@ export type Database = {
           low_viewer_threshold: number
           name: string
           owner_id: string | null
+          rtmp_disconnected_at: string | null
           scheduled_end_at: string | null
           scheduled_start_at: string | null
           stream_url: string | null
@@ -73,6 +75,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auto_stop_disconnect_minutes?: number
           auto_stop_idle_minutes?: number
           auto_stop_max_minutes?: number
           created_at?: string
@@ -93,6 +96,7 @@ export type Database = {
           low_viewer_threshold?: number
           name: string
           owner_id?: string | null
+          rtmp_disconnected_at?: string | null
           scheduled_end_at?: string | null
           scheduled_start_at?: string | null
           stream_url?: string | null
@@ -101,6 +105,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auto_stop_disconnect_minutes?: number
           auto_stop_idle_minutes?: number
           auto_stop_max_minutes?: number
           created_at?: string
@@ -121,6 +126,7 @@ export type Database = {
           low_viewer_threshold?: number
           name?: string
           owner_id?: string | null
+          rtmp_disconnected_at?: string | null
           scheduled_end_at?: string | null
           scheduled_start_at?: string | null
           stream_url?: string | null
