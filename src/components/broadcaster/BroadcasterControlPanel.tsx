@@ -8,6 +8,7 @@ import { useBroadcasterChannel, formatElapsed, type BroadcastPhase } from '@/hoo
 import StartLiveDialog from './StartLiveDialog';
 import StopLiveDialog from './StopLiveDialog';
 import KeepaliveDialog from './KeepaliveDialog';
+import DisconnectWarning from './DisconnectWarning';
 
 
 interface PhaseDisplay {
