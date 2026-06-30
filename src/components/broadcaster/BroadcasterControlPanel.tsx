@@ -217,6 +217,13 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
 
         <p className="text-sm text-muted-foreground">{display.description}</p>
 
+        {isLive && (
+          <DisconnectWarning
+            disconnectedAt={(channel as any).rtmp_disconnected_at}
+            graceMinutes={(channel as any).auto_stop_disconnect_minutes ?? 1}
+          />
+        )}
+
         {(lastError || channel.gcp_last_error) && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
             <div className="flex gap-2 items-start">
