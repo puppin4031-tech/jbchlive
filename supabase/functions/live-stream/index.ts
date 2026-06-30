@@ -794,7 +794,7 @@ serve(async (req) => {
             }
           }
         }
-        return new Response(JSON.stringify({ stopped, prompted }), {
+        return new Response(JSON.stringify({ stopped, prompted, disconnected }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
