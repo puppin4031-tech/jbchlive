@@ -1,71 +1,85 @@
-# OBS 종료 → 라이브 채널 자동 종료 (1분 grace)
+# 커스텀 도메인 접속 설정 가이드
 
-## 배경
+## 왜 지금 안 되고 있는지
 
-OBS를 끄면 GCP는 즉시 `AWAITING_INPUT` 상태가 되지만, 현재는 **15분** 후에야 자동 종료됨. cron이 2분 주기라 실제론 더 늦어짐. (웹사이트 종료는 OBS→GCP 송출과 무관하므로 OBS 끊김 감지 하나로 두 시나리오 모두 커버됨.)
+Cloudflare에 넣으려던 값이 `jbchlive.lovable.app`이었다면 절대 등록이 안 됩니다. 이유:
 
-목표: OBS 끊김 후 약 1분 내 자동 종료 + 종료 1분 전 송출자 알림.
-
-## 동작 흐름
+- `.lovable.app`은 **Lovable 소유의 도메인**입니다. Cloudflare는 "당신이 소유권을 증명할 수 있는 루트 도메인"만 받아들입니다.
+- 즉 Cloudflare에는 반드시 **내가 직접 구매한 루트 도메인**(예: `pajujbch.org`, `mychurch.com`)을 넣어야 합니다.
+- Lovable 주소는 그대로 살아있으면서, 그 위에 "별칭"으로 커스텀 도메인을 얹는 구조입니다.
 
 ```text
-T+0s   OBS 종료 → GCP 상태: STREAMING → AWAITING_INPUT
-T+30s  cron 첫 감지 → rtmp_disconnected_at = now() 기록
-       → 송출자에게 알림: "OBS 연결 끊김. 1분 내 재연결되지 않으면 자동 종료됩니다"
-T+90s  cron 재실행 → 끊김 60초 경과 + 여전히 AWAITING_INPUT → 자동 종료
-       → 송출자에게 알림: "OBS 연결 끊김으로 자동 종료되었습니다"
-
-OBS 재연결 시: 상태 STREAMING 복귀 → rtmp_disconnected_at = NULL → 알림 취소
+사용자 브라우저
+      │  www.mychurch.com 입력
+      ▼
+Cloudflare DNS (내 도메인 관리)
+      │  A 레코드 → 185.158.133.1
+      ▼
+Lovable 호스팅 (jbchlive.lovable.app 내용을 서빙)
 ```
 
-## 구현
+두 주소 모두 동일한 사이트를 엽니다. `jbchlive.lovable.app`은 자동으로 커스텀 도메인으로 리다이렉트되도록 설정 가능합니다.
 
-### 1. DB 마이그레이션 (channels 컬럼 2개 추가)
+## 진행 절차
 
-- `rtmp_disconnected_at timestamptz` — RTMP 끊김 최초 감지 시각 (재연결 시 NULL)
-- `auto_stop_disconnect_minutes int DEFAULT 1` — 끊김 후 자동 종료까지 grace (기본 1분)
+### 1단계 — 도메인 확보 (택 1)
 
-기존 `auto_stop_idle_minutes`(15분)는 폴백으로 유지 — RTMP가 한 번도 안 들어온 경우(OBS 시작 안 함) 대응.
+**옵션 A: Lovable에서 바로 구매 (가장 간단, 권장)**
+- Project Settings → Project → Domains → **Buy new domain**
+- 원하는 이름 검색 → 결제 → 자동으로 프로젝트에 연결됨
+- Cloudflare 설정 불필요, DNS도 Lovable UI에서 관리
 
-### 2. cron 주기 단축
+**옵션 B: 이미 산 도메인이 있거나, Cloudflare Registrar에서 새로 구매**
+- 도메인을 먼저 확보한 뒤 2단계로
 
-`pg_cron`에서 `live-stream/autoStopIdleChannels` 호출을 **2분 → 30초**로 변경 (1분 grace를 의미있게 만들기 위해).
+### 2단계 — Cloudflare에서 도메인 등록 (옵션 B인 경우만)
+1. Cloudflare 계정 → **Add a Site** → 내 루트 도메인 입력 (예: `mychurch.com`, `www` 붙이지 않음)
+2. Free 플랜 선택
+3. Cloudflare가 보여주는 2개의 네임서버(NS)를 도메인 등록업체(가비아, 후이즈 등)의 네임서버 설정에 입력
+4. 전파 완료(수 분~수 시간) 대기 → Cloudflare 대시보드에 "Active" 표시
 
-### 3. Edge Function `autoStopIdleChannels` 로직 추가
+### 3단계 — Lovable에서 Connect Domain
+1. Project Settings → Project → Domains → **Connect Domain**
+2. 도메인 입력: `mychurch.com` (프로토콜/슬래시 없이, 소문자)
+3. **Advanced 펼치기 → "Domain uses Cloudflare or a similar proxy" 체크**
+4. Lovable이 CNAME + TXT 값 제공 → 다음 단계에서 사용
+5. `www` 서브도메인도 원한다면 별도로 한 번 더 Connect (`www.mychurch.com`)
 
-기존 RTMP-idle (A), keepalive (B) 위에 **새 블록 (C) "RTMP 끊김 즉시 감지"** 추가:
+### 4단계 — Cloudflare DNS 레코드 추가
+Cloudflare 대시보드 → 해당 도메인 → **DNS → Records → Add record**
 
-각 `is_live=true` 채널마다 GCP 상태 조회 후:
+```text
+Type: CNAME  Name: @    Target: <Lovable이 준 CNAME 값>   Proxy: ON (주황 구름)
+Type: CNAME  Name: www  Target: <Lovable이 준 CNAME 값>   Proxy: ON
+Type: TXT    Name: _lovable   Content: lovable_verify=<Lovable이 준 값>   Proxy: DNS only
+```
 
-| 현재 GCP 상태 | `rtmp_disconnected_at` | 동작 |
-|---|---|---|
-| `STREAMING` | NOT NULL | 재연결 — `rtmp_disconnected_at = NULL`, 알림 취소 |
-| `AWAITING_INPUT` (RTMP 한 번이라도 연결됐던 채널: stream_url 존재) | NULL | 끊김 최초 감지 — `rtmp_disconnected_at = now()`, 송출자에게 `live_disconnect_warning` 알림 |
-| `AWAITING_INPUT` (stream_url 존재) | NOT NULL & ≥ `auto_stop_disconnect_minutes` | 자동 종료 — `stopOne(reason="OBS 연결 끊김으로 자동 종료", endReason="auto_disconnect")` |
+주의사항:
+- 기존에 다른 A/AAAA/CNAME 레코드가 `@` 또는 `www`에 있으면 **먼저 삭제**
+- Cloudflare **SSL/TLS 모드는 반드시 "Full" 이상** (Flexible이면 리다이렉트 루프 발생)
+- CAA 레코드가 있다면 Let's Encrypt 허용
 
-조건: `stream_url`이 채워진 적이 있는 채널만 — OBS 처음 켜기 전(`STARTING`/초기 `AWAITING_INPUT`)에는 적용 안 함.
+### 5단계 — Lovable에서 Verify
+- Lovable Domains 화면 → **Verify** 클릭
+- 상태 흐름: `Verifying` → `Setting up` → `Active` (SSL 자동 발급)
+- 최대 72시간 걸리지만 보통 5~30분
 
-### 4. 알림
+## 자주 걸리는 함정
 
-- 새 type `live_disconnect_warning` (NotificationBell이 unknown type도 표시하므로 표시 로직 변경 불필요, 한국어 라벨만 추가)
-- 종료 알림은 기존 `notify_live_lifecycle` 트리거가 `is_live false`로 자동 처리
+| 증상 | 원인 | 해결 |
+|------|------|------|
+| "도메인이 잘못됨" | `.lovable.app`을 입력함 | 내 소유 루트 도메인 사용 |
+| Verify 실패 | Cloudflare 프록시 ON인데 Advanced 옵션 미체크 | Advanced에서 프록시 옵션 체크 |
+| 리다이렉트 루프 | Cloudflare SSL/TLS = Flexible | Full로 변경 |
+| `www`만 열림 or `@`만 열림 | 한쪽만 Connect 함 | 양쪽 모두 Connect + DNS 등록 |
+| DNS 전파 안 됨 | 등록업체 NS 변경 미완료 | https://dnschecker.org 로 NS 확인 |
 
-### 5. 프론트엔드 (BroadcasterControlPanel)
+## 이 계획에는 코드 변경 없음
+전부 인프라(도메인/DNS) 설정 작업입니다. 앱 코드 수정 불필요, 방송 송출 핵심 경로에도 영향 없음.
 
-`channel.rtmp_disconnected_at`이 NOT NULL이고 `is_live=true`일 때:
-- 상단에 노란 경고 배너: "⚠ OBS 연결이 끊겼습니다. {남은초}초 내 재연결되지 않으면 자동 종료됩니다."
-- Realtime 구독으로 이미 channels UPDATE 받고 있어 추가 작업 없음
+## 다음 액션이 필요합니다
+어떤 도메인을 쓰실 건지 알려주세요:
+1. **Lovable에서 새로 구매**할지 (옵션 A)
+2. **이미 소유한 도메인 이름**이 무엇인지, 그리고 그게 이미 Cloudflare에 등록되어 있는지 (옵션 B)
 
-## 보호 장치
-
-- `auto_stop_disconnect_minutes`는 채널별 컬럼 — 향후 송출자가 조정 가능 (이번엔 UI 없이 기본 1분)
-- 일시적 네트워크 끊김(<1분)이면 재연결되어 종료 안 됨
-- 기존 `auto_stop_idle_minutes`(15분)와 keepalive(3시간) 로직 그대로 유지 — 다중 안전망
-
-## 변경 파일
-
-- `supabase/migrations/<new>.sql` — 컬럼 2개 추가
-- `pg_cron` 스케줄 업데이트 (insert 도구로 별도 처리)
-- `supabase/functions/live-stream/index.ts` — `autoStopIdleChannels`에 블록 (C) 추가
-- `src/components/broadcaster/BroadcasterControlPanel.tsx` — 끊김 경고 배너
-- `src/components/NotificationBell.tsx` — `live_disconnect_warning` 라벨 (필요 시)
+답을 주시면 그 상황에 맞춰 위 단계 중 남은 부분을 세부적으로 안내드립니다.
