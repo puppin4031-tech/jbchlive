@@ -557,6 +557,8 @@ const RATE_LIMITS: Record<string, { max: number; windowSec: number }> = {
   getStatus: { max: 60, windowSec: 60 },
   getHLSUrl: { max: 30, windowSec: 60 },
   confirmKeepalive: { max: 10, windowSec: 60 },
+  heartbeatBroadcaster: { max: 10, windowSec: 60 },
+
 
   viewerHeartbeat: { max: 4, windowSec: 60 },
   autoStopIdleChannels: { max: 30, windowSec: 60 },
