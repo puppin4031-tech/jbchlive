@@ -1040,6 +1040,17 @@ serve(async (req) => {
         break;
       }
 
+      case "heartbeatBroadcaster": {
+        if (!channelId) throw new Error("channelId required");
+        await user.serviceClient
+          .from("channels")
+          .update({ broadcaster_last_seen_at: new Date().toISOString() })
+          .eq("id", channelId);
+        result = { ok: true };
+        break;
+      }
+
+
       case "getStatus": {
         if (!channelId) throw new Error("channelId required");
         const gcpChannelId = gcpResourceId(channelId, "channel");
