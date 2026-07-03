@@ -223,10 +223,19 @@ const LivePage = () => {
                 {liveSermon?.preacher && ` · ${liveSermon.preacher}`}
               </p>
               {isLive && (
-                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                  <Users className="w-3 h-3" /> {viewerCount.toLocaleString()}명 시청 중
-                </p>
+                <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                  <span className="inline-flex items-center gap-1">
+                    <Users className="w-3 h-3" />
+                    Current Viewers: {viewerCount.toLocaleString()}
+                  </span>
+                  <span>Peak: {(channel.peak_viewers ?? 0).toLocaleString()}</span>
+                  <span>
+                    Avg Watch Time: {Math.floor((channel.avg_watch_seconds ?? 0) / 60)}m{' '}
+                    {(channel.avg_watch_seconds ?? 0) % 60}s
+                  </span>
+                </div>
               )}
+
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={handleShare} className="shrink-0">
