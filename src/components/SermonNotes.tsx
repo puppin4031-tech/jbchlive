@@ -82,7 +82,6 @@ const SermonNotes = ({ sermonId, channelOwnerId }: Props) => {
     if (!user) { toast.error('로그인이 필요합니다'); navigate('/login'); return; }
     const text = content.trim();
     if (!text && !file) { toast.error('내용 또는 이미지를 추가해주세요'); return; }
-    if (text.length > 2000) { toast.error('2000자 이내로 입력해주세요'); return; }
     setSubmitting(true);
     try {
       let image_url: string | null = null;
@@ -198,7 +197,6 @@ const SermonNotes = ({ sermonId, channelOwnerId }: Props) => {
                   onChange={(e) => setContent(e.target.value)}
                   placeholder="이 영상에 대한 노트를 남겨주세요…"
                   rows={2}
-                  maxLength={2000}
                   className="resize-none"
                 />
                 <div className="flex items-center justify-between mt-2">
