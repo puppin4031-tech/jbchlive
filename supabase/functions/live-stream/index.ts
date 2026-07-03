@@ -371,14 +371,23 @@ async function provisionChannel(
     // Best-effort cleanup: if a channel already exists (possibly from a failed
     // earlier attempt with a different mux config), delete it before recreating.
     try {
-      await getChannelGCP(gcpChannelId);
+      const existingCh = await getChannelGCP(gcpChannelId);
+      // Guard: never destroy a live channel — admin must stop it first.
+      const state = existingCh?.streamingState;
+      if (state && state !== "STOPPED" && state !== "STREAMING_STATE_UNSPECIFIED") {
+        throw new Error(
+          `Channel is currently ${state}. Stop the live broadcast before reprovisioning.`
+        );
+      }
       // Exists — delete to ensure fresh creation with current mux config
       await deleteChannelGCP(gcpChannelId).catch((e) =>
         console.error("Cleanup deleteChannel failed:", e)
       );
-    } catch {
-      // Channel does not exist, nothing to clean up
+    } catch (e) {
+      // If it was our explicit guard, rethrow; otherwise channel simply doesn't exist.
+      if (e instanceof Error && e.message.startsWith("Channel is currently")) throw e;
     }
+
     await createChannel(gcpChannelId, inputId);
 
     // Step 3: Save to DB
