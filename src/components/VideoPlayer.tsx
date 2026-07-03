@@ -104,10 +104,22 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
       const hls = new Hls();
       hls.loadSource(url);
       hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) => {
         setError(null);
+        // Prefer 720p track when available (single-quality provisioning target).
+        try {
+          const levels = data?.levels ?? hls.levels ?? [];
+          const idx720 = levels.findIndex((l) => l?.height === 720);
+          if (idx720 >= 0) {
+            hls.currentLevel = idx720;
+            hls.loadLevel = idx720;
+          }
+        } catch {
+          // If level pinning fails, leave hls.js in auto mode.
+        }
         if (autoPlay) video.play().catch(() => {});
       });
+
 
       hls.on(Hls.Events.ERROR, async (_evt, data: ErrorData) => {
         if (!data.fatal) return;
