@@ -5,10 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Play, Square, Loader2, Settings, AlertTriangle, Radio } from 'lucide-react';
 import { useBroadcasterChannel, formatElapsed, type BroadcastPhase } from '@/hooks/useBroadcasterChannel';
+import { useBroadcasterPresence } from '@/hooks/useBroadcasterPresence';
 import StartLiveDialog from './StartLiveDialog';
 import StopLiveDialog from './StopLiveDialog';
 import KeepaliveDialog from './KeepaliveDialog';
 import DisconnectWarning from './DisconnectWarning';
+
 
 
 interface PhaseDisplay {
@@ -61,11 +63,15 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
 
   const isLive = phase === 'streaming' || phase === 'awaiting-input' || phase === 'starting';
 
+  // Layer 1 zombie-stream defense: broadcaster browser heartbeat
+  useBroadcasterPresence(channel?.id, isLive);
+
   useEffect(() => {
     if (!isLive) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [isLive]);
+
 
   // Open dialog automatically when start is triggered & not yet ready
   useEffect(() => {

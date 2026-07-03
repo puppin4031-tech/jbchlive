@@ -42,6 +42,11 @@ export const getHLSUrl = (channelId: string) => invoke("getHLSUrl", { channelId 
 export const confirmKeepalive = (channelId: string) =>
   invoke("confirmKeepalive", { channelId });
 
+/** Broadcaster browser heartbeat (Layer 1 zombie stream defense) */
+export const heartbeatBroadcaster = (channelId: string) =>
+  invoke("heartbeatBroadcaster", { channelId });
+
+
 
 /**
  * 저장된 RTMP URI를 OBS용 (서버 / 스트림 키)로 분리.

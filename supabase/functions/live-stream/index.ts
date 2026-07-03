@@ -222,11 +222,12 @@ async function createChannel(channelId: string, inputId: string) {
           videoStream: {
             h264: {
               profile: "main",
-              bitrateBps: 1000000,
-              frameRate: 30,
+              bitrateBps: 1500000,
+              frameRate: 24,
               widthPixels: 1280,
               heightPixels: 720,
             },
+
 
           },
         },
@@ -556,6 +557,8 @@ const RATE_LIMITS: Record<string, { max: number; windowSec: number }> = {
   getStatus: { max: 60, windowSec: 60 },
   getHLSUrl: { max: 30, windowSec: 60 },
   confirmKeepalive: { max: 10, windowSec: 60 },
+  heartbeatBroadcaster: { max: 10, windowSec: 60 },
+
 
   viewerHeartbeat: { max: 4, windowSec: 60 },
   autoStopIdleChannels: { max: 30, windowSec: 60 },
@@ -639,12 +642,16 @@ serve(async (req) => {
             is_live: false,
             gcp_channel_state: "STOPPED",
             stream_url: null,
+            current_viewers: 0,
+            low_viewer_since: null,
+            broadcaster_last_seen_at: null,
             ...(reason ? { gcp_last_error: reason } : {}),
           })
           .eq("id", channelId);
         // History: close session (never throws)
         await closeLiveSession(serviceClient, channelId, endReason);
       };
+
 
       if (action === "autoStopIdleChannels") {
         // (A) Stop channels marked live with no RTMP input (AWAITING_INPUT) > auto_stop_idle_minutes.
@@ -654,9 +661,15 @@ serve(async (req) => {
         const { data: liveChannels } = await serviceClient
           .from("channels")
           .select(
-            "id, owner_id, name, live_started_at, stream_url, auto_stop_idle_minutes, auto_stop_max_minutes, auto_stop_disconnect_minutes, rtmp_disconnected_at, low_viewer_threshold, keepalive_grace_minutes, keepalive_prompt_sent_at, keepalive_confirmed_at",
+            "id, owner_id, name, live_started_at, stream_url, auto_stop_idle_minutes, auto_stop_max_minutes, auto_stop_disconnect_minutes, rtmp_disconnected_at, low_viewer_threshold, keepalive_grace_minutes, keepalive_prompt_sent_at, keepalive_confirmed_at, peak_viewers, low_viewer_since",
           )
           .eq("is_live", true);
+
+        // Hard policy caps (Layer 3 watchdog): non-configurable per requirement
+        const HARD_MAX_MINUTES = 300;         // 5 hours absolute cap
+        const LOW_VIEWER_MAX_MINUTES = 50;    // <= threshold for 50 min → force stop
+        const HARD_LOW_VIEWER_THRESHOLD = 2;
+        const BROADCASTER_STALE_MINUTES = 3;  // Layer 1 heartbeat-based
 
         const stopped: string[] = [];
         const prompted: string[] = [];
@@ -669,13 +682,93 @@ serve(async (req) => {
           const startedAt = ch.live_started_at ? new Date(ch.live_started_at).getTime() : 0;
           const elapsedMin = (nowMs - startedAt) / 60000;
 
-          // Fetch current GCP state once per channel (used by both A and C)
+          // Fetch current GCP state once per channel
           const gcpChannelId = gcpResourceId(ch.id, "channel");
           const gcpCh = await getChannelGCP(gcpChannelId).catch(() => null);
           const state = gcpCh?.streamingState;
 
+          // === Sync live viewer stats to channels row (every cron tick) ===
+          const { count: viewerCountRaw } = await serviceClient
+            .from("viewer_presence")
+            .select("viewer_key", { count: "exact", head: true })
+            .eq("channel_id", ch.id)
+            .gt("last_seen_at", presenceCutoff);
+          const viewerCount = viewerCountRaw ?? 0;
+          const newPeak = Math.max(ch.peak_viewers ?? 0, viewerCount);
+          const avgSec = startedAt > 0 ? Math.floor((nowMs - startedAt) / 1000) : 0;
+
+          // Track low_viewer_since window
+          const lowActive = viewerCount <= HARD_LOW_VIEWER_THRESHOLD;
+          const prevLowSince = ch.low_viewer_since ? new Date(ch.low_viewer_since).getTime() : 0;
+          const nextLowSince = lowActive
+            ? (prevLowSince > 0 ? prevLowSince : nowMs)
+            : 0;
+
+          await serviceClient
+            .from("channels")
+            .update({
+              current_viewers: viewerCount,
+              peak_viewers: newPeak,
+              avg_watch_seconds: avgSec,
+              low_viewer_since: nextLowSince > 0 ? new Date(nextLowSince).toISOString() : null,
+            })
+            .eq("id", ch.id);
+
+          // === Layer 3.a — Hard 5h cap: unconditional stop ===
+          if (elapsedMin >= HARD_MAX_MINUTES) {
+            try {
+              await stopOne(
+                ch.id,
+                `자동 종료: 최대 방송 시간 ${HARD_MAX_MINUTES}분 초과`,
+                "auto_max_duration",
+              );
+              stopped.push(ch.id);
+            } catch (e) {
+              console.error("autoStop(hard-cap) error for", ch.id, e);
+            }
+            continue;
+          }
+
+          // === Layer 3.b — Low viewers ≥ 50 min: unconditional stop ===
+          if (lowActive && prevLowSince > 0 && (nowMs - prevLowSince) / 60000 >= LOW_VIEWER_MAX_MINUTES) {
+            try {
+              await stopOne(
+                ch.id,
+                `자동 종료: 시청자 ${HARD_LOW_VIEWER_THRESHOLD}명 이하 상태 ${LOW_VIEWER_MAX_MINUTES}분 지속`,
+                "auto_low_viewer",
+              );
+              stopped.push(ch.id);
+            } catch (e) {
+              console.error("autoStop(low-viewer) error for", ch.id, e);
+            }
+            continue;
+          }
+
+          // === Layer 1 — Broadcaster browser heartbeat stale AND no RTMP input ===
+          // Safe: never kills a channel that is actively receiving RTMP.
+          const bLastSeen = (ch as { broadcaster_last_seen_at?: string | null })
+            .broadcaster_last_seen_at;
+          const bLastSeenMs = bLastSeen ? new Date(bLastSeen).getTime() : 0;
+          if (
+            bLastSeenMs > 0 &&
+            (nowMs - bLastSeenMs) / 60000 >= BROADCASTER_STALE_MINUTES &&
+            !ch.stream_url &&
+            state !== "STREAMING"
+          ) {
+            try {
+              await stopOne(
+                ch.id,
+                `자동 종료: 송출자 브라우저 ${BROADCASTER_STALE_MINUTES}분 이상 미접속 + RTMP 미수신`,
+                "auto_broadcaster_absent",
+              );
+              stopped.push(ch.id);
+            } catch (e) {
+              console.error("autoStop(broadcaster-absent) error for", ch.id, e);
+            }
+            continue;
+          }
+
           // --- (C) OBS disconnect fast-path ---
-          // Only applies if RTMP was actually streaming at some point (stream_url set).
           const hadStream = !!ch.stream_url;
           const disconnectMin = ch.auto_stop_disconnect_minutes ?? 1;
           const isAwaiting = state === "AWAITING_INPUT" || state === "PENDING";
@@ -684,13 +777,11 @@ serve(async (req) => {
             : 0;
 
           if (hadStream && state === "STREAMING" && disconnectedAtMs > 0) {
-            // Reconnected — clear flag
             await serviceClient
               .from("channels")
               .update({ rtmp_disconnected_at: null })
               .eq("id", ch.id);
           } else if (hadStream && isAwaiting && disconnectedAtMs === 0) {
-            // First disconnect detection — mark + warn broadcaster
             await serviceClient
               .from("channels")
               .update({ rtmp_disconnected_at: new Date().toISOString() })
@@ -708,7 +799,6 @@ serve(async (req) => {
             disconnected.push(ch.id);
             continue;
           } else if (hadStream && isAwaiting && disconnectedAtMs > 0) {
-            // Still disconnected — check grace
             if ((nowMs - disconnectedAtMs) / 60000 >= disconnectMin) {
               try {
                 await stopOne(
@@ -743,7 +833,7 @@ serve(async (req) => {
           }
           if (didIdleStop) continue;
 
-          // --- (B) Long-running + low-viewer keepalive prompt ---
+          // --- (B) Legacy keepalive prompt path (kept as soft warning before hard caps) ---
           const maxMin = ch.auto_stop_max_minutes ?? 180;
           const graceMin = ch.keepalive_grace_minutes ?? 10;
           const threshold = ch.low_viewer_threshold ?? 2;
@@ -753,14 +843,7 @@ serve(async (req) => {
           const effectiveStart = Math.max(startedAt, confirmedAt);
           const effectiveElapsedMin = (nowMs - effectiveStart) / 60000;
           if (effectiveElapsedMin < maxMin) continue;
-
-          // Count active viewers (last 2 min)
-          const { count: viewerCount } = await serviceClient
-            .from("viewer_presence")
-            .select("viewer_key", { count: "exact", head: true })
-            .eq("channel_id", ch.id)
-            .gt("last_seen_at", presenceCutoff);
-          if ((viewerCount ?? 0) > threshold) continue;
+          if (viewerCount > threshold) continue;
 
           const promptSentAt = ch.keepalive_prompt_sent_at
             ? new Date(ch.keepalive_prompt_sent_at).getTime()
@@ -768,7 +851,6 @@ serve(async (req) => {
           const promptActive = promptSentAt > confirmedAt;
 
           if (!promptActive) {
-            // First time: send notification + mark prompt sent
             if (ch.owner_id) {
               await serviceClient.from("notifications").insert({
                 user_id: ch.owner_id,
@@ -785,7 +867,6 @@ serve(async (req) => {
               .eq("id", ch.id);
             prompted.push(ch.id);
           } else if ((nowMs - promptSentAt) / 60000 >= graceMin) {
-            // Grace expired: auto-stop
             try {
               await stopOne(
                 ch.id,
@@ -798,6 +879,7 @@ serve(async (req) => {
             }
           }
         }
+
         return new Response(JSON.stringify({ stopped, prompted, disconnected }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -951,7 +1033,9 @@ serve(async (req) => {
       "getStatus",
       "getHLSUrl",
       "provisionChannel",
+      "heartbeatBroadcaster",
     ];
+
     if (channelActions.includes(action) && channelId) {
       await verifyChannelAccess(user, channelId);
     }
@@ -988,8 +1072,14 @@ serve(async (req) => {
             live_started_at: new Date().toISOString(),
             gcp_channel_state: "STARTING",
             stream_url: null,
+            current_viewers: 0,
+            peak_viewers: 0,
+            avg_watch_seconds: 0,
+            low_viewer_since: null,
+            broadcaster_last_seen_at: new Date().toISOString(),
           })
           .eq("id", channelId);
+
         // History: open session (never throws)
         await openLiveSession(user.serviceClient, channelId);
         result = { ...(result as object), streamUrl: null };
@@ -1021,9 +1111,13 @@ serve(async (req) => {
             is_live: false,
             gcp_channel_state: "STOPPED",
             stream_url: null,
+            current_viewers: 0,
+            low_viewer_since: null,
+            broadcaster_last_seen_at: null,
             ...(forceReason ? { gcp_last_error: forceReason } : {}),
           })
           .eq("id", channelId);
+
         // History: close session (never throws)
         await closeLiveSession(
           user.serviceClient,
@@ -1034,6 +1128,17 @@ serve(async (req) => {
         // No auto-VOD: live manifest URL is ephemeral and would 404 after stop.
         break;
       }
+
+      case "heartbeatBroadcaster": {
+        if (!channelId) throw new Error("channelId required");
+        await user.serviceClient
+          .from("channels")
+          .update({ broadcaster_last_seen_at: new Date().toISOString() })
+          .eq("id", channelId);
+        result = { ok: true };
+        break;
+      }
+
 
       case "getStatus": {
         if (!channelId) throw new Error("channelId required");
