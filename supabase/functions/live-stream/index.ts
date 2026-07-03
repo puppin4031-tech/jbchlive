@@ -642,12 +642,16 @@ serve(async (req) => {
             is_live: false,
             gcp_channel_state: "STOPPED",
             stream_url: null,
+            current_viewers: 0,
+            low_viewer_since: null,
+            broadcaster_last_seen_at: null,
             ...(reason ? { gcp_last_error: reason } : {}),
           })
           .eq("id", channelId);
         // History: close session (never throws)
         await closeLiveSession(serviceClient, channelId, endReason);
       };
+
 
       if (action === "autoStopIdleChannels") {
         // (A) Stop channels marked live with no RTMP input (AWAITING_INPUT) > auto_stop_idle_minutes.
