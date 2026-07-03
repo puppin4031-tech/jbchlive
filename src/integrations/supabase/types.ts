@@ -48,7 +48,10 @@ export type Database = {
           auto_stop_disconnect_minutes: number
           auto_stop_idle_minutes: number
           auto_stop_max_minutes: number
+          avg_watch_seconds: number
+          broadcaster_last_seen_at: string | null
           created_at: string
+          current_viewers: number
           description: string | null
           gcp_channel_state: string | null
           gcp_input_uri: string | null
@@ -63,9 +66,11 @@ export type Database = {
           keepalive_prompt_sent_at: string | null
           live_started_at: string | null
           logo_url: string | null
+          low_viewer_since: string | null
           low_viewer_threshold: number
           name: string
           owner_id: string | null
+          peak_viewers: number
           rtmp_disconnected_at: string | null
           scheduled_end_at: string | null
           scheduled_start_at: string | null
@@ -78,7 +83,10 @@ export type Database = {
           auto_stop_disconnect_minutes?: number
           auto_stop_idle_minutes?: number
           auto_stop_max_minutes?: number
+          avg_watch_seconds?: number
+          broadcaster_last_seen_at?: string | null
           created_at?: string
+          current_viewers?: number
           description?: string | null
           gcp_channel_state?: string | null
           gcp_input_uri?: string | null
@@ -93,9 +101,11 @@ export type Database = {
           keepalive_prompt_sent_at?: string | null
           live_started_at?: string | null
           logo_url?: string | null
+          low_viewer_since?: string | null
           low_viewer_threshold?: number
           name: string
           owner_id?: string | null
+          peak_viewers?: number
           rtmp_disconnected_at?: string | null
           scheduled_end_at?: string | null
           scheduled_start_at?: string | null
@@ -108,7 +118,10 @@ export type Database = {
           auto_stop_disconnect_minutes?: number
           auto_stop_idle_minutes?: number
           auto_stop_max_minutes?: number
+          avg_watch_seconds?: number
+          broadcaster_last_seen_at?: string | null
           created_at?: string
+          current_viewers?: number
           description?: string | null
           gcp_channel_state?: string | null
           gcp_input_uri?: string | null
@@ -123,9 +136,11 @@ export type Database = {
           keepalive_prompt_sent_at?: string | null
           live_started_at?: string | null
           logo_url?: string | null
+          low_viewer_since?: string | null
           low_viewer_threshold?: number
           name?: string
           owner_id?: string | null
+          peak_viewers?: number
           rtmp_disconnected_at?: string | null
           scheduled_end_at?: string | null
           scheduled_start_at?: string | null
