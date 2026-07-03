@@ -345,17 +345,11 @@ async function provisionChannel(
   const inputId = gcpResourceId(channelUuid, "input");
   const gcpChannelId = gcpResourceId(channelUuid, "channel");
 
-  // If already provisioned with URI, verify GCP still has it
-  if (existing?.gcp_input_uri) {
-    try {
-      const input = await getInput(inputId);
-      if (input?.uri) {
-        return { gcp_input_uri: input.uri, alreadyProvisioned: true };
-      }
-    } catch {
-      // Input missing on GCP, will recreate
-    }
-  }
+  // Note: we intentionally do NOT short-circuit when gcp_input_uri already
+  // exists. Reprovisioning must always recreate the GCP Channel so that
+  // config changes (e.g. single 720p mux) are applied immediately.
+  // The Input itself is reused when present (getInput below succeeds).
+
 
   let inputCreated = false;
   try {
@@ -377,14 +371,23 @@ async function provisionChannel(
     // Best-effort cleanup: if a channel already exists (possibly from a failed
     // earlier attempt with a different mux config), delete it before recreating.
     try {
-      await getChannelGCP(gcpChannelId);
+      const existingCh = await getChannelGCP(gcpChannelId);
+      // Guard: never destroy a live channel — admin must stop it first.
+      const state = existingCh?.streamingState;
+      if (state && state !== "STOPPED" && state !== "STREAMING_STATE_UNSPECIFIED") {
+        throw new Error(
+          `Channel is currently ${state}. Stop the live broadcast before reprovisioning.`
+        );
+      }
       // Exists — delete to ensure fresh creation with current mux config
       await deleteChannelGCP(gcpChannelId).catch((e) =>
         console.error("Cleanup deleteChannel failed:", e)
       );
-    } catch {
-      // Channel does not exist, nothing to clean up
+    } catch (e) {
+      // If it was our explicit guard, rethrow; otherwise channel simply doesn't exist.
+      if (e instanceof Error && e.message.startsWith("Channel is currently")) throw e;
     }
+
     await createChannel(gcpChannelId, inputId);
 
     // Step 3: Save to DB
