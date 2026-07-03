@@ -1072,8 +1072,14 @@ serve(async (req) => {
             live_started_at: new Date().toISOString(),
             gcp_channel_state: "STARTING",
             stream_url: null,
+            current_viewers: 0,
+            peak_viewers: 0,
+            avg_watch_seconds: 0,
+            low_viewer_since: null,
+            broadcaster_last_seen_at: new Date().toISOString(),
           })
           .eq("id", channelId);
+
         // History: open session (never throws)
         await openLiveSession(user.serviceClient, channelId);
         result = { ...(result as object), streamUrl: null };
