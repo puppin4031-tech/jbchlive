@@ -221,12 +221,13 @@ async function createChannel(channelId: string, inputId: string) {
           key: "video-stream",
           videoStream: {
             h264: {
-              profile: "high",
-              bitrateBps: 3000000,
+              profile: "main",
+              bitrateBps: 1000000,
               frameRate: 30,
-              widthPixels: 1920,
-              heightPixels: 1080,
+              widthPixels: 1280,
+              heightPixels: 720,
             },
+
           },
         },
         {
