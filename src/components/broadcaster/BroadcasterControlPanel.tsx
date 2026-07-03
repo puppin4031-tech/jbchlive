@@ -63,11 +63,15 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
 
   const isLive = phase === 'streaming' || phase === 'awaiting-input' || phase === 'starting';
 
+  // Layer 1 zombie-stream defense: broadcaster browser heartbeat
+  useBroadcasterPresence(channel?.id, isLive);
+
   useEffect(() => {
     if (!isLive) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [isLive]);
+
 
   // Open dialog automatically when start is triggered & not yet ready
   useEffect(() => {
