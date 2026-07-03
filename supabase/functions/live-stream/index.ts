@@ -345,17 +345,11 @@ async function provisionChannel(
   const inputId = gcpResourceId(channelUuid, "input");
   const gcpChannelId = gcpResourceId(channelUuid, "channel");
 
-  // If already provisioned with URI, verify GCP still has it
-  if (existing?.gcp_input_uri) {
-    try {
-      const input = await getInput(inputId);
-      if (input?.uri) {
-        return { gcp_input_uri: input.uri, alreadyProvisioned: true };
-      }
-    } catch {
-      // Input missing on GCP, will recreate
-    }
-  }
+  // Note: we intentionally do NOT short-circuit when gcp_input_uri already
+  // exists. Reprovisioning must always recreate the GCP Channel so that
+  // config changes (e.g. single 720p mux) are applied immediately.
+  // The Input itself is reused when present (getInput below succeeds).
+
 
   let inputCreated = false;
   try {
