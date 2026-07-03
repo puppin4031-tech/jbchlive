@@ -954,7 +954,9 @@ serve(async (req) => {
       "getStatus",
       "getHLSUrl",
       "provisionChannel",
+      "heartbeatBroadcaster",
     ];
+
     if (channelActions.includes(action) && channelId) {
       await verifyChannelAccess(user, channelId);
     }
