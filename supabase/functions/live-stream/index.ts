@@ -1111,9 +1111,13 @@ serve(async (req) => {
             is_live: false,
             gcp_channel_state: "STOPPED",
             stream_url: null,
+            current_viewers: 0,
+            low_viewer_since: null,
+            broadcaster_last_seen_at: null,
             ...(forceReason ? { gcp_last_error: forceReason } : {}),
           })
           .eq("id", channelId);
+
         // History: close session (never throws)
         await closeLiveSession(
           user.serviceClient,
