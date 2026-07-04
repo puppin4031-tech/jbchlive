@@ -1208,7 +1208,7 @@ serve(async (req) => {
 
       case "getStatus": {
         if (!channelId) throw new Error("channelId required");
-        const gcpChannelId = gcpResourceId(channelId, "channel");
+        const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
         const gcpCh = await getChannelGCP(gcpChannelId);
         const state = gcpCh.streamingState || "UNKNOWN";
 
