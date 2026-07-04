@@ -170,12 +170,39 @@ async function verifyChannelAccess(
 }
 
 // --- GCP Resource ID derivation ---
-// Use deterministic IDs based on channel UUID so we can re-find them.
+// Legacy deterministic IDs — kept as fallback for channels provisioned before
+// the "Safe Reset" refactor, whose current live-pipeline IDs are stored in DB.
 // GCP IDs: lowercase letters, digits, hyphens, max 63 chars, must start with letter.
 function gcpResourceId(channelUuid: string, kind: "input" | "channel"): string {
-  // Strip hyphens, take first 24 hex chars, prefix
   const short = channelUuid.replace(/-/g, "").slice(0, 24);
   return `${kind === "input" ? "in" : "ch"}-${short}`;
+}
+
+// New unique-per-provision IDs. Timestamp appended so re-provision never
+// collides with a still-existing GCP resource (409 Conflict) and cannot
+// overwrite previous output manifests in the storage bucket.
+function newGcpResourceId(channelUuid: string, kind: "input" | "channel", ts: number): string {
+  const short = channelUuid.replace(/-/g, "").slice(0, 16);
+  const suffix = ts.toString(36);
+  return `${kind === "input" ? "in" : "ch"}-${short}-${suffix}`;
+}
+
+// Resolve the effective GCP channel/input IDs for a DB channel row.
+// Prefers the values persisted at provision time; falls back to the legacy
+// deterministic scheme for rows provisioned before this refactor.
+async function resolveGcpIds(
+  serviceClient: ReturnType<typeof createClient>,
+  channelUuid: string,
+): Promise<{ inputId: string; gcpChannelId: string }> {
+  const { data } = await serviceClient
+    .from("channels")
+    .select("gcp_input_id, gcp_channel_id")
+    .eq("id", channelUuid)
+    .maybeSingle();
+  return {
+    inputId: (data?.gcp_input_id as string | null) ?? gcpResourceId(channelUuid, "input"),
+    gcpChannelId: (data?.gcp_channel_id as string | null) ?? gcpResourceId(channelUuid, "channel"),
+  };
 }
 
 // --- GCP API operations ---
@@ -208,14 +235,14 @@ async function deleteInput(inputId: string) {
   }
 }
 
-async function createChannel(channelId: string, inputId: string) {
+async function createChannel(channelId: string, inputId: string, outputUri: string) {
   const inputName = `projects/${PROJECT_ID}/locations/${LOCATION}/inputs/${inputId}`;
   const url = `${BASE_URL}/channels?channelId=${channelId}`;
   const op = await gcpFetch(url, {
     method: "POST",
     body: JSON.stringify({
       inputAttachments: [{ key: "primary", input: inputName }],
-      output: { uri: `gs://${PROJECT_ID}-live-output/${channelId}/` },
+      output: { uri: outputUri },
       elementaryStreams: [
         {
           key: "video-stream",
@@ -328,89 +355,128 @@ async function getHLSUrl(channelId: string) {
 // --- High-level orchestrations ---
 
 /**
- * Provision GCP Input + Channel for a given DB channel UUID.
- * Idempotent: if already provisioned, returns existing URI.
- * Clean-up: if channel creation fails after input was created, deletes the input.
+ * Safe Reset provisioning.
+ *
+ * On every call this function:
+ *   1. Reads any previously-provisioned GCP Input/Channel IDs from the DB and
+ *      best-effort DELETES them on GCP. 404/403/NOT_FOUND/PERMISSION_DENIED
+ *      are silently ignored (resource already gone or lost admin permission).
+ *      Never deletes a channel that is currently live — admin must stop first.
+ *   2. Generates BRAND-NEW timestamp-suffixed IDs for both the Input and the
+ *      Channel, so there is no possibility of a 409 Conflict against a
+ *      still-lingering resource.
+ *   3. Uses a timestamped GCS output folder so a new live session cannot
+ *      overwrite manifest/segment files from a previous session.
+ *   4. Creates the Input, then the Channel (with separated video/audio
+ *      mux_streams in an fmp4 container — fixes prior INVALID_ARGUMENT).
+ *   5. ONLY after both GCP resources are fully created, atomically writes
+ *      the new IDs + RTMP URI + output URI to the channels row.
  */
+async function safeDeleteInput(inputId: string): Promise<void> {
+  try {
+    await deleteInput(inputId);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("404") || msg.includes("NOT_FOUND") ||
+        msg.includes("403") || msg.includes("PERMISSION_DENIED")) {
+      return;
+    }
+    console.error("safeDeleteInput non-fatal:", msg);
+  }
+}
+
+async function safeDeleteChannel(gcpChannelId: string): Promise<void> {
+  try {
+    // Guard against wiping a live channel
+    const existing = await getChannelGCP(gcpChannelId).catch(() => null);
+    if (existing) {
+      const state = existing.streamingState;
+      if (state && state !== "STOPPED" && state !== "STREAMING_STATE_UNSPECIFIED") {
+        throw new Error(
+          `Channel is currently ${state}. Stop the live broadcast before reprovisioning.`,
+        );
+      }
+    }
+    await deleteChannelGCP(gcpChannelId);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.startsWith("Channel is currently")) throw e;
+    if (msg.includes("404") || msg.includes("NOT_FOUND") ||
+        msg.includes("403") || msg.includes("PERMISSION_DENIED")) {
+      return;
+    }
+    console.error("safeDeleteChannel non-fatal:", msg);
+  }
+}
+
 async function provisionChannel(
   serviceClient: ReturnType<typeof createClient>,
-  channelUuid: string
+  channelUuid: string,
 ) {
-  // Check existing state
+  // ---- Step 0: read existing IDs (may be null for first-time provisioning) ----
   const { data: existing } = await serviceClient
     .from("channels")
-    .select("gcp_input_uri")
+    .select("gcp_input_id, gcp_channel_id")
     .eq("id", channelUuid)
-    .single();
+    .maybeSingle();
 
-  const inputId = gcpResourceId(channelUuid, "input");
-  const gcpChannelId = gcpResourceId(channelUuid, "channel");
+  const oldInputId = (existing?.gcp_input_id as string | null) ??
+    gcpResourceId(channelUuid, "input"); // legacy fallback
+  const oldChannelId = (existing?.gcp_channel_id as string | null) ??
+    gcpResourceId(channelUuid, "channel");
 
-  // Note: we intentionally do NOT short-circuit when gcp_input_uri already
-  // exists. Reprovisioning must always recreate the GCP Channel so that
-  // config changes (e.g. single 720p mux) are applied immediately.
-  // The Input itself is reused when present (getInput below succeeds).
+  // ---- Step 1: CLEANUP FIRST — delete old channel then input ----
+  // Order matters: channel references input, so channel first.
+  await safeDeleteChannel(oldChannelId);
+  await safeDeleteInput(oldInputId);
 
+  // ---- Step 2: generate brand-new unique IDs and output path ----
+  const ts = Date.now();
+  const newInputId = newGcpResourceId(channelUuid, "input", ts);
+  const newChannelId = newGcpResourceId(channelUuid, "channel", ts);
+  const newOutputUri = `gs://${PROJECT_ID}-live-output/${channelUuid}/${ts}/`;
 
   let inputCreated = false;
   try {
-    // Step 1: Create or fetch Input
-    let input;
-    try {
-      input = await getInput(inputId);
-    } catch {
-      input = await createInput(inputId);
-      inputCreated = true;
-    }
-
+    // ---- Step 3: create Input ----
+    const input = await createInput(newInputId);
+    inputCreated = true;
     if (!input?.uri) {
       throw new Error("Input created but no RTMP URI returned");
     }
-    const inputUri = input.uri;
+    const inputUri = input.uri as string;
 
-    // Step 2: Ensure Channel matches current config.
-    // Best-effort cleanup: if a channel already exists (possibly from a failed
-    // earlier attempt with a different mux config), delete it before recreating.
-    try {
-      const existingCh = await getChannelGCP(gcpChannelId);
-      // Guard: never destroy a live channel — admin must stop it first.
-      const state = existingCh?.streamingState;
-      if (state && state !== "STOPPED" && state !== "STREAMING_STATE_UNSPECIFIED") {
-        throw new Error(
-          `Channel is currently ${state}. Stop the live broadcast before reprovisioning.`
-        );
-      }
-      // Exists — delete to ensure fresh creation with current mux config
-      await deleteChannelGCP(gcpChannelId).catch((e) =>
-        console.error("Cleanup deleteChannel failed:", e)
-      );
-    } catch (e) {
-      // If it was our explicit guard, rethrow; otherwise channel simply doesn't exist.
-      if (e instanceof Error && e.message.startsWith("Channel is currently")) throw e;
-    }
+    // ---- Step 4: create Channel (fmp4, separate video/audio mux streams) ----
+    await createChannel(newChannelId, newInputId, newOutputUri);
 
-    await createChannel(gcpChannelId, inputId);
-
-    // Step 3: Save to DB
+    // ---- Step 5: atomic DB update AFTER both GCP resources exist ----
     const { error: dbErr } = await serviceClient
       .from("channels")
       .update({
+        gcp_input_id: newInputId,
+        gcp_channel_id: newChannelId,
         gcp_input_uri: inputUri,
+        gcp_output_uri: newOutputUri,
         gcp_provisioned_at: new Date().toISOString(),
         gcp_last_error: null,
+        stream_url: null,
       })
       .eq("id", channelUuid);
     if (dbErr) throw new Error(`DB update failed: ${dbErr.message}`);
 
-    return { gcp_input_uri: inputUri, alreadyProvisioned: false };
+    return {
+      gcp_input_id: newInputId,
+      gcp_channel_id: newChannelId,
+      gcp_input_uri: inputUri,
+      gcp_output_uri: newOutputUri,
+    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // Clean-up: if we created the input but channel failed, delete the input
+    // Roll back any half-created GCP resources so we don't leak quota.
     if (inputCreated) {
-      await deleteInput(inputId).catch((e) =>
-        console.error("Cleanup deleteInput failed:", e)
-      );
+      await safeDeleteInput(newInputId);
     }
+    await safeDeleteChannel(newChannelId);
     await serviceClient
       .from("channels")
       .update({ gcp_last_error: msg.slice(0, 1000) })
@@ -627,7 +693,7 @@ serve(async (req) => {
 
       // Helper: stop a single channel (idempotent)
       const stopOne = async (channelId: string, reason?: string, endReason: string = "auto") => {
-        const gcpChannelId = gcpResourceId(channelId, "channel");
+        const { gcpChannelId } = await resolveGcpIds(serviceClient, channelId);
         try {
           await stopChannelGCP(gcpChannelId);
         } catch (e) {
@@ -683,7 +749,7 @@ serve(async (req) => {
           const elapsedMin = (nowMs - startedAt) / 60000;
 
           // Fetch current GCP state once per channel
-          const gcpChannelId = gcpResourceId(ch.id, "channel");
+          const { gcpChannelId } = await resolveGcpIds(serviceClient, ch.id);
           const gcpCh = await getChannelGCP(gcpChannelId).catch(() => null);
           const state = gcpCh?.streamingState;
 
@@ -915,7 +981,7 @@ serve(async (req) => {
             continue;
           }
           try {
-            const gcpChannelId = gcpResourceId(ch.id, "channel");
+            const { gcpChannelId } = await resolveGcpIds(serviceClient, ch.id);
             await startChannelGCP(gcpChannelId);
             await serviceClient
               .from("channels")
@@ -1063,7 +1129,7 @@ serve(async (req) => {
           }
           await provisionChannel(user.serviceClient, channelId);
         }
-        const gcpChannelId = gcpResourceId(channelId, "channel");
+        const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
         result = await startChannelGCP(gcpChannelId);
         await user.serviceClient
           .from("channels")
@@ -1088,7 +1154,7 @@ serve(async (req) => {
 
       case "stopChannel": {
         if (!channelId) throw new Error("channelId required");
-        const gcpChannelId = gcpResourceId(channelId, "channel");
+        const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
 
         try {
           result = await stopChannelGCP(gcpChannelId);
@@ -1142,7 +1208,7 @@ serve(async (req) => {
 
       case "getStatus": {
         if (!channelId) throw new Error("channelId required");
-        const gcpChannelId = gcpResourceId(channelId, "channel");
+        const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
         const gcpCh = await getChannelGCP(gcpChannelId);
         const state = gcpCh.streamingState || "UNKNOWN";
 
@@ -1183,7 +1249,7 @@ serve(async (req) => {
 
       case "getHLSUrl": {
         if (!channelId) throw new Error("channelId required");
-        const gcpChannelId = gcpResourceId(channelId, "channel");
+        const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
         result = await getHLSUrl(gcpChannelId);
         break;
       }
