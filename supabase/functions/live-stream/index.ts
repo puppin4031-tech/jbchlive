@@ -1154,7 +1154,7 @@ serve(async (req) => {
 
       case "stopChannel": {
         if (!channelId) throw new Error("channelId required");
-        const gcpChannelId = gcpResourceId(channelId, "channel");
+        const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
 
         try {
           result = await stopChannelGCP(gcpChannelId);
