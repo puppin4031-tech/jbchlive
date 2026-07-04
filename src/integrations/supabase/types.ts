@@ -53,9 +53,12 @@ export type Database = {
           created_at: string
           current_viewers: number
           description: string | null
+          gcp_channel_id: string | null
           gcp_channel_state: string | null
+          gcp_input_id: string | null
           gcp_input_uri: string | null
           gcp_last_error: string | null
+          gcp_output_uri: string | null
           gcp_provisioned_at: string | null
           id: string
           is_approved: boolean
@@ -88,9 +91,12 @@ export type Database = {
           created_at?: string
           current_viewers?: number
           description?: string | null
+          gcp_channel_id?: string | null
           gcp_channel_state?: string | null
+          gcp_input_id?: string | null
           gcp_input_uri?: string | null
           gcp_last_error?: string | null
+          gcp_output_uri?: string | null
           gcp_provisioned_at?: string | null
           id?: string
           is_approved?: boolean
@@ -123,9 +129,12 @@ export type Database = {
           created_at?: string
           current_viewers?: number
           description?: string | null
+          gcp_channel_id?: string | null
           gcp_channel_state?: string | null
+          gcp_input_id?: string | null
           gcp_input_uri?: string | null
           gcp_last_error?: string | null
+          gcp_output_uri?: string | null
           gcp_provisioned_at?: string | null
           id?: string
           is_approved?: boolean
