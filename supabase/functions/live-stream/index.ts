@@ -1249,7 +1249,7 @@ serve(async (req) => {
 
       case "getHLSUrl": {
         if (!channelId) throw new Error("channelId required");
-        const gcpChannelId = gcpResourceId(channelId, "channel");
+        const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
         result = await getHLSUrl(gcpChannelId);
         break;
       }
