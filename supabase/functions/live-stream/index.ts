@@ -170,12 +170,39 @@ async function verifyChannelAccess(
 }
 
 // --- GCP Resource ID derivation ---
-// Use deterministic IDs based on channel UUID so we can re-find them.
+// Legacy deterministic IDs — kept as fallback for channels provisioned before
+// the "Safe Reset" refactor, whose current live-pipeline IDs are stored in DB.
 // GCP IDs: lowercase letters, digits, hyphens, max 63 chars, must start with letter.
 function gcpResourceId(channelUuid: string, kind: "input" | "channel"): string {
-  // Strip hyphens, take first 24 hex chars, prefix
   const short = channelUuid.replace(/-/g, "").slice(0, 24);
   return `${kind === "input" ? "in" : "ch"}-${short}`;
+}
+
+// New unique-per-provision IDs. Timestamp appended so re-provision never
+// collides with a still-existing GCP resource (409 Conflict) and cannot
+// overwrite previous output manifests in the storage bucket.
+function newGcpResourceId(channelUuid: string, kind: "input" | "channel", ts: number): string {
+  const short = channelUuid.replace(/-/g, "").slice(0, 16);
+  const suffix = ts.toString(36);
+  return `${kind === "input" ? "in" : "ch"}-${short}-${suffix}`;
+}
+
+// Resolve the effective GCP channel/input IDs for a DB channel row.
+// Prefers the values persisted at provision time; falls back to the legacy
+// deterministic scheme for rows provisioned before this refactor.
+async function resolveGcpIds(
+  serviceClient: ReturnType<typeof createClient>,
+  channelUuid: string,
+): Promise<{ inputId: string; gcpChannelId: string }> {
+  const { data } = await serviceClient
+    .from("channels")
+    .select("gcp_input_id, gcp_channel_id")
+    .eq("id", channelUuid)
+    .maybeSingle();
+  return {
+    inputId: (data?.gcp_input_id as string | null) ?? gcpResourceId(channelUuid, "input"),
+    gcpChannelId: (data?.gcp_channel_id as string | null) ?? gcpResourceId(channelUuid, "channel"),
+  };
 }
 
 // --- GCP API operations ---
