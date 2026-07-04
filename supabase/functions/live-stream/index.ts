@@ -1129,7 +1129,7 @@ serve(async (req) => {
           }
           await provisionChannel(user.serviceClient, channelId);
         }
-        const gcpChannelId = gcpResourceId(channelId, "channel");
+        const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
         result = await startChannelGCP(gcpChannelId);
         await user.serviceClient
           .from("channels")
