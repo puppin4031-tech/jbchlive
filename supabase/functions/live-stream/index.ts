@@ -693,7 +693,7 @@ serve(async (req) => {
 
       // Helper: stop a single channel (idempotent)
       const stopOne = async (channelId: string, reason?: string, endReason: string = "auto") => {
-        const gcpChannelId = gcpResourceId(channelId, "channel");
+        const { gcpChannelId } = await resolveGcpIds(serviceClient, channelId);
         try {
           await stopChannelGCP(gcpChannelId);
         } catch (e) {
