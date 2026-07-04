@@ -749,7 +749,7 @@ serve(async (req) => {
           const elapsedMin = (nowMs - startedAt) / 60000;
 
           // Fetch current GCP state once per channel
-          const gcpChannelId = gcpResourceId(ch.id, "channel");
+          const { gcpChannelId } = await resolveGcpIds(serviceClient, ch.id);
           const gcpCh = await getChannelGCP(gcpChannelId).catch(() => null);
           const state = gcpCh?.streamingState;
 
