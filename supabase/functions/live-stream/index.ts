@@ -235,14 +235,14 @@ async function deleteInput(inputId: string) {
   }
 }
 
-async function createChannel(channelId: string, inputId: string) {
+async function createChannel(channelId: string, inputId: string, outputUri: string) {
   const inputName = `projects/${PROJECT_ID}/locations/${LOCATION}/inputs/${inputId}`;
   const url = `${BASE_URL}/channels?channelId=${channelId}`;
   const op = await gcpFetch(url, {
     method: "POST",
     body: JSON.stringify({
       inputAttachments: [{ key: "primary", input: inputName }],
-      output: { uri: `gs://${PROJECT_ID}-live-output/${channelId}/` },
+      output: { uri: outputUri },
       elementaryStreams: [
         {
           key: "video-stream",
