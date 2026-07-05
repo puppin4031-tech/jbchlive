@@ -291,6 +291,7 @@ async function createChannel(channelId: string, inputId: string, outputUri: stri
           segmentKeepDuration: "60s",
         },
       ],
+      logConfig: { logSeverity: "INFO" },
     }),
   });
   await waitForOperation(op.name);
@@ -406,7 +407,22 @@ async function safeDeleteChannel(gcpChannelId: string): Promise<void> {
     const existing = await getChannelGCP(gcpChannelId).catch(() => null);
     if (existing) {
       const state = existing.streamingState;
-      if (state && state !== "STOPPED" && state !== "STREAMING_STATE_UNSPECIFIED") {
+      if (state === "STARTING" || state === "STOPPING") {
+        // Recovery path for half-started/half-stopped GCP channels. Try to stop
+        // once, but do not block Safe Reset forever if Google keeps the old
+        // resource in a transitional state. The new timestamped IDs below keep
+        // the replacement channel isolated from this quarantined resource.
+        await stopChannelGCP(gcpChannelId).catch((e) => {
+          console.warn("safeDeleteChannel stop transitional failed", e);
+        });
+        const afterStop = await getChannelGCP(gcpChannelId).catch(() => null);
+        if (afterStop?.streamingState && afterStop.streamingState !== "STOPPED") {
+          console.warn(
+            `safeDeleteChannel quarantining ${gcpChannelId} in ${afterStop.streamingState}`,
+          );
+          return;
+        }
+      } else if (state && state !== "STOPPED" && state !== "STREAMING_STATE_UNSPECIFIED") {
         throw new Error(
           `Channel is currently ${state}. Stop the live broadcast before reprovisioning.`,
         );
@@ -488,10 +504,10 @@ async function provisionChannel(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // Roll back any half-created GCP resources so we don't leak quota.
+    await safeDeleteChannel(newChannelId);
     if (inputCreated) {
       await safeDeleteInput(newInputId);
     }
-    await safeDeleteChannel(newChannelId);
     await serviceClient
       .from("channels")
       .update({ gcp_last_error: msg.slice(0, 1000) })
@@ -767,6 +783,17 @@ serve(async (req) => {
           const { gcpChannelId } = await resolveGcpIds(serviceClient, ch.id);
           const gcpCh = await getChannelGCP(gcpChannelId).catch(() => null);
           const state = gcpCh?.streamingState;
+
+          // STARTING is a valid GCP warm-up phase and can take several minutes.
+          // Never auto-stop it: a stop request during STARTING can interrupt the
+          // start LRO and leave the channel unable to accept OBS input.
+          if (state === "STARTING") {
+            await serviceClient
+              .from("channels")
+              .update({ gcp_channel_state: state })
+              .eq("id", ch.id);
+            continue;
+          }
 
           // === Sync live viewer stats to channels row (every cron tick) ===
           const { count: viewerCountRaw } = await serviceClient
