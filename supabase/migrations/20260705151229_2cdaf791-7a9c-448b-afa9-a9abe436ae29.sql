@@ -1,0 +1,1 @@
+UPDATE public.channels SET is_live = true, gcp_channel_state = 'STARTING', gcp_last_error = NULL, live_started_at = COALESCE(live_started_at, now()), updated_at = now() WHERE id = 'b456e635-4154-43b7-b9b1-44c1e1ae66ee';
