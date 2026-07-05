@@ -303,7 +303,22 @@ async function getChannelGCP(channelId: string) {
 
 async function startChannelGCP(channelId: string) {
   const url = `${BASE_URL}/channels/${channelId}:start`;
-  return gcpFetch(url, { method: "POST", body: "{}" });
+  try {
+    return await gcpFetch(url, { method: "POST", body: "{}" });
+  } catch (e) {
+    // Idempotent: GCP returns FAILED_PRECONDITION "channel is not stopped"
+    // when it's already STARTING/AWAITING_INPUT/STREAMING. That's fine —
+    // treat as success so a retry after a previous partial failure works.
+    const msg = e instanceof Error ? e.message : String(e);
+    if (
+      msg.includes("FAILED_PRECONDITION") &&
+      (msg.includes("not stopped") || msg.includes("already"))
+    ) {
+      console.warn("startChannelGCP: already started, treating as success", msg);
+      return { alreadyStarted: true };
+    }
+    throw e;
+  }
 }
 
 async function stopChannelGCP(channelId: string) {
