@@ -12,7 +12,7 @@ const LOCATION = Deno.env.get("GOOGLE_CLOUD_LOCATION")!;
 const SERVICE_ACCOUNT_JSON = Deno.env.get("GCP_SERVICE_ACCOUNT_JSON")!;
 
 const BASE_URL = `https://livestream.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}`;
-const STUCK_STARTING_AFTER_MS = 6 * 60 * 1000;
+const STUCK_STARTING_AFTER_MS = 20 * 60 * 1000;
 
 // --- Google Auth via Service Account JWT ---
 
