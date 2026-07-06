@@ -8,7 +8,23 @@ const invoke = async (action: string, params: Record<string, unknown> = {}) => {
   const { data, error } = await supabase.functions.invoke("live-stream", {
     body: { action, ...cleanParams },
   });
-  if (error) throw error;
+  if (error) {
+    const context = (error as { context?: Response }).context;
+    if (context) {
+      try {
+        const body = await context.clone().json();
+        if (body?.error) throw new Error(body.error);
+      } catch {
+        try {
+          const text = await context.clone().text();
+          if (text) throw new Error(text);
+        } catch {
+          // Fall through to the original SDK error.
+        }
+      }
+    }
+    throw error;
+  }
   if (data?.error) throw new Error(data.error);
   return data;
 };
