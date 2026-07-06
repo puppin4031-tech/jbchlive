@@ -11,17 +11,22 @@ const invoke = async (action: string, params: Record<string, unknown> = {}) => {
   if (error) {
     const context = (error as { context?: Response }).context;
     if (context) {
+      let message = "";
       try {
         const body = await context.clone().json();
-        if (body?.error) throw new Error(body.error);
+        message = typeof body?.error === "string" ? body.error : "";
       } catch {
+        // Response was not JSON; try plain text below.
+      }
+      if (!message) {
         try {
           const text = await context.clone().text();
-          if (text) throw new Error(text);
+          message = text || "";
         } catch {
-          // Fall through to the original SDK error.
+          // Fall through to the original SDK error below.
         }
       }
+      if (message) throw new Error(message);
     }
     throw error;
   }
