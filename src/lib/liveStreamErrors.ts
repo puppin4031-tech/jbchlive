@@ -116,6 +116,15 @@ export const toFriendlyError = (err: unknown): FriendlyError => {
     };
   }
 
+  // GCP: 시작 준비 중에는 종료 불가
+  if (m.includes("starting") && (m.includes("준비 중") || m.includes("awaiting_input"))) {
+    return {
+      title: "서버가 아직 준비 중입니다",
+      message: "파란색 OBS 대기 상태가 된 뒤 종료할 수 있습니다. 지금은 종료 버튼을 누르지 말고 잠시 기다려주세요.",
+      raw,
+    };
+  }
+
   // GCP: 정지 시 이미 멈춤
   if (m.includes("failed_precondition") || m.includes("not running")) {
     return {
