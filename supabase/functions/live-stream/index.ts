@@ -1316,7 +1316,7 @@ serve(async (req) => {
         const ch = await getChannelGCP(gcpChannelId).catch((e) => ({ error: String(e) }));
         const input = await getInput(inputId).catch((e) => ({ error: String(e) }));
         const ops = await gcpFetch(
-          `${BASE_URL}/operations?filter=${encodeURIComponent(`target=projects/${PROJECT_ID}/locations/${LOCATION}/channels/${gcpChannelId}`)}`,
+          `${BASE_URL}/operations?pageSize=20`,
         ).catch((e) => ({ error: String(e) }));
         result = { channel: ch, input, operations: ops };
         break;
