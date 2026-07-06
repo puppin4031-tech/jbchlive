@@ -1310,6 +1310,18 @@ serve(async (req) => {
         break;
       }
 
+      case "diagnose": {
+        if (!channelId) throw new Error("channelId required");
+        const { gcpChannelId, inputId } = await resolveGcpIds(user.serviceClient, channelId);
+        const ch = await getChannelGCP(gcpChannelId).catch((e) => ({ error: String(e) }));
+        const input = await getInput(inputId).catch((e) => ({ error: String(e) }));
+        const ops = await gcpFetch(
+          `${BASE_URL}/operations?filter=${encodeURIComponent(`target=projects/${PROJECT_ID}/locations/${LOCATION}/channels/${gcpChannelId}`)}`,
+        ).catch((e) => ({ error: String(e) }));
+        result = { channel: ch, input, operations: ops };
+        break;
+      }
+
       default:
 
         throw new Error(`Unknown action: ${action}`);
