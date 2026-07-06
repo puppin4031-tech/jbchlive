@@ -368,6 +368,7 @@ const AdminPage = () => {
             {channels.map(ch => {
               const isStopping = stopLive.isPending && stopLive.variables?.id === ch.id;
               const isReprov = reprovisionChannel.isPending && reprovisionChannel.variables === ch.id;
+              const canStop = ch.gcp_channel_state !== 'STARTING' && ch.gcp_channel_state !== 'STOPPING';
 
               return (
                 <Card key={ch.id} className={`p-4 space-y-2 ${ch.is_suspended ? 'border-destructive/50' : ''}`}>
@@ -421,10 +422,11 @@ const AdminPage = () => {
                           size="sm"
                           variant="destructive"
                           onClick={() => stopLive.mutate({ id: ch.id })}
-                          disabled={isStopping}
+                          disabled={isStopping || !canStop}
+                          title={!canStop ? 'GCP 서버 준비/종료 중에는 종료할 수 없습니다' : '라이브 종료'}
                         >
                           {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-                          라이브 종료
+                          {canStop ? '라이브 종료' : '준비 중'}
                         </Button>
                       )}
                       <Button size="icon" variant="ghost" onClick={() => deleteChannel.mutate(ch.id)}>
