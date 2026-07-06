@@ -471,6 +471,10 @@ async function safeDeleteInput(inputId: string): Promise<void> {
     await deleteInput(inputId);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("still in use by a channel")) {
+      console.warn("safeDeleteInput quarantined with old channel:", inputId);
+      return;
+    }
     if (msg.includes("404") || msg.includes("NOT_FOUND") ||
         msg.includes("403") || msg.includes("PERMISSION_DENIED")) {
       return;
@@ -1211,6 +1215,7 @@ serve(async (req) => {
       "getHLSUrl",
       "provisionChannel",
       "heartbeatBroadcaster",
+      "diagnoseChannel",
     ];
 
     if (channelActions.includes(action) && channelId) {
@@ -1475,6 +1480,34 @@ serve(async (req) => {
         if (!channelId) throw new Error("channelId required");
         const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
         result = await getHLSUrl(gcpChannelId);
+        break;
+      }
+
+      case "diagnoseChannel": {
+        if (!channelId) throw new Error("channelId required");
+        const { inputId, gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
+        const [dbChannel, gcpChannel, gcpInput, ops] = await Promise.all([
+          user.serviceClient
+            .from("channels")
+            .select("id, is_live, gcp_channel_state, gcp_channel_id, gcp_input_id, gcp_input_uri, gcp_output_uri, gcp_last_error, stream_url, live_started_at, updated_at")
+            .eq("id", channelId)
+            .single()
+            .then((r) => r.data),
+          getChannelGCP(gcpChannelId).catch((e) => ({ error: e instanceof Error ? e.message : String(e) })),
+          getInput(inputId).catch((e) => ({ error: e instanceof Error ? e.message : String(e) })),
+          listChannelOperations(gcpChannelId).catch((e) => [{ error: { message: e instanceof Error ? e.message : String(e) } }] as GcpOperation[]),
+        ]);
+        result = {
+          database: dbChannel,
+          gcp: {
+            location: LOCATION,
+            channelId: gcpChannelId,
+            inputId,
+            channel: gcpChannel,
+            input: gcpInput,
+            operations: ops.slice(0, 20).map(summarizeOperation),
+          },
+        };
         break;
       }
 
