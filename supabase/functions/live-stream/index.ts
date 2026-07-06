@@ -14,6 +14,16 @@ const SERVICE_ACCOUNT_JSON = Deno.env.get("GCP_SERVICE_ACCOUNT_JSON")!;
 const BASE_URL = `https://livestream.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}`;
 const STUCK_STARTING_AFTER_MS = 20 * 60 * 1000;
 
+class HttpError extends Error {
+  status: number;
+
+  constructor(message: string, status = 500) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+  }
+}
+
 // --- Google Auth via Service Account JWT ---
 
 async function getAccessToken(): Promise<string> {
@@ -798,6 +808,17 @@ serve(async (req) => {
       // Helper: stop a single channel (idempotent)
       const stopOne = async (channelId: string, reason?: string, endReason: string = "auto") => {
         const { gcpChannelId } = await resolveGcpIds(serviceClient, channelId);
+        const preState = await getChannelGCP(gcpChannelId)
+          .then((c) => c.streamingState as string | undefined)
+          .catch(() => undefined);
+        if (preState === "STARTING" || preState === "STOPPING") {
+          console.warn(`skip stopOne for ${channelId}: channel is ${preState}`);
+          await serviceClient
+            .from("channels")
+            .update({ gcp_channel_state: preState })
+            .eq("id", channelId);
+          return;
+        }
         try {
           await stopChannelGCP(gcpChannelId);
         } catch (e) {
@@ -1279,9 +1300,13 @@ serve(async (req) => {
           .then((c) => c.streamingState as string | undefined)
           .catch(() => undefined);
         if (preState === "STARTING") {
-          throw new Error(
+          throw new HttpError(
             "채널이 아직 준비 중입니다 (STARTING). 잠시 후 [AWAITING_INPUT] 상태가 된 뒤 종료해 주세요.",
+            409,
           );
+        }
+        if (preState === "STOPPING") {
+          throw new HttpError("채널이 이미 종료 처리 중입니다. 잠시 후 다시 확인해주세요.", 409);
         }
 
         try {
@@ -1535,7 +1560,9 @@ serve(async (req) => {
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    const status = msg.includes("Unauthorized")
+    const status = error instanceof HttpError
+      ? error.status
+      : msg.includes("Unauthorized")
       ? 401
       : msg.includes("Forbidden")
         ? 403

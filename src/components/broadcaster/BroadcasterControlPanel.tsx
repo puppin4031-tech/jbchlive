@@ -86,6 +86,7 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
 
   const display = phaseDisplay(phase, gcpState);
   const elapsed = isLive ? formatElapsed(channel.live_started_at, now) : null;
+  const canStop = phase === 'awaiting-input' || phase === 'streaming';
 
   const handleStart = () => {
     startLive.mutate(undefined, {
@@ -155,13 +156,18 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
             ) : (
               <Button
                 onClick={() => setStopDialogOpen(true)}
-                disabled={stopLive.isPending}
+                disabled={stopLive.isPending || !canStop}
                 variant="destructive"
                 size="sm"
                 className="flex-1 h-10 font-semibold"
+                title={!canStop ? '서버 준비 중에는 종료할 수 없습니다' : '라이브 종료'}
               >
                 {stopLive.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
+                ) : !canStop ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-1 animate-spin" /> 준비 중
+                  </>
                 ) : (
                   <>
                     <Square className="w-4 h-4 mr-1" /> 종료
@@ -282,17 +288,20 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
         ) : (
           <Button
             onClick={() => setStopDialogOpen(true)}
-            disabled={stopLive.isPending}
+            disabled={stopLive.isPending || !canStop}
             variant="destructive"
             size="lg"
             className="w-full h-14 text-base font-bold gap-2"
+            title={!canStop ? '서버 준비 중에는 종료할 수 없습니다' : '라이브 종료'}
           >
             {stopLive.isPending ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : !canStop ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <Square className="w-5 h-5" />
             )}
-            라이브 종료
+            {canStop ? '라이브 종료' : '서버 준비 중'}
           </Button>
         )}
 
