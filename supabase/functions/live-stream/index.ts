@@ -1326,10 +1326,6 @@ serve(async (req) => {
       default:
 
         throw new Error(`Unknown action: ${action}`);
-
-      default:
-
-        throw new Error(`Unknown action: ${action}`);
     }
 
     return new Response(JSON.stringify(result), {
