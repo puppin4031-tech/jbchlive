@@ -1198,6 +1198,18 @@ serve(async (req) => {
         if (!channelId) throw new Error("channelId required");
         const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
 
+        // CRITICAL: Never call stop while the channel is STARTING. GCP will
+        // silently wedge the channel in STARTING and it will never reach
+        // AWAITING_INPUT. Only STREAMING or AWAITING_INPUT are safe to stop.
+        const preState = await getChannelGCP(gcpChannelId)
+          .then((c) => c.streamingState as string | undefined)
+          .catch(() => undefined);
+        if (preState === "STARTING") {
+          throw new Error(
+            "채널이 아직 준비 중입니다 (STARTING). 잠시 후 [AWAITING_INPUT] 상태가 된 뒤 종료해 주세요.",
+          );
+        }
+
         try {
           result = await stopChannelGCP(gcpChannelId);
         } catch (e) {
@@ -1208,6 +1220,7 @@ serve(async (req) => {
           }
           result = { alreadyStopped: true };
         }
+
 
         const forceReason = user.isAdmin && typeof reason === "string" && reason.trim()
           ? `관리자 강제 종료: ${reason.trim().slice(0, 200)}`
