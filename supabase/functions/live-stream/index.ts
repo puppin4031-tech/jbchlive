@@ -1223,8 +1223,8 @@ serve(async (req) => {
     if (action && !ACTION_REGEX.test(action)) throw new Error("Invalid action format");
     checkRateLimit(user.id, action);
 
-    // provisionChannel: admin only
-    if (action === "provisionChannel" && !user.isAdmin) {
+    // Admin-only actions
+    if (["provisionChannel", "forceStopStartingChannel"].includes(action) && !user.isAdmin) {
       throw new Error("Forbidden: admin only");
     }
 
@@ -1235,6 +1235,7 @@ serve(async (req) => {
       "getStatus",
       "getHLSUrl",
       "provisionChannel",
+      "forceStopStartingChannel",
       "heartbeatBroadcaster",
       "diagnoseChannel",
     ];
@@ -1346,6 +1347,51 @@ serve(async (req) => {
         );
 
         // No auto-VOD: live manifest URL is ephemeral and would 404 after stop.
+        break;
+      }
+
+      case "forceStopStartingChannel": {
+        if (!channelId) throw new Error("channelId required");
+        if (!user.isAdmin) throw new Error("Forbidden: admin only");
+        const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
+        const beforeState = await getChannelGCP(gcpChannelId)
+          .then((c) => c.streamingState as string | undefined)
+          .catch(() => undefined);
+
+        let stopResult: unknown = null;
+        let stopError: string | null = null;
+        try {
+          stopResult = await stopChannelGCP(gcpChannelId);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          stopError = msg;
+          if (!msg.includes("FAILED_PRECONDITION") && !msg.includes("not running")) {
+            console.error("forceStopStartingChannel GCP stop failed", msg);
+          }
+        }
+
+        await user.serviceClient
+          .from("channels")
+          .update({
+            is_live: false,
+            gcp_channel_state: "FORCE_STOPPED",
+            stream_url: null,
+            current_viewers: 0,
+            low_viewer_since: null,
+            broadcaster_last_seen_at: null,
+            rtmp_disconnected_at: null,
+            gcp_last_error: `관리자 강제 종료: ${beforeState ?? "UNKNOWN"} 상태에서 라이브를 오프라인으로 정리했습니다.`,
+          })
+          .eq("id", channelId);
+
+        await closeLiveSession(user.serviceClient, channelId, "admin_force_stopped_starting");
+
+        result = {
+          ok: true,
+          beforeState,
+          stopResult,
+          stopError,
+        };
         break;
       }
 
@@ -1480,7 +1526,7 @@ serve(async (req) => {
           .from("channels")
           .update({
             gcp_channel_state: state,
-            ...(failedOpMessage ? { gcp_last_error: failedOpMessage.slice(0, 1000) } : {}),
+            ...(dbCh?.is_live && failedOpMessage ? { gcp_last_error: failedOpMessage.slice(0, 1000) } : {}),
             stream_url: dbCh?.is_live && state === "STREAMING" ? streamUrl : null,
           })
           .eq("id", channelId);
