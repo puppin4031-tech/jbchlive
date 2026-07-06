@@ -12,6 +12,7 @@ const LOCATION = Deno.env.get("GOOGLE_CLOUD_LOCATION")!;
 const SERVICE_ACCOUNT_JSON = Deno.env.get("GCP_SERVICE_ACCOUNT_JSON")!;
 
 const BASE_URL = `https://livestream.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}`;
+const STUCK_STARTING_AFTER_MS = 20 * 60 * 1000;
 
 // --- Google Auth via Service Account JWT ---
 
@@ -102,6 +103,83 @@ async function gcpFetch(url: string, options: RequestInit = {}) {
     throw new Error(`GCP API error [${res.status}]: ${JSON.stringify(data)}`);
   }
   return data;
+}
+
+type GcpOperation = {
+  name?: string;
+  done?: boolean;
+  error?: { code?: number; message?: string; details?: unknown[] };
+  metadata?: {
+    target?: string;
+    verb?: string;
+    createTime?: string;
+    endTime?: string;
+    requestedCancellation?: boolean;
+    apiVersion?: string;
+  };
+  response?: unknown;
+};
+
+function channelResourceName(gcpChannelId: string): string {
+  return `projects/${PROJECT_ID}/locations/${LOCATION}/channels/${gcpChannelId}`;
+}
+
+async function listRecentOperations(pageSize = 50): Promise<GcpOperation[]> {
+  const url = `${BASE_URL}/operations?pageSize=${pageSize}`;
+  const data = await gcpFetch(url);
+  return Array.isArray(data?.operations) ? data.operations : [];
+}
+
+async function listChannelOperations(gcpChannelId: string): Promise<GcpOperation[]> {
+  const target = channelResourceName(gcpChannelId);
+  const ops = await listRecentOperations(50);
+  return ops
+    .filter((op) => {
+      const raw = JSON.stringify(op);
+      return op.metadata?.target === target || raw.includes(`/channels/${gcpChannelId}`) || raw.includes(gcpChannelId);
+    })
+    .sort((a, b) => {
+      const at = new Date(a.metadata?.createTime ?? a.metadata?.endTime ?? 0).getTime();
+      const bt = new Date(b.metadata?.createTime ?? b.metadata?.endTime ?? 0).getTime();
+      return bt - at;
+    });
+}
+
+function summarizeOperation(op: GcpOperation) {
+  return {
+    name: op.name,
+    verb: op.metadata?.verb,
+    target: op.metadata?.target,
+    done: !!op.done,
+    createTime: op.metadata?.createTime,
+    endTime: op.metadata?.endTime,
+    requestedCancellation: op.metadata?.requestedCancellation,
+    error: op.error ? {
+      code: op.error.code,
+      message: op.error.message,
+      details: op.error.details,
+    } : null,
+  };
+}
+
+function latestFailedOperationMessage(ops: GcpOperation[]): string | null {
+  const failed = ops.find((op) => op.done && op.error?.message);
+  if (!failed?.error) return null;
+  const verb = failed.metadata?.verb ? `${failed.metadata.verb} ` : "";
+  return `GCP ${verb}operation failed: ${failed.error.message}`;
+}
+
+function operationCreateTimeMs(op: GcpOperation | undefined): number {
+  const raw = op?.metadata?.createTime;
+  return raw ? new Date(raw).getTime() : 0;
+}
+
+function isStuckStarting(startedAt: string | null | undefined, ops: GcpOperation[]): boolean {
+  const latestStartOp = ops.find((op) => op.metadata?.verb === "start");
+  const startOpMs = operationCreateTimeMs(latestStartOp);
+  const dbStartMs = startedAt ? new Date(startedAt).getTime() : 0;
+  const referenceMs = Math.max(startOpMs, dbStartMs);
+  return referenceMs > 0 && Date.now() - referenceMs >= STUCK_STARTING_AFTER_MS;
 }
 
 // Poll an LRO operation until done (with timeout)
@@ -393,6 +471,10 @@ async function safeDeleteInput(inputId: string): Promise<void> {
     await deleteInput(inputId);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("still in use by a channel")) {
+      console.warn("safeDeleteInput quarantined with old channel:", inputId);
+      return;
+    }
     if (msg.includes("404") || msg.includes("NOT_FOUND") ||
         msg.includes("403") || msg.includes("PERMISSION_DENIED")) {
       return;
@@ -408,20 +490,11 @@ async function safeDeleteChannel(gcpChannelId: string): Promise<void> {
     if (existing) {
       const state = existing.streamingState;
       if (state === "STARTING" || state === "STOPPING") {
-        // Recovery path for half-started/half-stopped GCP channels. Try to stop
-        // once, but do not block Safe Reset forever if Google keeps the old
-        // resource in a transitional state. The new timestamped IDs below keep
-        // the replacement channel isolated from this quarantined resource.
-        await stopChannelGCP(gcpChannelId).catch((e) => {
-          console.warn("safeDeleteChannel stop transitional failed", e);
-        });
-        const afterStop = await getChannelGCP(gcpChannelId).catch(() => null);
-        if (afterStop?.streamingState && afterStop.streamingState !== "STOPPED") {
-          console.warn(
-            `safeDeleteChannel quarantining ${gcpChannelId} in ${afterStop.streamingState}`,
-          );
-          return;
-        }
+        // Never call :stop while STARTING/STOPPING. Google can leave the
+        // channel wedged in STARTING. Quarantine the old ID and continue with a
+        // timestamped replacement channel instead.
+        console.warn(`safeDeleteChannel quarantining ${gcpChannelId} in ${state}`);
+        return;
       } else if (state && state !== "STOPPED" && state !== "STREAMING_STATE_UNSPECIFIED") {
         throw new Error(
           `Channel is currently ${state}. Stop the live broadcast before reprovisioning.`,
@@ -1142,6 +1215,7 @@ serve(async (req) => {
       "getHLSUrl",
       "provisionChannel",
       "heartbeatBroadcaster",
+      "diagnoseChannel",
     ];
 
     if (channelActions.includes(action) && channelId) {
@@ -1266,11 +1340,16 @@ serve(async (req) => {
         const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
         const gcpCh = await getChannelGCP(gcpChannelId);
         const state = gcpCh.streamingState || "UNKNOWN";
+        const ops = await listChannelOperations(gcpChannelId).catch((e) => {
+          console.warn("listChannelOperations failed", e);
+          return [] as GcpOperation[];
+        });
+        const failedOpMessage = latestFailedOperationMessage(ops);
 
         // Idempotent stream_url backfill: if channel is live but stream_url missing, populate it
         const { data: dbCh } = await user.serviceClient
           .from("channels")
-          .select("is_live, stream_url")
+          .select("is_live, stream_url, live_started_at, gcp_channel_id, gcp_channel_state")
           .eq("id", channelId)
           .single();
 
@@ -1281,6 +1360,93 @@ serve(async (req) => {
           streamUrl = null;
         }
 
+        if (
+          dbCh?.is_live &&
+          state === "STARTING" &&
+          dbCh.gcp_channel_state === "STARTING" &&
+          dbCh.gcp_channel_id === gcpChannelId &&
+          !failedOpMessage &&
+          isStuckStarting(dbCh.live_started_at, ops)
+        ) {
+          const { data: lockRow } = await user.serviceClient
+            .from("channels")
+            .update({
+              gcp_channel_state: "RECOVERING",
+              gcp_last_error: "STARTING 상태가 장시간 지속되어 GCP 채널을 자동 복구 중입니다.",
+            })
+            .eq("id", channelId)
+            .eq("gcp_channel_id", gcpChannelId)
+            .eq("gcp_channel_state", "STARTING")
+            .select("id")
+            .maybeSingle();
+
+          if (!lockRow) {
+            result = {
+              streamingState: "RECOVERING",
+              streamUrl: null,
+              recovered: false,
+              recoveryReason: "이미 다른 상태 조회 요청이 자동 복구를 진행 중입니다.",
+              diagnostic: {
+                gcpChannelId,
+                location: LOCATION,
+                startedAt: dbCh.live_started_at ?? null,
+              },
+            };
+            break;
+          }
+
+          console.warn(`Recovering stuck STARTING channel ${channelId} (${gcpChannelId})`);
+          try {
+            const recovered = await provisionChannel(user.serviceClient, channelId);
+            const restart = await startChannelGCP(recovered.gcp_channel_id);
+            await user.serviceClient
+              .from("channels")
+              .update({
+                is_live: true,
+                live_started_at: new Date().toISOString(),
+                gcp_channel_state: "STARTING",
+                gcp_last_error: null,
+                stream_url: null,
+                current_viewers: 0,
+                peak_viewers: 0,
+                avg_watch_seconds: 0,
+                low_viewer_since: null,
+                broadcaster_last_seen_at: new Date().toISOString(),
+              })
+              .eq("id", channelId);
+            await openLiveSession(user.serviceClient, channelId);
+
+            result = {
+              streamingState: "STARTING",
+              streamUrl: null,
+              recovered: true,
+              recoveryReason: `STARTING 상태가 ${Math.floor(STUCK_STARTING_AFTER_MS / 60000)}분 이상 지속되어 새 GCP 채널로 자동 복구했습니다. OBS 송출 주소가 변경되었습니다.`,
+              previous: {
+                gcpChannelId,
+                operations: ops.slice(0, 10).map(summarizeOperation),
+              },
+              current: {
+                ...recovered,
+                startOperation: restart,
+              },
+            };
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            await user.serviceClient
+              .from("channels")
+              .update({
+                is_live: false,
+                gcp_channel_state: "ERROR",
+                gcp_last_error: `자동 복구 실패: ${msg.slice(0, 900)}`,
+                stream_url: null,
+              })
+              .eq("id", channelId);
+            await closeLiveSession(user.serviceClient, channelId, "recovery_failed");
+            throw e;
+          }
+          break;
+        }
+
         if (dbCh?.is_live && state === "STREAMING" && !streamUrl) {
           streamUrl = await buildHlsHttpsUrl(gcpChannelId);
         }
@@ -1289,6 +1455,7 @@ serve(async (req) => {
           .from("channels")
           .update({
             gcp_channel_state: state,
+            ...(failedOpMessage ? { gcp_last_error: failedOpMessage.slice(0, 1000) } : {}),
             stream_url: dbCh?.is_live && state === "STREAMING" ? streamUrl : null,
           })
           .eq("id", channelId);
@@ -1298,6 +1465,13 @@ serve(async (req) => {
           inputAttachments: gcpCh.inputAttachments,
           activeInput: gcpCh.activeInput,
           streamUrl,
+          operations: ops.slice(0, 10).map(summarizeOperation),
+          diagnostic: {
+            gcpChannelId,
+            location: LOCATION,
+            startedAt: dbCh?.live_started_at ?? null,
+            failedOperation: failedOpMessage,
+          },
         };
         break;
       }
@@ -1306,6 +1480,34 @@ serve(async (req) => {
         if (!channelId) throw new Error("channelId required");
         const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
         result = await getHLSUrl(gcpChannelId);
+        break;
+      }
+
+      case "diagnoseChannel": {
+        if (!channelId) throw new Error("channelId required");
+        const { inputId, gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
+        const [dbChannel, gcpChannel, gcpInput, ops] = await Promise.all([
+          user.serviceClient
+            .from("channels")
+            .select("id, is_live, gcp_channel_state, gcp_channel_id, gcp_input_id, gcp_input_uri, gcp_output_uri, gcp_last_error, stream_url, live_started_at, updated_at")
+            .eq("id", channelId)
+            .single()
+            .then((r) => r.data),
+          getChannelGCP(gcpChannelId).catch((e) => ({ error: e instanceof Error ? e.message : String(e) })),
+          getInput(inputId).catch((e) => ({ error: e instanceof Error ? e.message : String(e) })),
+          listChannelOperations(gcpChannelId).catch((e) => [{ error: { message: e instanceof Error ? e.message : String(e) } }] as GcpOperation[]),
+        ]);
+        result = {
+          database: dbChannel,
+          gcp: {
+            location: LOCATION,
+            channelId: gcpChannelId,
+            inputId,
+            channel: gcpChannel,
+            input: gcpInput,
+            operations: ops.slice(0, 20).map(summarizeOperation),
+          },
+        };
         break;
       }
 
