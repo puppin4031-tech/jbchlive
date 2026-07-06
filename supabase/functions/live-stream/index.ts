@@ -1526,7 +1526,7 @@ serve(async (req) => {
           .from("channels")
           .update({
             gcp_channel_state: state,
-            ...(failedOpMessage ? { gcp_last_error: failedOpMessage.slice(0, 1000) } : {}),
+            ...(dbCh?.is_live && failedOpMessage ? { gcp_last_error: failedOpMessage.slice(0, 1000) } : {}),
             stream_url: dbCh?.is_live && state === "STREAMING" ? streamUrl : null,
           })
           .eq("id", channelId);
