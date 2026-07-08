@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import * as liveApi from '@/lib/liveStreamApi';
 import ActivityTimeline from '@/components/admin/ActivityTimeline';
 import LiveNowPanel from '@/components/admin/LiveNowPanel';
+import ChannelHealthPanel from '@/components/admin/ChannelHealthPanel';
 
 const AdminPage = () => {
   const { isAdmin, loading, user } = useAuth();
