@@ -318,6 +318,16 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
             playsInline
             className="w-full h-full object-contain bg-black"
           />
+          {manifestRetrying && !error && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 gap-3 p-6 text-center">
+              <span className="relative flex h-4 w-4">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-primary"></span>
+              </span>
+              <p className="text-sm text-white font-medium">방송 신호를 받아오는 중입니다…</p>
+              <p className="text-xs text-white/70">(재시도 {manifestRetriesRef.current}/{MANIFEST_MAX_RETRIES})</p>
+            </div>
+          )}
           {error && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/85 p-4 sm:p-6 overflow-auto">
               <div className="max-w-lg w-full bg-background/95 rounded-xl p-5 sm:p-6 shadow-2xl border border-destructive/30">
