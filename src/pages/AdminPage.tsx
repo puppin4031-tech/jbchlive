@@ -247,8 +247,11 @@ const AdminPage = () => {
             <TabsTrigger value="new">새 채널</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="live" className="mt-4">
+          <TabsContent value="live" className="mt-4 space-y-6">
             <LiveNowPanel />
+            <div className="border-t pt-6">
+              <ChannelHealthPanel />
+            </div>
           </TabsContent>
 
           <TabsContent value="activity" className="mt-4">
