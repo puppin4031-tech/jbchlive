@@ -52,6 +52,7 @@ const ViewerCountBadge = ({ channelId }: { channelId: string }) => {
 const LiveNowPanel = () => {
   const queryClient = useQueryClient();
   const [target, setTarget] = useState<LiveChannel | null>(null);
+  const [diagnoseTarget, setDiagnoseTarget] = useState<LiveChannel | null>(null);
   const [reason, setReason] = useState('');
 
   const { data: liveChannels = [] } = useQuery({
