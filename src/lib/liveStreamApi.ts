@@ -46,6 +46,25 @@ export const startChannel = (channelId: string) =>
 export const stopChannel = (channelId: string, reason?: string) =>
   invoke("stopChannel", { channelId, reason });
 
+/** 관리자용: 채널 전체 진단 (DB + GCP 채널/입력/최근 오퍼레이션) */
+export type ChannelDiagnostic = {
+  database: Record<string, unknown> | null;
+  gcp: {
+    location: string;
+    channelId: string;
+    inputId: string;
+    channel: Record<string, unknown> & { error?: string };
+    input: Record<string, unknown> & { error?: string };
+    operations: Array<Record<string, unknown>>;
+  };
+};
+export const diagnoseChannel = (channelId: string): Promise<ChannelDiagnostic> =>
+  invoke("diagnoseChannel", { channelId });
+
+/** 관리자용: STARTING 상태에서 강제 종료 (GCP 실패해도 DB만 오프라인 처리) */
+export const forceStopStartingChannel = (channelId: string) =>
+  invoke("forceStopStartingChannel", { channelId });
+
 /** GCP 채널 상태 조회 (폴링용) */
 export const getStatus = (
   channelId: string
