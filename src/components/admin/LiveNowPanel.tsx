@@ -101,6 +101,14 @@ const LiveNowPanel = () => {
             <ViewerCountBadge channelId={ch.id} />
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => setDiagnoseTarget(ch)}
+              title="진단"
+            >
+              <Stethoscope className="w-4 h-4 mr-1" /> 진단
+            </Button>
+            <Button
+              size="sm"
               variant="destructive"
               onClick={() => { setTarget(ch); setReason(''); }}
             >
@@ -109,6 +117,12 @@ const LiveNowPanel = () => {
           </Card>
         ))}
       </div>
+
+      <ChannelDiagnosticDialog
+        channelId={diagnoseTarget?.id ?? null}
+        channelName={diagnoseTarget?.name}
+        onClose={() => setDiagnoseTarget(null)}
+      />
 
       <Dialog open={!!target} onOpenChange={(open) => !open && setTarget(null)}>
         <DialogContent>
