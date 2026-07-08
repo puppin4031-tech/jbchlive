@@ -1459,7 +1459,8 @@ serve(async (req) => {
 
         let streamUrl = dbCh?.stream_url ?? null;
         if (state === "STREAMING") {
-          streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId);
+          // Verify manifest actually exists on GCS before advertising URL to viewers.
+          streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId, { verify: true });
         } else {
           streamUrl = null;
         }
