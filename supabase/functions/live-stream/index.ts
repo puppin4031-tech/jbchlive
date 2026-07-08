@@ -1553,7 +1553,7 @@ serve(async (req) => {
         }
 
         if (dbCh?.is_live && state === "STREAMING" && !streamUrl) {
-          streamUrl = await buildHlsHttpsUrl(gcpChannelId);
+          streamUrl = await buildHlsHttpsUrl(gcpChannelId, { verify: true });
         }
 
         await user.serviceClient
