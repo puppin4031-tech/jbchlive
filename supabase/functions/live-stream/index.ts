@@ -429,14 +429,37 @@ function gsToHttps(uri: string): string {
   return m ? `https://storage.googleapis.com/${m[1]}/${m[2]}` : uri;
 }
 
-async function buildHlsHttpsUrl(gcpChannelId: string): Promise<string | null> {
+/**
+ * HEAD-check that the public HLS manifest actually exists on GCS.
+ * STREAMING state can precede the first manifest write by several seconds,
+ * so returning the URL too early causes viewers to see a 404 in the player.
+ */
+async function manifestExists(httpsUrl: string): Promise<boolean> {
+  try {
+    const bust = httpsUrl.includes("?") ? "&" : "?";
+    const r = await fetch(`${httpsUrl}${bust}t=${Date.now()}`, { method: "HEAD" });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function buildHlsHttpsUrl(
+  gcpChannelId: string,
+  opts: { verify?: boolean } = {},
+): Promise<string | null> {
   try {
     const ch = await getChannelGCP(gcpChannelId);
     const fileName = ch.manifests?.[0]?.fileName ?? "manifest.m3u8";
     const outputUri: string = ch.output?.uri ?? "";
     if (!outputUri.startsWith("gs://")) return null;
     const base = outputUri.endsWith("/") ? outputUri : `${outputUri}/`;
-    return gsToHttps(`${base}${fileName}`);
+    const httpsUrl = gsToHttps(`${base}${fileName}`);
+    if (opts.verify) {
+      const ok = await manifestExists(httpsUrl);
+      if (!ok) return null;
+    }
+    return httpsUrl;
   } catch {
     return null;
   }
