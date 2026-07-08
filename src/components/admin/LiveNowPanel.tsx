@@ -6,9 +6,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Radio, Users } from 'lucide-react';
+import { Loader2, Radio, Users, Stethoscope } from 'lucide-react';
 import * as liveApi from '@/lib/liveStreamApi';
 import { toast } from 'sonner';
+import ChannelDiagnosticDialog from './ChannelDiagnosticDialog';
 
 type LiveChannel = {
   id: string;
@@ -51,6 +52,7 @@ const ViewerCountBadge = ({ channelId }: { channelId: string }) => {
 const LiveNowPanel = () => {
   const queryClient = useQueryClient();
   const [target, setTarget] = useState<LiveChannel | null>(null);
+  const [diagnoseTarget, setDiagnoseTarget] = useState<LiveChannel | null>(null);
   const [reason, setReason] = useState('');
 
   const { data: liveChannels = [] } = useQuery({
@@ -99,6 +101,14 @@ const LiveNowPanel = () => {
             <ViewerCountBadge channelId={ch.id} />
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => setDiagnoseTarget(ch)}
+              title="진단"
+            >
+              <Stethoscope className="w-4 h-4 mr-1" /> 진단
+            </Button>
+            <Button
+              size="sm"
               variant="destructive"
               onClick={() => { setTarget(ch); setReason(''); }}
             >
@@ -107,6 +117,12 @@ const LiveNowPanel = () => {
           </Card>
         ))}
       </div>
+
+      <ChannelDiagnosticDialog
+        channelId={diagnoseTarget?.id ?? null}
+        channelName={diagnoseTarget?.name}
+        onClose={() => setDiagnoseTarget(null)}
+      />
 
       <Dialog open={!!target} onOpenChange={(open) => !open && setTarget(null)}>
         <DialogContent>

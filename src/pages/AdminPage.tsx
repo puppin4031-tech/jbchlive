@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import * as liveApi from '@/lib/liveStreamApi';
 import ActivityTimeline from '@/components/admin/ActivityTimeline';
 import LiveNowPanel from '@/components/admin/LiveNowPanel';
+import ChannelHealthPanel from '@/components/admin/ChannelHealthPanel';
 
 const AdminPage = () => {
   const { isAdmin, loading, user } = useAuth();
@@ -247,8 +248,11 @@ const AdminPage = () => {
             <TabsTrigger value="new">새 채널</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="live" className="mt-4">
+          <TabsContent value="live" className="mt-4 space-y-6">
             <LiveNowPanel />
+            <div className="border-t pt-6">
+              <ChannelHealthPanel />
+            </div>
           </TabsContent>
 
           <TabsContent value="activity" className="mt-4">
