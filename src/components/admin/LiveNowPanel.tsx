@@ -6,9 +6,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Radio, Users } from 'lucide-react';
+import { Loader2, Radio, Users, Stethoscope } from 'lucide-react';
 import * as liveApi from '@/lib/liveStreamApi';
 import { toast } from 'sonner';
+import ChannelDiagnosticDialog from './ChannelDiagnosticDialog';
 
 type LiveChannel = {
   id: string;
