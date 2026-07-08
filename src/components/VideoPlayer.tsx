@@ -93,20 +93,49 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
   const source = useMemo(() => parseVideoSource(src), [src]);
   const [error, setError] = useState<HlsErrorInfo | null>(null);
 
+  // While the master manifest is 404-ing right after STREAMING starts, GCS
+  // may still be writing the first playlist. We swallow the error and retry
+  // silently for ~30s before surfacing the scary debug panel.
+  const [manifestRetrying, setManifestRetrying] = useState(false);
+  const manifestRetriesRef = useRef(0);
+  const MANIFEST_MAX_RETRIES = 10;
+  const MANIFEST_RETRY_MS = 3000;
+
   useEffect(() => {
     setError(null);
+    setManifestRetrying(false);
+    manifestRetriesRef.current = 0;
     if (source.type !== 'direct') return;
     const video = videoRef.current;
     if (!video) return;
 
     const url = source.url;
     if (url.includes('.m3u8') && Hls.isSupported()) {
-      const hls = new Hls();
-      hls.loadSource(url);
+      const hls = new Hls({
+        // Aggressive load retries at the hls.js level too — helps when GCS
+        // returns a transient 404 for the first segment.
+        manifestLoadingMaxRetry: 4,
+        manifestLoadingRetryDelay: 1500,
+        manifestLoadingMaxRetryTimeout: 20000,
+        levelLoadingMaxRetry: 4,
+        levelLoadingRetryDelay: 1500,
+        fragLoadingMaxRetry: 6,
+      });
+      let retryTimer: ReturnType<typeof setTimeout> | null = null;
+      let destroyed = false;
+
+      const loadWithCacheBust = () => {
+        // Cache-bust so intermediate CDN 404 isn't cached.
+        const sep = url.includes('?') ? '&' : '?';
+        hls.loadSource(`${url}${sep}t=${Date.now()}`);
+      };
+
+      loadWithCacheBust();
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) => {
         setError(null);
-        // Prefer 720p track when available (single-quality provisioning target).
+        setManifestRetrying(false);
+        manifestRetriesRef.current = 0;
         try {
           const levels = data?.levels ?? hls.levels ?? [];
           const idx720 = levels.findIndex((l) => l?.height === 720);
@@ -127,9 +156,32 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
         const failedUrl = getHlsErrorUrl(data, url);
         const httpStatus = data.response?.code;
         const target = getHlsErrorTarget(data);
-        let responseSnippet: string | undefined;
 
-        // Try to fetch body for diagnostic detail when we know the failing URL.
+        // Silent retry: master manifest 404/timeout right after STREAMING —
+        // GCS often takes 5-20s after channel state flips before the first
+        // manifest.m3u8 exists. Don't scare viewers with a debug panel yet.
+        const isManifestMiss =
+          (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
+            data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT) &&
+          (httpStatus === 404 || httpStatus === 0 || httpStatus === undefined);
+        if (isManifestMiss && manifestRetriesRef.current < MANIFEST_MAX_RETRIES && !destroyed) {
+          manifestRetriesRef.current += 1;
+          setManifestRetrying(true);
+          if (retryTimer) clearTimeout(retryTimer);
+          retryTimer = setTimeout(() => {
+            if (destroyed) return;
+            try {
+              hls.stopLoad();
+              loadWithCacheBust();
+              hls.startLoad();
+            } catch {
+              // swallow
+            }
+          }, MANIFEST_RETRY_MS);
+          return;
+        }
+
+        let responseSnippet: string | undefined;
         try {
           if (failedUrl) {
             const r = await fetch(failedUrl, { method: 'GET' });
@@ -154,7 +206,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
           data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT
         ) {
           title = '매니페스트를 찾을 수 없음 (404)';
-          reason = '아직 송출이 시작되지 않았거나, HLS 매니페스트가 생성되지 않았습니다.';
+          reason = `${MANIFEST_MAX_RETRIES}회 재시도 후에도 HLS 매니페스트가 생성되지 않았습니다. 방송자 OBS 송출이 중단되었거나 GCP 파이프라인에 문제가 있을 수 있습니다.`;
         } else if (
           data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR ||
           data.details === Hls.ErrorDetails.LEVEL_LOAD_TIMEOUT
@@ -181,6 +233,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
           reason = '영상 디코딩 중 문제가 발생했습니다.';
         }
 
+        setManifestRetrying(false);
         setError({
           title,
           reason,
@@ -194,7 +247,11 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
         });
       });
 
-      return () => hls.destroy();
+      return () => {
+        destroyed = true;
+        if (retryTimer) clearTimeout(retryTimer);
+        hls.destroy();
+      };
     } else {
       video.src = url;
       if (autoPlay) video.play().catch(() => {});
