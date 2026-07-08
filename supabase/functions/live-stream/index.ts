@@ -1294,59 +1294,69 @@ serve(async (req) => {
         if (!channelId) throw new Error("channelId required");
         const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
 
-        // CRITICAL: Never call stop while the channel is STARTING. GCP will
-        // silently wedge the channel in STARTING and it will never reach
-        // AWAITING_INPUT. Only STREAMING or AWAITING_INPUT are safe to stop.
+        const isAdminForce = user.isAdmin && typeof reason === "string" && !!reason.trim();
+
+        // CRITICAL: Never call stop while the channel is STARTING for regular
+        // broadcasters (GCP wedges the channel). Admin force-stop bypasses this
+        // guard so a stuck STARTING channel can always be recovered.
         const preState = await getChannelGCP(gcpChannelId)
           .then((c) => c.streamingState as string | undefined)
           .catch(() => undefined);
-        if (preState === "STARTING") {
-          throw new HttpError(
-            "채널이 아직 준비 중입니다 (STARTING). 잠시 후 [AWAITING_INPUT] 상태가 된 뒤 종료해 주세요.",
-            409,
-          );
-        }
-        if (preState === "STOPPING") {
-          throw new HttpError("채널이 이미 종료 처리 중입니다. 잠시 후 다시 확인해주세요.", 409);
+
+        if (!isAdminForce) {
+          if (preState === "STARTING") {
+            throw new HttpError(
+              "채널이 아직 준비 중입니다 (STARTING). 잠시 후 [AWAITING_INPUT] 상태가 된 뒤 종료해 주세요.",
+              409,
+            );
+          }
+          if (preState === "STOPPING") {
+            throw new HttpError("채널이 이미 종료 처리 중입니다. 잠시 후 다시 확인해주세요.", 409);
+          }
         }
 
+        let stopError: string | null = null;
         try {
           result = await stopChannelGCP(gcpChannelId);
         } catch (e) {
-          // Idempotent: already stopped is fine
           const msg = e instanceof Error ? e.message : String(e);
-          if (!msg.includes("FAILED_PRECONDITION") && !msg.includes("not running")) {
+          if (isAdminForce) {
+            // Admin force stop is ALWAYS idempotent — never fail the DB cleanup
+            // just because GCP refused (STARTING / already stopped / transient).
+            console.error("admin force stop: GCP stop error (ignored)", msg);
+            stopError = msg;
+            result = { forced: true, stopError: msg, beforeState: preState };
+          } else if (msg.includes("FAILED_PRECONDITION") || msg.includes("not running")) {
+            result = { alreadyStopped: true };
+          } else {
             throw e;
           }
-          result = { alreadyStopped: true };
         }
 
-
-        const forceReason = user.isAdmin && typeof reason === "string" && reason.trim()
-          ? `관리자 강제 종료: ${reason.trim().slice(0, 200)}`
+        const forceReason = isAdminForce
+          ? `관리자 강제 종료: ${reason.trim().slice(0, 200)}${stopError ? ` (GCP: ${stopError.slice(0, 120)})` : ""}`
           : null;
 
         await user.serviceClient
           .from("channels")
           .update({
             is_live: false,
-            gcp_channel_state: "STOPPED",
+            gcp_channel_state: isAdminForce ? "FORCE_STOPPED" : "STOPPED",
             stream_url: null,
             current_viewers: 0,
             low_viewer_since: null,
             broadcaster_last_seen_at: null,
+            rtmp_disconnected_at: null,
             ...(forceReason ? { gcp_last_error: forceReason } : {}),
           })
           .eq("id", channelId);
 
-        // History: close session (never throws)
         await closeLiveSession(
           user.serviceClient,
           channelId,
-          user.isAdmin && typeof reason === "string" && reason.trim() ? "admin_forced" : "manual",
+          isAdminForce ? "admin_forced" : "manual",
         );
 
-        // No auto-VOD: live manifest URL is ephemeral and would 404 after stop.
         break;
       }
 
