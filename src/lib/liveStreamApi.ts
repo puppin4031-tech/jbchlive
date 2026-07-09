@@ -75,6 +75,16 @@ export const getStatus = (
   streamUrl?: string | null;
 }> => invoke("getStatus", { channelId });
 
+/** 공개 시청자용 라이브 상태 동기화 */
+export const getPublicLiveStatus = (
+  channelId: string
+): Promise<{
+  isLive: boolean;
+  streamingState: string;
+  streamUrl: string | null;
+  manifestReady?: boolean;
+}> => invoke("getPublicLiveStatus", { channelId });
+
 /** HLS 재생 URL 조회 */
 export const getHLSUrl = (channelId: string) => invoke("getHLSUrl", { channelId });
 

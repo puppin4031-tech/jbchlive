@@ -761,6 +761,7 @@ const RATE_LIMITS: Record<string, { max: number; windowSec: number }> = {
   getHLSUrl: { max: 30, windowSec: 60 },
   confirmKeepalive: { max: 10, windowSec: 60 },
   heartbeatBroadcaster: { max: 10, windowSec: 60 },
+  getPublicLiveStatus: { max: 120, windowSec: 60 },
 
 
   viewerHeartbeat: { max: 4, windowSec: 60 },
@@ -779,7 +780,7 @@ const CRON_ACTIONS = new Set([
 ]);
 
 // Public actions: no auth required (used by all viewers, including anonymous)
-const PUBLIC_ACTIONS = new Set(["viewerHeartbeat"]);
+const PUBLIC_ACTIONS = new Set(["viewerHeartbeat", "getPublicLiveStatus"]);
 
 function checkRateLimit(userId: string, action: string) {
   const limit = RATE_LIMITS[action] || { max: 10, windowSec: 60 };
@@ -1226,6 +1227,58 @@ serve(async (req) => {
           { onConflict: "channel_id,viewer_key" },
         );
         return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (action === "getPublicLiveStatus") {
+        const { channelId: cid } = body as { channelId?: string };
+        const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!cid || !UUID.test(cid)) throw new Error("Invalid channelId");
+        checkRateLimit(`public:${cid}`, "getPublicLiveStatus");
+
+        const { data: dbCh } = await serviceClient
+          .from("channels")
+          .select("id, is_live, is_approved, is_suspended, stream_url, gcp_channel_id, gcp_channel_state")
+          .eq("id", cid)
+          .single();
+
+        if (!dbCh || !dbCh.is_approved || dbCh.is_suspended) {
+          throw new HttpError("Channel not available", 404);
+        }
+
+        let state = (dbCh.gcp_channel_state as string | null) ?? "UNKNOWN";
+        let streamUrl = (dbCh.stream_url as string | null) ?? null;
+        let manifestReady = false;
+
+        if (dbCh.is_live) {
+          const { gcpChannelId } = await resolveGcpIds(serviceClient, cid);
+          const gcpCh = await getChannelGCP(gcpChannelId).catch((e) => {
+            console.warn("getPublicLiveStatus GCP read failed", e);
+            return null;
+          });
+          state = gcpCh?.streamingState || state;
+          if (state === "STREAMING") {
+            streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId);
+            manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
+          }
+
+          await serviceClient
+            .from("channels")
+            .update({
+              gcp_channel_state: state,
+              stream_url: streamUrl,
+            })
+            .eq("id", cid)
+            .eq("is_live", true);
+        }
+
+        return new Response(JSON.stringify({
+          isLive: !!dbCh.is_live,
+          streamingState: state,
+          streamUrl: dbCh.is_live ? streamUrl : null,
+          manifestReady,
+        }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
