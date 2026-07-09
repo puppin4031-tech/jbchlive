@@ -1266,20 +1266,23 @@ serve(async (req) => {
           manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
         }
 
-        const shouldMarkLive = !dbCh.is_live && state === "STREAMING" && !!streamUrl;
+        const dbState = (dbCh.gcp_channel_state as string | null) ?? "UNKNOWN";
+        const terminalDbState = dbState === "STOPPED" || dbState === "FORCE_STOPPED" || dbState === "ERROR";
+        const shouldMarkLive = !dbCh.is_live && state === "STREAMING" && !!streamUrl && !terminalDbState;
         const isEffectivelyLive = !!dbCh.is_live || shouldMarkLive;
         if (isEffectivelyLive) {
+          const updatePayload: Record<string, unknown> = {
+            gcp_channel_state: state,
+            stream_url: streamUrl,
+          };
+          if (shouldMarkLive) {
+            updatePayload.is_live = true;
+            updatePayload.live_started_at = new Date().toISOString();
+            updatePayload.gcp_last_error = "자동 동기화: GCP는 STREAMING인데 DB가 오프라인이라 라이브로 복구했습니다.";
+          }
           await serviceClient
             .from("channels")
-            .update({
-              is_live: true,
-              live_started_at: shouldMarkLive ? new Date().toISOString() : undefined,
-              gcp_channel_state: state,
-              stream_url: streamUrl,
-              gcp_last_error: shouldMarkLive
-                ? "자동 동기화: GCP는 STREAMING인데 DB가 오프라인이라 라이브로 복구했습니다."
-                : undefined,
-            })
+            .update(updatePayload)
             .eq("id", cid);
         }
 
