@@ -1254,33 +1254,39 @@ serve(async (req) => {
         let state = (dbCh.gcp_channel_state as string | null) ?? "UNKNOWN";
         let streamUrl = (dbCh.stream_url as string | null) ?? null;
         let manifestReady = false;
+        const { gcpChannelId } = await resolveGcpIds(serviceClient, cid);
+        const gcpCh = await getChannelGCP(gcpChannelId).catch((e) => {
+          console.warn("getPublicLiveStatus GCP read failed", e);
+          return null;
+        });
+        state = gcpCh?.streamingState || state;
 
-        if (dbCh.is_live) {
-          const { gcpChannelId } = await resolveGcpIds(serviceClient, cid);
-          const gcpCh = await getChannelGCP(gcpChannelId).catch((e) => {
-            console.warn("getPublicLiveStatus GCP read failed", e);
-            return null;
-          });
-          state = gcpCh?.streamingState || state;
-          if (state === "STREAMING") {
-            streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId);
-            manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
-          }
+        if (state === "STREAMING") {
+          streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId);
+          manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
+        }
 
+        const shouldMarkLive = !dbCh.is_live && state === "STREAMING" && !!streamUrl;
+        const isEffectivelyLive = !!dbCh.is_live || shouldMarkLive;
+        if (isEffectivelyLive) {
           await serviceClient
             .from("channels")
             .update({
+              is_live: true,
+              live_started_at: shouldMarkLive ? new Date().toISOString() : undefined,
               gcp_channel_state: state,
               stream_url: streamUrl,
+              gcp_last_error: shouldMarkLive
+                ? "자동 동기화: GCP는 STREAMING인데 DB가 오프라인이라 라이브로 복구했습니다."
+                : undefined,
             })
-            .eq("id", cid)
-            .eq("is_live", true);
+            .eq("id", cid);
         }
 
         return new Response(JSON.stringify({
-          isLive: !!dbCh.is_live,
+          isLive: isEffectivelyLive,
           streamingState: state,
-          streamUrl: dbCh.is_live ? streamUrl : null,
+          streamUrl: isEffectivelyLive ? streamUrl : null,
           manifestReady,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
