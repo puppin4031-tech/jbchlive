@@ -761,6 +761,7 @@ const RATE_LIMITS: Record<string, { max: number; windowSec: number }> = {
   getHLSUrl: { max: 30, windowSec: 60 },
   confirmKeepalive: { max: 10, windowSec: 60 },
   heartbeatBroadcaster: { max: 10, windowSec: 60 },
+  getPublicLiveStatus: { max: 120, windowSec: 60 },
 
 
   viewerHeartbeat: { max: 4, windowSec: 60 },
@@ -779,7 +780,7 @@ const CRON_ACTIONS = new Set([
 ]);
 
 // Public actions: no auth required (used by all viewers, including anonymous)
-const PUBLIC_ACTIONS = new Set(["viewerHeartbeat"]);
+const PUBLIC_ACTIONS = new Set(["viewerHeartbeat", "getPublicLiveStatus"]);
 
 function checkRateLimit(userId: string, action: string) {
   const limit = RATE_LIMITS[action] || { max: 10, windowSec: 60 };
@@ -1229,6 +1230,71 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      if (action === "getPublicLiveStatus") {
+        const { channelId: cid } = body as { channelId?: string };
+        const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!cid || !UUID.test(cid)) throw new Error("Invalid channelId");
+        const clientIp =
+          req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+          req.headers.get("cf-connecting-ip") ||
+          "anonymous";
+        checkRateLimit(`public:${clientIp}:${cid}`, "getPublicLiveStatus");
+
+        const { data: dbCh } = await serviceClient
+          .from("channels")
+          .select("id, is_live, is_approved, is_suspended, stream_url, gcp_channel_id, gcp_channel_state")
+          .eq("id", cid)
+          .single();
+
+        if (!dbCh || !dbCh.is_approved || dbCh.is_suspended) {
+          throw new HttpError("Channel not available", 404);
+        }
+
+        let state = (dbCh.gcp_channel_state as string | null) ?? "UNKNOWN";
+        let streamUrl = (dbCh.stream_url as string | null) ?? null;
+        let manifestReady = false;
+        const { gcpChannelId } = await resolveGcpIds(serviceClient, cid);
+        const gcpCh = await getChannelGCP(gcpChannelId).catch((e) => {
+          console.warn("getPublicLiveStatus GCP read failed", e);
+          return null;
+        });
+        state = gcpCh?.streamingState || state;
+
+        if (state === "STREAMING") {
+          streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId);
+          manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
+        }
+
+        const dbState = (dbCh.gcp_channel_state as string | null) ?? "UNKNOWN";
+        const terminalDbState = dbState === "STOPPED" || dbState === "FORCE_STOPPED" || dbState === "ERROR";
+        const shouldMarkLive = !dbCh.is_live && state === "STREAMING" && !!streamUrl && !terminalDbState;
+        const isEffectivelyLive = !!dbCh.is_live || shouldMarkLive;
+        if (isEffectivelyLive) {
+          const updatePayload: Record<string, unknown> = {
+            gcp_channel_state: state,
+            stream_url: streamUrl,
+          };
+          if (shouldMarkLive) {
+            updatePayload.is_live = true;
+            updatePayload.live_started_at = new Date().toISOString();
+            updatePayload.gcp_last_error = "자동 동기화: GCP는 STREAMING인데 DB가 오프라인이라 라이브로 복구했습니다.";
+          }
+          await serviceClient
+            .from("channels")
+            .update(updatePayload)
+            .eq("id", cid);
+        }
+
+        return new Response(JSON.stringify({
+          isLive: isEffectivelyLive,
+          streamingState: state,
+          streamUrl: isEffectivelyLive ? streamUrl : null,
+          manifestReady,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // === Authenticated user actions ===
@@ -1458,10 +1524,19 @@ serve(async (req) => {
           .single();
 
         let streamUrl = dbCh?.stream_url ?? null;
+        let manifestReady = false;
         if (state === "STREAMING") {
-          // Verify manifest actually exists on GCS before advertising URL to viewers.
-          streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId, { verify: true });
-        } else {
+          // Once GCP reports STREAMING, publish the HLS URL immediately.
+          // The first manifest can lag behind by a few seconds; the player has
+          // silent retries, and keeping the URL prevents public viewers from
+          // falling back to the misleading "server preparing" screen.
+          streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId);
+          manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
+        } else if (
+          state === "STOPPED" ||
+          state === "STREAMING_STATE_UNSPECIFIED" ||
+          !dbCh?.is_live
+        ) {
           streamUrl = null;
         }
 
@@ -1553,15 +1628,18 @@ serve(async (req) => {
         }
 
         if (dbCh?.is_live && state === "STREAMING" && !streamUrl) {
-          streamUrl = await buildHlsHttpsUrl(gcpChannelId, { verify: true });
+          streamUrl = await buildHlsHttpsUrl(gcpChannelId);
+          manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
         }
+
+        const persistedStreamUrl = dbCh?.is_live ? streamUrl : null;
 
         await user.serviceClient
           .from("channels")
           .update({
             gcp_channel_state: state,
             ...(dbCh?.is_live && failedOpMessage ? { gcp_last_error: failedOpMessage.slice(0, 1000) } : {}),
-            stream_url: dbCh?.is_live && state === "STREAMING" ? streamUrl : null,
+            stream_url: persistedStreamUrl,
           })
           .eq("id", channelId);
 
@@ -1569,13 +1647,14 @@ serve(async (req) => {
           streamingState: state,
           inputAttachments: gcpCh.inputAttachments,
           activeInput: gcpCh.activeInput,
-          streamUrl,
+          streamUrl: persistedStreamUrl,
           operations: ops.slice(0, 10).map(summarizeOperation),
           diagnostic: {
             gcpChannelId,
             location: LOCATION,
             startedAt: dbCh?.live_started_at ?? null,
             failedOperation: failedOpMessage,
+            manifestReady,
           },
         };
         break;

@@ -65,11 +65,19 @@ export const useBroadcasterChannel = () => {
     };
   }, [channelId, refetch, queryClient]);
 
+  const effectiveGcpState = gcpState || channel?.gcp_channel_state || '';
+
   // Status polling: while live but state isn't STREAMING with stream_url, OR STARTING phase
   useEffect(() => {
     if (!channelId) return;
     const isLive = !!channel?.is_live;
-    const needsPoll = isLive && (!channel?.stream_url || gcpState === 'STARTING' || gcpState === 'PENDING' || gcpState === '');
+    const needsPoll = isLive && (
+      !channel?.stream_url ||
+      effectiveGcpState === 'STARTING' ||
+      effectiveGcpState === 'PENDING' ||
+      effectiveGcpState === 'AWAITING_INPUT' ||
+      effectiveGcpState === ''
+    );
     if (!needsPoll) return;
 
     let cancelled = false;
@@ -96,17 +104,17 @@ export const useBroadcasterChannel = () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [channelId, channel?.is_live, channel?.stream_url, gcpState, refetch, queryClient]);
+  }, [channelId, channel?.is_live, channel?.stream_url, effectiveGcpState, refetch, queryClient]);
 
   const phase: BroadcastPhase = useMemo(() => {
     if (!channel) return 'no-channel';
     if (!channel.is_approved) return 'pending-approval';
     if (channel.gcp_last_error && !channel.is_live) return 'error';
     if (!channel.is_live) return 'offline';
-    if (gcpState === 'STREAMING' || channel.stream_url) return 'streaming';
-    if (gcpState === 'AWAITING_INPUT') return 'awaiting-input';
+    if (effectiveGcpState === 'STREAMING' || channel.stream_url) return 'streaming';
+    if (effectiveGcpState === 'AWAITING_INPUT') return 'awaiting-input';
     return 'starting';
-  }, [channel, gcpState]);
+  }, [channel, effectiveGcpState]);
 
   const startLive = useMutation({
     mutationFn: async () => {

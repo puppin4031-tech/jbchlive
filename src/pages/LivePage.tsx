@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { isPlayableLiveChannel, isPreparingLiveChannel } from '@/lib/livePlayback';
+import { getPublicLiveStatus } from '@/lib/liveStreamApi';
 
 const LivePage = () => {
   const { channelId } = useParams();
@@ -76,6 +77,23 @@ const LivePage = () => {
   // Viewer count (must be called unconditionally before any early return)
   const viewerCount = useViewerCount(channelId, !!channel?.is_live);
   useViewerHeartbeat(channelId, !!channel?.is_live);
+
+  useQuery({
+    queryKey: ['public-live-status', channelId],
+    queryFn: async () => {
+      const status = await getPublicLiveStatus(channelId!);
+      if (status.streamUrl || status.streamingState) {
+        queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
+        queryClient.invalidateQueries({ queryKey: ['live-channels'] });
+        queryClient.invalidateQueries({ queryKey: ['live-channels-list'] });
+      }
+      return status;
+    },
+    enabled: !!channelId && !!channel?.is_live && (!channel?.stream_url || isPreparingLiveChannel(channel)),
+    refetchInterval: (query) => query.state.data?.streamUrl ? false : 5000,
+    refetchOnWindowFocus: true,
+    retry: 2,
+  });
 
   // Update document title for sharing
   useEffect(() => {

@@ -7,7 +7,7 @@ type LiveChannelLike = {
 export const isPlayableLiveChannel = (channel?: LiveChannelLike | null) => {
   if (!channel?.is_live) return false;
   if (!channel.stream_url) return false;
-  return channel.gcp_channel_state === 'STREAMING';
+  return true;
 };
 
 export const isPreparingLiveChannel = (channel?: LiveChannelLike | null) => {
