@@ -1235,7 +1235,11 @@ serve(async (req) => {
         const { channelId: cid } = body as { channelId?: string };
         const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (!cid || !UUID.test(cid)) throw new Error("Invalid channelId");
-        checkRateLimit(`public:${cid}`, "getPublicLiveStatus");
+        const clientIp =
+          req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+          req.headers.get("cf-connecting-ip") ||
+          "anonymous";
+        checkRateLimit(`public:${clientIp}:${cid}`, "getPublicLiveStatus");
 
         const { data: dbCh } = await serviceClient
           .from("channels")
