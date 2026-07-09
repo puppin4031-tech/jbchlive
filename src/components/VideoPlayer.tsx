@@ -7,6 +7,7 @@ interface VideoPlayerProps {
   src?: string;
   poster?: string;
   autoPlay?: boolean;
+  onManifestMissing?: () => void;
 }
 
 type VideoSource =
