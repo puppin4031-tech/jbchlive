@@ -34,6 +34,10 @@ const LivePage = () => {
     refetchOnWindowFocus: true,
     refetchOnMount: 'always',
     staleTime: 0,
+    // Safety net: even if realtime UPDATE events are dropped, re-poll every
+    // 10s so a channel that went offline/changed stream_url is picked up and
+    // the VideoPlayer unmounts instead of looping on a stale manifest URL.
+    refetchInterval: 10000,
   });
 
   // Fetch current live sermon for this channel
@@ -178,7 +182,17 @@ const LivePage = () => {
       <main className="container px-4 py-4 max-w-4xl mx-auto space-y-4">
         {/* Live or Offline Player Area */}
         {canPlayLive && streamUrl ? (
-          <VideoPlayer src={streamUrl} autoPlay />
+          <VideoPlayer
+            src={streamUrl}
+            autoPlay
+            onManifestMissing={() => {
+              // Player is retrying — the URL might be stale (previous session)
+              // or GCP is still writing the first manifest. Refresh channel &
+              // public status so we pick up the new URL / offline state ASAP.
+              queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
+              queryClient.invalidateQueries({ queryKey: ['public-live-status', channelId] });
+            }}
+          />
         ) : isWaitingForBroadcaster ? (
           <div className="relative w-full aspect-video bg-card border border-border rounded-xl overflow-hidden flex flex-col items-center justify-center gap-4 p-6">
             <span className="relative flex h-4 w-4">

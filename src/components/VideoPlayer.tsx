@@ -7,6 +7,7 @@ interface VideoPlayerProps {
   src?: string;
   poster?: string;
   autoPlay?: boolean;
+  onManifestMissing?: () => void;
 }
 
 type VideoSource =
@@ -88,7 +89,7 @@ function getHlsErrorTarget(data: ErrorData) {
   }
 }
 
-const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
+const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const source = useMemo(() => parseVideoSource(src), [src]);
   const [error, setError] = useState<HlsErrorInfo | null>(null);
@@ -167,6 +168,10 @@ const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
         if (isManifestMiss && manifestRetriesRef.current < MANIFEST_MAX_RETRIES && !destroyed) {
           manifestRetriesRef.current += 1;
           setManifestRetrying(true);
+          // Ping parent so it can refresh channel/public status — the URL we
+          // are hitting may belong to a previous GCP session (channel restart
+          // rotates the timestamp folder) or the channel may already be offline.
+          try { onManifestMissing?.(); } catch { /* ignore */ }
           if (retryTimer) clearTimeout(retryTimer);
           retryTimer = setTimeout(() => {
             if (destroyed) return;
