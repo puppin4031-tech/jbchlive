@@ -1458,10 +1458,19 @@ serve(async (req) => {
           .single();
 
         let streamUrl = dbCh?.stream_url ?? null;
+        let manifestReady = false;
         if (state === "STREAMING") {
-          // Verify manifest actually exists on GCS before advertising URL to viewers.
-          streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId, { verify: true });
-        } else {
+          // Once GCP reports STREAMING, publish the HLS URL immediately.
+          // The first manifest can lag behind by a few seconds; the player has
+          // silent retries, and keeping the URL prevents public viewers from
+          // falling back to the misleading "server preparing" screen.
+          streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId);
+          manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
+        } else if (
+          state === "STOPPED" ||
+          state === "STREAMING_STATE_UNSPECIFIED" ||
+          !dbCh?.is_live
+        ) {
           streamUrl = null;
         }
 
@@ -1553,15 +1562,18 @@ serve(async (req) => {
         }
 
         if (dbCh?.is_live && state === "STREAMING" && !streamUrl) {
-          streamUrl = await buildHlsHttpsUrl(gcpChannelId, { verify: true });
+          streamUrl = await buildHlsHttpsUrl(gcpChannelId);
+          manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
         }
+
+        const persistedStreamUrl = dbCh?.is_live ? streamUrl : null;
 
         await user.serviceClient
           .from("channels")
           .update({
             gcp_channel_state: state,
             ...(dbCh?.is_live && failedOpMessage ? { gcp_last_error: failedOpMessage.slice(0, 1000) } : {}),
-            stream_url: dbCh?.is_live && state === "STREAMING" ? streamUrl : null,
+            stream_url: persistedStreamUrl,
           })
           .eq("id", channelId);
 
@@ -1569,13 +1581,14 @@ serve(async (req) => {
           streamingState: state,
           inputAttachments: gcpCh.inputAttachments,
           activeInput: gcpCh.activeInput,
-          streamUrl,
+          streamUrl: persistedStreamUrl,
           operations: ops.slice(0, 10).map(summarizeOperation),
           diagnostic: {
             gcpChannelId,
             location: LOCATION,
             startedAt: dbCh?.live_started_at ?? null,
             failedOperation: failedOpMessage,
+            manifestReady,
           },
         };
         break;
