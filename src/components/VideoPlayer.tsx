@@ -89,7 +89,7 @@ function getHlsErrorTarget(data: ErrorData) {
   }
 }
 
-const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
+const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const source = useMemo(() => parseVideoSource(src), [src]);
   const [error, setError] = useState<HlsErrorInfo | null>(null);
