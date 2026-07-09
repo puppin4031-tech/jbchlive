@@ -168,6 +168,10 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
         if (isManifestMiss && manifestRetriesRef.current < MANIFEST_MAX_RETRIES && !destroyed) {
           manifestRetriesRef.current += 1;
           setManifestRetrying(true);
+          // Ping parent so it can refresh channel/public status — the URL we
+          // are hitting may belong to a previous GCP session (channel restart
+          // rotates the timestamp folder) or the channel may already be offline.
+          try { onManifestMissing?.(); } catch { /* ignore */ }
           if (retryTimer) clearTimeout(retryTimer);
           retryTimer = setTimeout(() => {
             if (destroyed) return;
