@@ -34,6 +34,10 @@ const LivePage = () => {
     refetchOnWindowFocus: true,
     refetchOnMount: 'always',
     staleTime: 0,
+    // Safety net: even if realtime UPDATE events are dropped, re-poll every
+    // 10s so a channel that went offline/changed stream_url is picked up and
+    // the VideoPlayer unmounts instead of looping on a stale manifest URL.
+    refetchInterval: 10000,
   });
 
   // Fetch current live sermon for this channel
