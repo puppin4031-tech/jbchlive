@@ -229,6 +229,16 @@ async function ensureOutputBucketReady(): Promise<{ bucket: string; created: boo
   };
 }
 
+async function assertOutputBucketReadyForPlayback(): Promise<{ bucket: string; created: boolean; publicRead: boolean; publicReadError?: string }> {
+  const readiness = await ensureOutputBucketReady();
+  if (!readiness.publicRead) {
+    throw new Error(
+      `HLS output bucket is not publicly readable: ${readiness.publicReadError || "public object viewer grant failed"}`,
+    );
+  }
+  return readiness;
+}
+
 type GcpOperation = {
   name?: string;
   done?: boolean;
@@ -755,7 +765,7 @@ async function provisionChannel(
   const ts = Date.now();
   const newInputId = newGcpResourceId(channelUuid, "input", ts);
   const newChannelId = newGcpResourceId(channelUuid, "channel", ts);
-  await ensureOutputBucketReady();
+  await assertOutputBucketReadyForPlayback();
 
   const newOutputUri = `gs://${OUTPUT_BUCKET}/${channelUuid}/${ts}/`;
 
@@ -1553,6 +1563,14 @@ serve(async (req) => {
         const bucket = await ensureOutputBucketReady();
         const currentUrl = await buildHlsHttpsUrl(gcpChannelId);
         const manifestStatus = currentUrl ? await inspectManifest(currentUrl) : null;
+        if (!bucket.publicRead || manifestStatus?.reason === "AccessDenied") {
+          await user.serviceClient
+            .from("channels")
+            .update({
+              gcp_last_error: `HLS output bucket access blocked: ${bucket.publicReadError || manifestStatus?.reason || "AccessDenied"}`.slice(0, 1000),
+            })
+            .eq("id", channelId);
+        }
         result = { bucket, streamUrl: currentUrl, manifestStatus };
         break;
       }
@@ -1572,7 +1590,7 @@ serve(async (req) => {
           await provisionChannel(user.serviceClient, channelId);
         }
         const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
-        await ensureOutputBucketReady();
+        await assertOutputBucketReadyForPlayback();
         result = await startChannelGCP(gcpChannelId);
         await user.serviceClient
           .from("channels")
