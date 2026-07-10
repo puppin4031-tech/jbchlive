@@ -185,14 +185,14 @@ async function createOutputBucket(bucketName: string) {
   });
 }
 
-async function ensurePublicObjectRead(bucketName: string) {
+async function ensurePublicObjectRead(bucketName: string): Promise<{ publicRead: boolean; error?: string }> {
   const policy = await gcsFetch(
     `https://storage.googleapis.com/storage/v1/b/${bucketName}/iam?optionsRequestedPolicyVersion=3`,
   ) as { bindings?: Array<{ role?: string; members?: string[] }>; etag?: string; version?: number };
 
   const bindings = Array.isArray(policy.bindings) ? policy.bindings : [];
   const viewerBinding = bindings.find((binding) => binding.role === "roles/storage.objectViewer");
-  if (viewerBinding?.members?.includes("allUsers")) return;
+  if (viewerBinding?.members?.includes("allUsers")) return { publicRead: true };
 
   if (viewerBinding) {
     viewerBinding.members = Array.from(new Set([...(viewerBinding.members ?? []), "allUsers"]));
@@ -200,20 +200,33 @@ async function ensurePublicObjectRead(bucketName: string) {
     bindings.push({ role: "roles/storage.objectViewer", members: ["allUsers"] });
   }
 
-  await gcsFetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/iam`, {
-    method: "PUT",
-    body: JSON.stringify({ ...policy, bindings, version: 3 }),
-  });
+  try {
+    await gcsFetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/iam`, {
+      method: "PUT",
+      body: JSON.stringify({ ...policy, bindings, version: 3 }),
+    });
+    return { publicRead: true };
+  } catch (e) {
+    return {
+      publicRead: false,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
 }
 
-async function ensureOutputBucketReady(): Promise<{ bucket: string; created: boolean; publicRead: boolean }> {
+async function ensureOutputBucketReady(): Promise<{ bucket: string; created: boolean; publicRead: boolean; publicReadError?: string }> {
   let created = false;
   if (!(await bucketExists(OUTPUT_BUCKET))) {
     await createOutputBucket(OUTPUT_BUCKET);
     created = true;
   }
-  await ensurePublicObjectRead(OUTPUT_BUCKET);
-  return { bucket: OUTPUT_BUCKET, created, publicRead: true };
+  const publicRead = await ensurePublicObjectRead(OUTPUT_BUCKET);
+  return {
+    bucket: OUTPUT_BUCKET,
+    created,
+    publicRead: publicRead.publicRead,
+    publicReadError: publicRead.error,
+  };
 }
 
 type GcpOperation = {
