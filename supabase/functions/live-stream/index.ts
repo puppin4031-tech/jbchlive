@@ -4,12 +4,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, range, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Expose-Headers": "content-length, content-range, accept-ranges, etag, last-modified",
 };
 
 const PROJECT_ID = Deno.env.get("GOOGLE_CLOUD_PROJECT_ID")!;
 const LOCATION = Deno.env.get("GOOGLE_CLOUD_LOCATION")!;
 const SERVICE_ACCOUNT_JSON = Deno.env.get("GCP_SERVICE_ACCOUNT_JSON")!;
+const OUTPUT_BUCKET = Deno.env.get("GCP_LIVE_OUTPUT_BUCKET") || `${PROJECT_ID}-live-output`;
+const OUTPUT_BUCKET_LOCATION = (Deno.env.get("GCP_LIVE_OUTPUT_BUCKET_LOCATION") || LOCATION).toUpperCase();
 
 const BASE_URL = `https://livestream.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}`;
 const STUCK_STARTING_AFTER_MS = 20 * 60 * 1000;
@@ -21,6 +24,18 @@ class HttpError extends Error {
     super(message);
     this.name = "HttpError";
     this.status = status;
+  }
+}
+
+class GcpApiError extends Error {
+  status: number;
+  payload: unknown;
+
+  constructor(message: string, status: number, payload: unknown) {
+    super(message);
+    this.name = "GcpApiError";
+    this.status = status;
+    this.payload = payload;
   }
 }
 
@@ -98,7 +113,7 @@ async function getAccessToken(): Promise<string> {
   return access_token;
 }
 
-async function gcpFetch(url: string, options: RequestInit = {}) {
+async function gcpFetch(url: string, options: RequestInit = {}): Promise<any> {
   const token = await getAccessToken();
   const res = await fetch(url, {
     ...options,
@@ -108,11 +123,229 @@ async function gcpFetch(url: string, options: RequestInit = {}) {
       "Content-Type": "application/json",
     },
   });
-  const data = await res.json();
+  const text = await res.text();
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
+    }
+  }
   if (!res.ok) {
-    throw new Error(`GCP API error [${res.status}]: ${JSON.stringify(data)}`);
+    throw new GcpApiError(`GCP API error [${res.status}]: ${JSON.stringify(data)}`, res.status, data);
   }
   return data;
+}
+
+async function gcsFetch(url: string, options: RequestInit = {}): Promise<any> {
+  const token = await getAccessToken();
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+  const text = await res.text();
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
+    }
+  }
+  if (!res.ok) {
+    throw new GcpApiError(`GCS API error [${res.status}]: ${JSON.stringify(data)}`, res.status, data);
+  }
+  return data;
+}
+
+async function bucketExists(bucketName: string): Promise<boolean> {
+  try {
+    await gcsFetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}`);
+    return true;
+  } catch (e) {
+    if (e instanceof GcpApiError && e.status === 404) return false;
+    throw e;
+  }
+}
+
+async function createOutputBucket(bucketName: string) {
+  return gcsFetch(`https://storage.googleapis.com/storage/v1/b?project=${encodeURIComponent(PROJECT_ID)}`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: bucketName,
+      location: OUTPUT_BUCKET_LOCATION,
+      iamConfiguration: {
+        uniformBucketLevelAccess: { enabled: true },
+      },
+    }),
+  });
+}
+
+async function ensurePublicObjectRead(bucketName: string): Promise<{ publicRead: boolean; error?: string }> {
+  const policy = await gcsFetch(
+    `https://storage.googleapis.com/storage/v1/b/${bucketName}/iam?optionsRequestedPolicyVersion=3`,
+  ) as { bindings?: Array<{ role?: string; members?: string[] }>; etag?: string; version?: number };
+
+  const bindings = Array.isArray(policy.bindings) ? policy.bindings : [];
+  const viewerBinding = bindings.find((binding) => binding.role === "roles/storage.objectViewer");
+  if (viewerBinding?.members?.includes("allUsers")) return { publicRead: true };
+
+  if (viewerBinding) {
+    viewerBinding.members = Array.from(new Set([...(viewerBinding.members ?? []), "allUsers"]));
+  } else {
+    bindings.push({ role: "roles/storage.objectViewer", members: ["allUsers"] });
+  }
+
+  try {
+    await gcsFetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/iam`, {
+      method: "PUT",
+      body: JSON.stringify({ ...policy, bindings, version: 3 }),
+    });
+    return { publicRead: true };
+  } catch (e) {
+    return {
+      publicRead: false,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+async function ensureOutputBucketReady(): Promise<{ bucket: string; created: boolean; publicRead: boolean; publicReadError?: string }> {
+  let created = false;
+  if (!(await bucketExists(OUTPUT_BUCKET))) {
+    await createOutputBucket(OUTPUT_BUCKET);
+    created = true;
+  }
+  const publicRead = await ensurePublicObjectRead(OUTPUT_BUCKET);
+  return {
+    bucket: OUTPUT_BUCKET,
+    created,
+    publicRead: publicRead.publicRead,
+    publicReadError: publicRead.error,
+  };
+}
+
+async function assertOutputBucketReadyForPlayback(): Promise<{ bucket: string; created: boolean; publicRead: boolean; publicReadError?: string }> {
+  const readiness = await ensureOutputBucketReady();
+  if (!readiness.publicRead) {
+    console.warn(
+      `HLS output bucket is not publicly readable; playback will use proxy: ${readiness.publicReadError || "public object viewer grant failed"}`,
+    );
+  }
+  return readiness;
+}
+
+function parseGcsHttpsUrl(httpsUrl: string): { bucket: string; objectPath: string } | null {
+  try {
+    const u = new URL(httpsUrl);
+    if (u.hostname !== "storage.googleapis.com") return null;
+    const parts = u.pathname.split("/").filter(Boolean);
+    const bucket = parts.shift();
+    if (!bucket || parts.length === 0) return null;
+    return { bucket, objectPath: parts.map(decodeURIComponent).join("/") };
+  } catch {
+    return null;
+  }
+}
+
+function liveStreamFunctionBaseUrl(): string {
+  return `${Deno.env.get("SUPABASE_URL")!}/functions/v1/live-stream`;
+}
+
+function buildHlsProxyUrl(channelUuid: string, objectPath: string): string {
+  return `${liveStreamFunctionBaseUrl()}/hls/${channelUuid}/${objectPath.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+async function inspectManifestWithServiceAccount(httpsUrl: string): Promise<{
+  exists: boolean;
+  status: number | null;
+  reason: string;
+  snippet?: string;
+}> {
+  const parsed = parseGcsHttpsUrl(httpsUrl);
+  if (!parsed) return { exists: false, status: null, reason: "Invalid GCS URL" };
+  try {
+    const token = await getAccessToken();
+    const bust = httpsUrl.includes("?") ? "&" : "?";
+    const r = await fetch(`${httpsUrl}${bust}authcheck=${Date.now()}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const snippet = (await r.clone().text().catch(() => "")).slice(0, 500);
+    if (r.ok) return { exists: true, status: r.status, reason: "ready-via-proxy", snippet };
+    if (snippet.includes("NoSuchBucket")) return { exists: false, status: r.status, reason: "NoSuchBucket", snippet };
+    if (snippet.includes("NoSuchKey") || snippet.includes("NoSuchObject") || r.status === 404) {
+      return { exists: false, status: r.status, reason: "ManifestNotWritten", snippet };
+    }
+    return { exists: false, status: r.status, reason: `AuthHTTP_${r.status}`, snippet };
+  } catch (e) {
+    return { exists: false, status: null, reason: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+async function proxyHlsRequest(req: Request, channelUuid: string, objectPath: string): Promise<Response> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(channelUuid)) {
+    return new Response("Invalid channel", { status: 400, headers: corsHeaders });
+  }
+  if (!objectPath || objectPath.includes("..") || !objectPath.startsWith(`${channelUuid}/`)) {
+    return new Response("Invalid HLS path", { status: 400, headers: corsHeaders });
+  }
+
+  const token = await getAccessToken();
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  const range = req.headers.get("range");
+  if (range) headers.Range = range;
+
+  const sourceUrl = `https://storage.googleapis.com/${OUTPUT_BUCKET}/${objectPath.split("/").map(encodeURIComponent).join("/")}`;
+  const upstream = await fetch(sourceUrl, { headers });
+  const responseHeaders = new Headers(corsHeaders);
+  responseHeaders.set("Cache-Control", objectPath.endsWith(".m3u8") ? "no-store" : "public, max-age=30");
+  responseHeaders.set("Accept-Ranges", "bytes");
+
+  const contentType = upstream.headers.get("content-type");
+  responseHeaders.set(
+    "Content-Type",
+    contentType || (objectPath.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : "video/mp4"),
+  );
+  for (const h of ["content-length", "content-range", "etag", "last-modified"]) {
+    const v = upstream.headers.get(h);
+    if (v) responseHeaders.set(h, v);
+  }
+
+  if (!upstream.ok) {
+    const text = await upstream.text().catch(() => "");
+    return new Response(text || `HLS upstream error ${upstream.status}`, {
+      status: upstream.status,
+      headers: responseHeaders,
+    });
+  }
+
+  if (objectPath.endsWith(".m3u8")) {
+    const playlist = await upstream.text();
+    const baseDir = objectPath.includes("/") ? objectPath.slice(0, objectPath.lastIndexOf("/") + 1) : "";
+    const rewritten = playlist
+      .split("\n")
+      .map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) return line;
+        if (/^https?:\/\//i.test(trimmed)) {
+          const parsed = parseGcsHttpsUrl(trimmed);
+          if (!parsed || parsed.bucket !== OUTPUT_BUCKET) return line;
+          return buildHlsProxyUrl(channelUuid, parsed.objectPath);
+        }
+        return buildHlsProxyUrl(channelUuid, `${baseDir}${trimmed}`);
+      })
+      .join("\n");
+    responseHeaders.delete("content-length");
+    return new Response(rewritten, { status: upstream.status, headers: responseHeaders });
+  }
+
+  return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
 }
 
 type GcpOperation = {
@@ -435,12 +668,38 @@ function gsToHttps(uri: string): string {
  * so returning the URL too early causes viewers to see a 404 in the player.
  */
 async function manifestExists(httpsUrl: string): Promise<boolean> {
+  const status = await inspectManifest(httpsUrl);
+  return status.exists;
+}
+
+async function inspectManifest(httpsUrl: string): Promise<{
+  exists: boolean;
+  status: number | null;
+  reason: string;
+  snippet?: string;
+}> {
   try {
     const bust = httpsUrl.includes("?") ? "&" : "?";
     const r = await fetch(`${httpsUrl}${bust}t=${Date.now()}`, { method: "HEAD" });
-    return r.ok;
-  } catch {
-    return false;
+    if (r.ok) return { exists: true, status: r.status, reason: "ready" };
+
+    let snippet = "";
+    try {
+      const bodyRes = await fetch(`${httpsUrl}${bust}debug=${Date.now()}`, { method: "GET" });
+      snippet = (await bodyRes.text()).slice(0, 500);
+    } catch {
+      // HEAD already told us the manifest is not ready; body is diagnostic-only.
+    }
+
+    if (snippet.includes("NoSuchBucket")) {
+      return { exists: false, status: r.status, reason: "NoSuchBucket", snippet };
+    }
+    if (snippet.includes("AccessDenied") || r.status === 403) {
+      return { exists: false, status: r.status, reason: "AccessDenied", snippet };
+    }
+    return { exists: false, status: r.status, reason: `HTTP_${r.status}`, snippet };
+  } catch (e) {
+    return { exists: false, status: null, reason: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -463,6 +722,66 @@ async function buildHlsHttpsUrl(
   } catch {
     return null;
   }
+}
+
+const TERMINAL_GCP_STATES = new Set(["STOPPED", "STOPPING", "STREAMING_STATE_UNSPECIFIED"]);
+
+async function resolvePlayableManifest(
+  gcpChannelId: string,
+  existingUrl?: string | null,
+  opts: { repairBucket?: boolean } = {},
+): Promise<{
+  streamUrl: string | null;
+  candidateUrl: string | null;
+  manifestReady: boolean;
+  manifestStatus: Awaited<ReturnType<typeof inspectManifest>> | null;
+}> {
+  const candidateUrl = existingUrl ?? await buildHlsHttpsUrl(gcpChannelId);
+  if (!candidateUrl) {
+    return {
+      streamUrl: null,
+      candidateUrl: null,
+      manifestReady: false,
+      manifestStatus: { exists: false, status: null, reason: "HLS URL could not be resolved" },
+    };
+  }
+
+  let manifestStatus = await inspectManifest(candidateUrl);
+  if (!manifestStatus.exists && manifestStatus.reason === "NoSuchBucket" && opts.repairBucket) {
+    try {
+      await ensureOutputBucketReady();
+      manifestStatus = await inspectManifest(candidateUrl);
+    } catch (e) {
+      manifestStatus = {
+        exists: false,
+        status: null,
+        reason: `Output bucket repair failed: ${e instanceof Error ? e.message : String(e)}`,
+      };
+    }
+  }
+
+  if (!manifestStatus.exists && manifestStatus.reason === "AccessDenied") {
+    const serviceStatus = await inspectManifestWithServiceAccount(candidateUrl);
+    if (serviceStatus.exists) {
+      const parsed = parseGcsHttpsUrl(candidateUrl);
+      const proxyChannelId = parsed?.objectPath.split("/")[0];
+      const proxyUrl = parsed && proxyChannelId ? buildHlsProxyUrl(proxyChannelId, parsed.objectPath) : null;
+      return {
+        streamUrl: proxyUrl,
+        candidateUrl,
+        manifestReady: !!proxyUrl,
+        manifestStatus: { ...serviceStatus, reason: "ready-via-backend-proxy" },
+      };
+    }
+    manifestStatus = serviceStatus;
+  }
+
+  return {
+    streamUrl: manifestStatus.exists ? candidateUrl : null,
+    candidateUrl,
+    manifestReady: manifestStatus.exists,
+    manifestStatus,
+  };
 }
 
 async function getHLSUrl(channelId: string) {
@@ -571,7 +890,9 @@ async function provisionChannel(
   const ts = Date.now();
   const newInputId = newGcpResourceId(channelUuid, "input", ts);
   const newChannelId = newGcpResourceId(channelUuid, "channel", ts);
-  const newOutputUri = `gs://${PROJECT_ID}-live-output/${channelUuid}/${ts}/`;
+  await assertOutputBucketReadyForPlayback();
+
+  const newOutputUri = `gs://${OUTPUT_BUCKET}/${channelUuid}/${ts}/`;
 
   let inputCreated = false;
   try {
@@ -811,6 +1132,16 @@ setInterval(() => {
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  const url = new URL(req.url);
+  const hlsMatch = url.pathname.match(/\/hls\/([0-9a-f-]{36})\/(.+)$/i);
+  if (hlsMatch) {
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+    }
+    const objectPath = hlsMatch[2].split("/").map((part) => decodeURIComponent(part)).join("/");
+    return proxyHlsRequest(req, hlsMatch[1], objectPath);
   }
 
   try {
@@ -1254,6 +1585,7 @@ serve(async (req) => {
         let state = (dbCh.gcp_channel_state as string | null) ?? "UNKNOWN";
         let streamUrl = (dbCh.stream_url as string | null) ?? null;
         let manifestReady = false;
+        let manifestStatus: Awaited<ReturnType<typeof inspectManifest>> | null = null;
         const { gcpChannelId } = await resolveGcpIds(serviceClient, cid);
         const gcpCh = await getChannelGCP(gcpChannelId).catch((e) => {
           console.warn("getPublicLiveStatus GCP read failed", e);
@@ -1262,19 +1594,34 @@ serve(async (req) => {
         state = gcpCh?.streamingState || state;
 
         if (state === "STREAMING") {
-          streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId);
-          manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
+          const resolved = await resolvePlayableManifest(gcpChannelId, streamUrl, { repairBucket: true });
+          streamUrl = resolved.streamUrl;
+          manifestReady = resolved.manifestReady;
+          manifestStatus = resolved.manifestStatus;
         }
 
         const dbState = (dbCh.gcp_channel_state as string | null) ?? "UNKNOWN";
         const terminalDbState = dbState === "STOPPED" || dbState === "FORCE_STOPPED" || dbState === "ERROR";
-        const shouldMarkLive = !dbCh.is_live && state === "STREAMING" && !!streamUrl && !terminalDbState;
-        const isEffectivelyLive = !!dbCh.is_live || shouldMarkLive;
-        if (isEffectivelyLive) {
+        const terminalGcpState = TERMINAL_GCP_STATES.has(state);
+        const shouldMarkLive = !dbCh.is_live && state === "STREAMING" && manifestReady && !!streamUrl && !terminalDbState;
+        const isEffectivelyLive = (!!dbCh.is_live && !terminalGcpState && !terminalDbState) || shouldMarkLive;
+        if (terminalGcpState || terminalDbState) {
+          await serviceClient
+            .from("channels")
+            .update({
+              is_live: false,
+              gcp_channel_state: state,
+              stream_url: null,
+            })
+            .eq("id", cid);
+        } else if (isEffectivelyLive) {
           const updatePayload: Record<string, unknown> = {
             gcp_channel_state: state,
             stream_url: streamUrl,
           };
+          if (state === "STREAMING" && !manifestReady && manifestStatus) {
+            updatePayload.gcp_last_error = `HLS manifest not ready: ${manifestStatus.reason}`.slice(0, 1000);
+          }
           if (shouldMarkLive) {
             updatePayload.is_live = true;
             updatePayload.live_started_at = new Date().toISOString();
@@ -1289,8 +1636,9 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           isLive: isEffectivelyLive,
           streamingState: state,
-          streamUrl: isEffectivelyLive ? streamUrl : null,
+          streamUrl: isEffectivelyLive && manifestReady ? streamUrl : null,
           manifestReady,
+          manifestStatus,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -1324,6 +1672,7 @@ serve(async (req) => {
       "getStatus",
       "getHLSUrl",
       "provisionChannel",
+      "repairLiveOutputBucket",
       "forceStopStartingChannel",
       "heartbeatBroadcaster",
       "diagnoseChannel",
@@ -1342,6 +1691,25 @@ serve(async (req) => {
         break;
       }
 
+      case "repairLiveOutputBucket": {
+        if (!channelId) throw new Error("channelId required");
+        if (!user.isAdmin) throw new Error("Forbidden: admin only");
+        const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
+        const bucket = await ensureOutputBucketReady();
+        const currentUrl = await buildHlsHttpsUrl(gcpChannelId);
+        const manifestStatus = currentUrl ? await inspectManifest(currentUrl) : null;
+        if (!bucket.publicRead || manifestStatus?.reason === "AccessDenied") {
+          await user.serviceClient
+            .from("channels")
+            .update({
+              gcp_last_error: `HLS output bucket access blocked: ${bucket.publicReadError || manifestStatus?.reason || "AccessDenied"}`.slice(0, 1000),
+            })
+            .eq("id", channelId);
+        }
+        result = { bucket, streamUrl: currentUrl, manifestStatus };
+        break;
+      }
+
       case "startChannel": {
         if (!channelId) throw new Error("channelId required");
         // Auto-provision if not yet done
@@ -1357,6 +1725,7 @@ serve(async (req) => {
           await provisionChannel(user.serviceClient, channelId);
         }
         const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
+        await assertOutputBucketReadyForPlayback();
         result = await startChannelGCP(gcpChannelId);
         await user.serviceClient
           .from("channels")
@@ -1525,15 +1894,18 @@ serve(async (req) => {
 
         let streamUrl = dbCh?.stream_url ?? null;
         let manifestReady = false;
+        let manifestStatus: Awaited<ReturnType<typeof inspectManifest>> | null = null;
         if (state === "STREAMING") {
-          // Once GCP reports STREAMING, publish the HLS URL immediately.
-          // The first manifest can lag behind by a few seconds; the player has
-          // silent retries, and keeping the URL prevents public viewers from
-          // falling back to the misleading "server preparing" screen.
-          streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId);
-          manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
+          // Do not publish a playback URL until the manifest exists. If the
+          // output bucket is missing, repair it here and leave the channel in
+          // preparing state instead of showing viewers a stale 404 player.
+          const resolved = await resolvePlayableManifest(gcpChannelId, streamUrl, { repairBucket: true });
+          streamUrl = resolved.streamUrl;
+          manifestReady = resolved.manifestReady;
+          manifestStatus = resolved.manifestStatus;
         } else if (
           state === "STOPPED" ||
+          state === "STOPPING" ||
           state === "STREAMING_STATE_UNSPECIFIED" ||
           !dbCh?.is_live
         ) {
@@ -1628,8 +2000,10 @@ serve(async (req) => {
         }
 
         if (dbCh?.is_live && state === "STREAMING" && !streamUrl) {
-          streamUrl = await buildHlsHttpsUrl(gcpChannelId);
-          manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
+          const resolved = await resolvePlayableManifest(gcpChannelId, null, { repairBucket: true });
+          streamUrl = resolved.streamUrl;
+          manifestReady = resolved.manifestReady;
+          manifestStatus = resolved.manifestStatus;
         }
 
         const persistedStreamUrl = dbCh?.is_live ? streamUrl : null;
@@ -1639,6 +2013,9 @@ serve(async (req) => {
           .update({
             gcp_channel_state: state,
             ...(dbCh?.is_live && failedOpMessage ? { gcp_last_error: failedOpMessage.slice(0, 1000) } : {}),
+            ...(dbCh?.is_live && state === "STREAMING" && !manifestReady && manifestStatus
+              ? { gcp_last_error: `HLS manifest not ready: ${manifestStatus.reason}`.slice(0, 1000) }
+              : {}),
             stream_url: persistedStreamUrl,
           })
           .eq("id", channelId);
@@ -1655,6 +2032,7 @@ serve(async (req) => {
             startedAt: dbCh?.live_started_at ?? null,
             failedOperation: failedOpMessage,
             manifestReady,
+            manifestStatus,
           },
         };
         break;
@@ -1670,7 +2048,7 @@ serve(async (req) => {
       case "diagnoseChannel": {
         if (!channelId) throw new Error("channelId required");
         const { inputId, gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
-        const [dbChannel, gcpChannel, gcpInput, ops] = await Promise.all([
+        const [dbChannel, gcpChannel, gcpInput, ops, outputBucketExists] = await Promise.all([
           user.serviceClient
             .from("channels")
             .select("id, is_live, gcp_channel_state, gcp_channel_id, gcp_input_id, gcp_input_uri, gcp_output_uri, gcp_last_error, stream_url, live_started_at, updated_at")
@@ -1680,13 +2058,25 @@ serve(async (req) => {
           getChannelGCP(gcpChannelId).catch((e) => ({ error: e instanceof Error ? e.message : String(e) })),
           getInput(inputId).catch((e) => ({ error: e instanceof Error ? e.message : String(e) })),
           listChannelOperations(gcpChannelId).catch((e) => [{ error: { message: e instanceof Error ? e.message : String(e) } }] as GcpOperation[]),
+          bucketExists(OUTPUT_BUCKET).catch((e) => ({ error: e instanceof Error ? e.message : String(e) })),
         ]);
+        const hlsUrl = (gcpChannel as { output?: { uri?: string }; manifests?: Array<{ fileName?: string }> })?.output?.uri
+          ? gsToHttps(`${(gcpChannel as { output: { uri: string } }).output.uri.endsWith("/") ? (gcpChannel as { output: { uri: string } }).output.uri : `${(gcpChannel as { output: { uri: string } }).output.uri}/`}${(gcpChannel as { manifests?: Array<{ fileName?: string }> }).manifests?.[0]?.fileName ?? "manifest.m3u8"}`)
+          : null;
+        const manifestStatus = hlsUrl ? await inspectManifest(hlsUrl) : null;
         result = {
           database: dbChannel,
           gcp: {
             location: LOCATION,
             channelId: gcpChannelId,
             inputId,
+            outputBucket: {
+              name: OUTPUT_BUCKET,
+              location: OUTPUT_BUCKET_LOCATION,
+              exists: outputBucketExists,
+            },
+            hlsUrl,
+            manifestStatus,
             channel: gcpChannel,
             input: gcpInput,
             operations: ops.slice(0, 20).map(summarizeOperation),

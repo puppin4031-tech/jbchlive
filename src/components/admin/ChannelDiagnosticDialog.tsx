@@ -33,6 +33,8 @@ const interpretIssues = (d: Diag): { level: 'ok' | 'warn' | 'error'; message: st
   const db = (d.database ?? {}) as Record<string, unknown>;
   const gcpCh = d.gcp?.channel as Record<string, unknown>;
   const gcpInput = d.gcp?.input as Record<string, unknown>;
+  const manifestStatus = d.gcp?.manifestStatus;
+  const outputBucket = d.gcp?.outputBucket;
   const state = (gcpCh?.streamingState as string) || (db.gcp_channel_state as string);
 
   if (gcpCh?.error) {
@@ -43,6 +45,21 @@ const interpretIssues = (d: Diag): { level: 'ok' | 'warn' | 'error'; message: st
   }
   if (db.gcp_last_error) {
     issues.push({ level: 'warn', message: `최근 저장된 오류: ${String(db.gcp_last_error)}` });
+  }
+  if (outputBucket?.exists === false) {
+    issues.push({ level: 'error', message: `HLS 출력 버킷이 없습니다: ${outputBucket.name}` });
+  }
+  if (typeof outputBucket?.exists === 'object' && outputBucket.exists?.error) {
+    issues.push({ level: 'error', message: `HLS 출력 버킷 조회 실패: ${outputBucket.exists.error}` });
+  }
+  if (manifestStatus && !manifestStatus.exists) {
+    if (manifestStatus.reason === 'AccessDenied') {
+      issues.push({ level: 'error', message: 'HLS 매니페스트 접근 거부(403): 출력 버킷/객체가 시청자에게 공개되어 있지 않습니다.' });
+    } else if (manifestStatus.reason === 'NoSuchBucket') {
+      issues.push({ level: 'error', message: 'HLS 매니페스트 버킷 없음(404): 출력 버킷 생성 또는 GCP 출력 경로 설정이 필요합니다.' });
+    } else {
+      issues.push({ level: 'warn', message: `HLS 매니페스트 준비 안 됨: ${manifestStatus.reason}` });
+    }
   }
   if (state === 'STARTING' && db.live_started_at) {
     const ageMin = Math.floor((Date.now() - new Date(String(db.live_started_at)).getTime()) / 60000);
@@ -148,7 +165,17 @@ const ChannelDiagnosticDialog = ({ channelId, channelName, onClose }: Props) => 
                   <dt className="text-muted-foreground">RTMP URI</dt>
                   <dd className="font-mono break-all">{(db.gcp_input_uri as string) || '(없음)'}</dd>
                   <dt className="text-muted-foreground">HLS URL</dt>
-                  <dd className="font-mono break-all">{(db.stream_url as string) || '(없음)'}</dd>
+                  <dd className="font-mono break-all">{(data.gcp.hlsUrl as string) || (db.stream_url as string) || '(없음)'}</dd>
+                  <dt className="text-muted-foreground">HLS 버킷</dt>
+                  <dd className="font-mono break-all">
+                    {data.gcp.outputBucket?.name || '(없음)'} · exists: {JSON.stringify(data.gcp.outputBucket?.exists ?? null)}
+                  </dd>
+                  <dt className="text-muted-foreground">매니페스트</dt>
+                  <dd className="font-mono break-all">
+                    {data.gcp.manifestStatus
+                      ? `${data.gcp.manifestStatus.exists ? 'ready' : 'not-ready'} / ${data.gcp.manifestStatus.reason} / ${data.gcp.manifestStatus.status ?? 'N/A'}`
+                      : '(미확인)'}
+                  </dd>
                   <dt className="text-muted-foreground">is_live (DB)</dt>
                   <dd>{String(db.is_live)}</dd>
                   <dt className="text-muted-foreground">DB 상태</dt>
