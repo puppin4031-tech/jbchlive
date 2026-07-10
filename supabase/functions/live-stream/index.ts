@@ -287,6 +287,66 @@ async function inspectManifestWithServiceAccount(httpsUrl: string): Promise<{
   }
 }
 
+async function proxyHlsRequest(req: Request, channelUuid: string, objectPath: string): Promise<Response> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(channelUuid)) {
+    return new Response("Invalid channel", { status: 400, headers: corsHeaders });
+  }
+  if (!objectPath || objectPath.includes("..") || !objectPath.startsWith(`${channelUuid}/`)) {
+    return new Response("Invalid HLS path", { status: 400, headers: corsHeaders });
+  }
+
+  const token = await getAccessToken();
+  const headers: HeadersInit = { Authorization: `Bearer ${token}` };
+  const range = req.headers.get("range");
+  if (range) headers.Range = range;
+
+  const sourceUrl = `https://storage.googleapis.com/${OUTPUT_BUCKET}/${objectPath.split("/").map(encodeURIComponent).join("/")}`;
+  const upstream = await fetch(sourceUrl, { headers });
+  const responseHeaders = new Headers(corsHeaders);
+  responseHeaders.set("Cache-Control", objectPath.endsWith(".m3u8") ? "no-store" : "public, max-age=30");
+  responseHeaders.set("Accept-Ranges", "bytes");
+
+  const contentType = upstream.headers.get("content-type");
+  responseHeaders.set(
+    "Content-Type",
+    contentType || (objectPath.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : "video/mp4"),
+  );
+  for (const h of ["content-length", "content-range", "etag", "last-modified"]) {
+    const v = upstream.headers.get(h);
+    if (v) responseHeaders.set(h, v);
+  }
+
+  if (!upstream.ok) {
+    const text = await upstream.text().catch(() => "");
+    return new Response(text || `HLS upstream error ${upstream.status}`, {
+      status: upstream.status,
+      headers: responseHeaders,
+    });
+  }
+
+  if (objectPath.endsWith(".m3u8")) {
+    const playlist = await upstream.text();
+    const baseDir = objectPath.includes("/") ? objectPath.slice(0, objectPath.lastIndexOf("/") + 1) : "";
+    const rewritten = playlist
+      .split("\n")
+      .map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) return line;
+        if (/^https?:\/\//i.test(trimmed)) {
+          const parsed = parseGcsHttpsUrl(trimmed);
+          if (!parsed || parsed.bucket !== OUTPUT_BUCKET) return line;
+          return buildHlsProxyUrl(channelUuid, parsed.objectPath);
+        }
+        return buildHlsProxyUrl(channelUuid, `${baseDir}${trimmed}`);
+      })
+      .join("\n");
+    responseHeaders.delete("content-length");
+    return new Response(rewritten, { status: upstream.status, headers: responseHeaders });
+  }
+
+  return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
+}
+
 type GcpOperation = {
   name?: string;
   done?: boolean;
