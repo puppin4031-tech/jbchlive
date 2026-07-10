@@ -1715,15 +1715,18 @@ serve(async (req) => {
 
         let streamUrl = dbCh?.stream_url ?? null;
         let manifestReady = false;
+        let manifestStatus: Awaited<ReturnType<typeof inspectManifest>> | null = null;
         if (state === "STREAMING") {
-          // Once GCP reports STREAMING, publish the HLS URL immediately.
-          // The first manifest can lag behind by a few seconds; the player has
-          // silent retries, and keeping the URL prevents public viewers from
-          // falling back to the misleading "server preparing" screen.
-          streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId);
-          manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
+          // Do not publish a playback URL until the manifest exists. If the
+          // output bucket is missing, repair it here and leave the channel in
+          // preparing state instead of showing viewers a stale 404 player.
+          const resolved = await resolvePlayableManifest(gcpChannelId, streamUrl, { repairBucket: true });
+          streamUrl = resolved.streamUrl;
+          manifestReady = resolved.manifestReady;
+          manifestStatus = resolved.manifestStatus;
         } else if (
           state === "STOPPED" ||
+          state === "STOPPING" ||
           state === "STREAMING_STATE_UNSPECIFIED" ||
           !dbCh?.is_live
         ) {
@@ -1818,8 +1821,10 @@ serve(async (req) => {
         }
 
         if (dbCh?.is_live && state === "STREAMING" && !streamUrl) {
-          streamUrl = await buildHlsHttpsUrl(gcpChannelId);
-          manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
+          const resolved = await resolvePlayableManifest(gcpChannelId, null, { repairBucket: true });
+          streamUrl = resolved.streamUrl;
+          manifestReady = resolved.manifestReady;
+          manifestStatus = resolved.manifestStatus;
         }
 
         const persistedStreamUrl = dbCh?.is_live ? streamUrl : null;
@@ -1829,6 +1834,9 @@ serve(async (req) => {
           .update({
             gcp_channel_state: state,
             ...(dbCh?.is_live && failedOpMessage ? { gcp_last_error: failedOpMessage.slice(0, 1000) } : {}),
+            ...(dbCh?.is_live && state === "STREAMING" && !manifestReady && manifestStatus
+              ? { gcp_last_error: `HLS manifest not ready: ${manifestStatus.reason}`.slice(0, 1000) }
+              : {}),
             stream_url: persistedStreamUrl,
           })
           .eq("id", channelId);
@@ -1845,6 +1853,7 @@ serve(async (req) => {
             startedAt: dbCh?.live_started_at ?? null,
             failedOperation: failedOpMessage,
             manifestReady,
+            manifestStatus,
           },
         };
         break;
