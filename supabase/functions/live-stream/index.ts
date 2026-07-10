@@ -10,6 +10,8 @@ const corsHeaders = {
 const PROJECT_ID = Deno.env.get("GOOGLE_CLOUD_PROJECT_ID")!;
 const LOCATION = Deno.env.get("GOOGLE_CLOUD_LOCATION")!;
 const SERVICE_ACCOUNT_JSON = Deno.env.get("GCP_SERVICE_ACCOUNT_JSON")!;
+const OUTPUT_BUCKET = Deno.env.get("GCP_LIVE_OUTPUT_BUCKET") || `${PROJECT_ID}-live-output`;
+const OUTPUT_BUCKET_LOCATION = (Deno.env.get("GCP_LIVE_OUTPUT_BUCKET_LOCATION") || LOCATION).toUpperCase();
 
 const BASE_URL = `https://livestream.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}`;
 const STUCK_STARTING_AFTER_MS = 20 * 60 * 1000;
@@ -21,6 +23,18 @@ class HttpError extends Error {
     super(message);
     this.name = "HttpError";
     this.status = status;
+  }
+}
+
+class GcpApiError extends Error {
+  status: number;
+  payload: unknown;
+
+  constructor(message: string, status: number, payload: unknown) {
+    super(message);
+    this.name = "GcpApiError";
+    this.status = status;
+    this.payload = payload;
   }
 }
 
@@ -108,9 +122,17 @@ async function gcpFetch(url: string, options: RequestInit = {}) {
       "Content-Type": "application/json",
     },
   });
-  const data = await res.json();
+  const text = await res.text();
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
+    }
+  }
   if (!res.ok) {
-    throw new Error(`GCP API error [${res.status}]: ${JSON.stringify(data)}`);
+    throw new GcpApiError(`GCP API error [${res.status}]: ${JSON.stringify(data)}`, res.status, data);
   }
   return data;
 }
