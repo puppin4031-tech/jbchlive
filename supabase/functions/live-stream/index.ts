@@ -763,7 +763,8 @@ async function resolvePlayableManifest(
     const serviceStatus = await inspectManifestWithServiceAccount(candidateUrl);
     if (serviceStatus.exists) {
       const parsed = parseGcsHttpsUrl(candidateUrl);
-      const proxyUrl = parsed ? buildHlsProxyUrl(gcpChannelId.replace(/^ch-/, ""), parsed.objectPath) : null;
+      const proxyChannelId = parsed?.objectPath.split("/")[0];
+      const proxyUrl = parsed && proxyChannelId ? buildHlsProxyUrl(proxyChannelId, parsed.objectPath) : null;
       return {
         streamUrl: proxyUrl,
         candidateUrl,
