@@ -592,6 +592,50 @@ async function buildHlsHttpsUrl(
   }
 }
 
+const TERMINAL_GCP_STATES = new Set(["STOPPED", "STOPPING", "STREAMING_STATE_UNSPECIFIED"]);
+
+async function resolvePlayableManifest(
+  gcpChannelId: string,
+  existingUrl?: string | null,
+  opts: { repairBucket?: boolean } = {},
+): Promise<{
+  streamUrl: string | null;
+  candidateUrl: string | null;
+  manifestReady: boolean;
+  manifestStatus: Awaited<ReturnType<typeof inspectManifest>> | null;
+}> {
+  const candidateUrl = existingUrl ?? await buildHlsHttpsUrl(gcpChannelId);
+  if (!candidateUrl) {
+    return {
+      streamUrl: null,
+      candidateUrl: null,
+      manifestReady: false,
+      manifestStatus: { exists: false, status: null, reason: "HLS URL could not be resolved" },
+    };
+  }
+
+  let manifestStatus = await inspectManifest(candidateUrl);
+  if (!manifestStatus.exists && manifestStatus.reason === "NoSuchBucket" && opts.repairBucket) {
+    try {
+      await ensureOutputBucketReady();
+      manifestStatus = await inspectManifest(candidateUrl);
+    } catch (e) {
+      manifestStatus = {
+        exists: false,
+        status: null,
+        reason: `Output bucket repair failed: ${e instanceof Error ? e.message : String(e)}`,
+      };
+    }
+  }
+
+  return {
+    streamUrl: manifestStatus.exists ? candidateUrl : null,
+    candidateUrl,
+    manifestReady: manifestStatus.exists,
+    manifestStatus,
+  };
+}
+
 async function getHLSUrl(channelId: string) {
   const channel = await getChannelGCP(channelId);
   const manifest = channel.manifests?.[0];
