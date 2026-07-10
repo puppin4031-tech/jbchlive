@@ -672,7 +672,9 @@ async function provisionChannel(
   const ts = Date.now();
   const newInputId = newGcpResourceId(channelUuid, "input", ts);
   const newChannelId = newGcpResourceId(channelUuid, "channel", ts);
-  const newOutputUri = `gs://${PROJECT_ID}-live-output/${channelUuid}/${ts}/`;
+  await ensureOutputBucketReady();
+
+  const newOutputUri = `gs://${OUTPUT_BUCKET}/${channelUuid}/${ts}/`;
 
   let inputCreated = false;
   try {
