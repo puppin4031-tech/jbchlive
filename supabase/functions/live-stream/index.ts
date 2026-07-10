@@ -1117,6 +1117,16 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const url = new URL(req.url);
+  const hlsMatch = url.pathname.match(/\/hls\/([0-9a-f-]{36})\/(.+)$/i);
+  if (hlsMatch) {
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+    }
+    const objectPath = hlsMatch[2].split("/").map((part) => decodeURIComponent(part)).join("/");
+    return proxyHlsRequest(req, hlsMatch[1], objectPath);
+  }
+
   try {
     const body = await req.json();
     const { action } = body;
