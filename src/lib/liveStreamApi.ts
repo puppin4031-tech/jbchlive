@@ -53,6 +53,18 @@ export type ChannelDiagnostic = {
     location: string;
     channelId: string;
     inputId: string;
+    outputBucket?: {
+      name: string;
+      location: string;
+      exists: boolean | { error?: string };
+    };
+    hlsUrl?: string | null;
+    manifestStatus?: {
+      exists: boolean;
+      status: number | null;
+      reason: string;
+      snippet?: string;
+    } | null;
     channel: Record<string, unknown> & { error?: string };
     input: Record<string, unknown> & { error?: string };
     operations: Array<Record<string, unknown>>;
@@ -60,6 +72,10 @@ export type ChannelDiagnostic = {
 };
 export const diagnoseChannel = (channelId: string): Promise<ChannelDiagnostic> =>
   invoke("diagnoseChannel", { channelId });
+
+/** 관리자용: HLS 출력 버킷 생성/공개 읽기 권한/매니페스트 접근 점검 */
+export const repairLiveOutputBucket = (channelId: string) =>
+  invoke("repairLiveOutputBucket", { channelId });
 
 /** 관리자용: STARTING 상태에서 강제 종료 (GCP 실패해도 DB만 오프라인 처리) */
 export const forceStopStartingChannel = (channelId: string) =>
