@@ -112,7 +112,7 @@ async function getAccessToken(): Promise<string> {
   return access_token;
 }
 
-async function gcpFetch(url: string, options: RequestInit = {}) {
+async function gcpFetch(url: string, options: RequestInit = {}): Promise<any> {
   const token = await getAccessToken();
   const res = await fetch(url, {
     ...options,
@@ -137,7 +137,7 @@ async function gcpFetch(url: string, options: RequestInit = {}) {
   return data;
 }
 
-async function gcsFetch(url: string, options: RequestInit = {}) {
+async function gcsFetch(url: string, options: RequestInit = {}): Promise<any> {
   const token = await getAccessToken();
   const res = await fetch(url, {
     ...options,
