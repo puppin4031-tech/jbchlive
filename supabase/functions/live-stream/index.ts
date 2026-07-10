@@ -137,6 +137,85 @@ async function gcpFetch(url: string, options: RequestInit = {}) {
   return data;
 }
 
+async function gcsFetch(url: string, options: RequestInit = {}) {
+  const token = await getAccessToken();
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+  const text = await res.text();
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
+    }
+  }
+  if (!res.ok) {
+    throw new GcpApiError(`GCS API error [${res.status}]: ${JSON.stringify(data)}`, res.status, data);
+  }
+  return data;
+}
+
+async function bucketExists(bucketName: string): Promise<boolean> {
+  try {
+    await gcsFetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}`);
+    return true;
+  } catch (e) {
+    if (e instanceof GcpApiError && e.status === 404) return false;
+    throw e;
+  }
+}
+
+async function createOutputBucket(bucketName: string) {
+  return gcsFetch(`https://storage.googleapis.com/storage/v1/b?project=${encodeURIComponent(PROJECT_ID)}`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: bucketName,
+      location: OUTPUT_BUCKET_LOCATION,
+      iamConfiguration: {
+        uniformBucketLevelAccess: { enabled: true },
+      },
+    }),
+  });
+}
+
+async function ensurePublicObjectRead(bucketName: string) {
+  const policy = await gcsFetch(
+    `https://storage.googleapis.com/storage/v1/b/${bucketName}/iam?optionsRequestedPolicyVersion=3`,
+  ) as { bindings?: Array<{ role?: string; members?: string[] }>; etag?: string; version?: number };
+
+  const bindings = Array.isArray(policy.bindings) ? policy.bindings : [];
+  const viewerBinding = bindings.find((binding) => binding.role === "roles/storage.objectViewer");
+  if (viewerBinding?.members?.includes("allUsers")) return;
+
+  if (viewerBinding) {
+    viewerBinding.members = Array.from(new Set([...(viewerBinding.members ?? []), "allUsers"]));
+  } else {
+    bindings.push({ role: "roles/storage.objectViewer", members: ["allUsers"] });
+  }
+
+  await gcsFetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/iam`, {
+    method: "PUT",
+    body: JSON.stringify({ ...policy, bindings, version: 3 }),
+  });
+}
+
+async function ensureOutputBucketReady(): Promise<{ bucket: string; created: boolean; publicRead: boolean }> {
+  let created = false;
+  if (!(await bucketExists(OUTPUT_BUCKET))) {
+    await createOutputBucket(OUTPUT_BUCKET);
+    created = true;
+  }
+  await ensurePublicObjectRead(OUTPUT_BUCKET);
+  return { bucket: OUTPUT_BUCKET, created, publicRead: true };
+}
+
 type GcpOperation = {
   name?: string;
   done?: boolean;
