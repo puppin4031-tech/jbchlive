@@ -1514,6 +1514,7 @@ serve(async (req) => {
       "getStatus",
       "getHLSUrl",
       "provisionChannel",
+      "repairLiveOutputBucket",
       "forceStopStartingChannel",
       "heartbeatBroadcaster",
       "diagnoseChannel",
@@ -1529,6 +1530,17 @@ serve(async (req) => {
       case "provisionChannel": {
         if (!channelId) throw new Error("channelId required");
         result = await provisionChannel(user.serviceClient, channelId);
+        break;
+      }
+
+      case "repairLiveOutputBucket": {
+        if (!channelId) throw new Error("channelId required");
+        if (!user.isAdmin) throw new Error("Forbidden: admin only");
+        const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
+        const bucket = await ensureOutputBucketReady();
+        const currentUrl = await buildHlsHttpsUrl(gcpChannelId);
+        const manifestStatus = currentUrl ? await inspectManifest(currentUrl) : null;
+        result = { bucket, streamUrl: currentUrl, manifestStatus };
         break;
       }
 
@@ -1870,7 +1882,7 @@ serve(async (req) => {
       case "diagnoseChannel": {
         if (!channelId) throw new Error("channelId required");
         const { inputId, gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
-        const [dbChannel, gcpChannel, gcpInput, ops] = await Promise.all([
+        const [dbChannel, gcpChannel, gcpInput, ops, outputBucketExists] = await Promise.all([
           user.serviceClient
             .from("channels")
             .select("id, is_live, gcp_channel_state, gcp_channel_id, gcp_input_id, gcp_input_uri, gcp_output_uri, gcp_last_error, stream_url, live_started_at, updated_at")
@@ -1880,13 +1892,25 @@ serve(async (req) => {
           getChannelGCP(gcpChannelId).catch((e) => ({ error: e instanceof Error ? e.message : String(e) })),
           getInput(inputId).catch((e) => ({ error: e instanceof Error ? e.message : String(e) })),
           listChannelOperations(gcpChannelId).catch((e) => [{ error: { message: e instanceof Error ? e.message : String(e) } }] as GcpOperation[]),
+          bucketExists(OUTPUT_BUCKET).catch((e) => ({ error: e instanceof Error ? e.message : String(e) })),
         ]);
+        const hlsUrl = (gcpChannel as { output?: { uri?: string }; manifests?: Array<{ fileName?: string }> })?.output?.uri
+          ? gsToHttps(`${(gcpChannel as { output: { uri: string } }).output.uri.endsWith("/") ? (gcpChannel as { output: { uri: string } }).output.uri : `${(gcpChannel as { output: { uri: string } }).output.uri}/`}${(gcpChannel as { manifests?: Array<{ fileName?: string }> }).manifests?.[0]?.fileName ?? "manifest.m3u8"}`)
+          : null;
+        const manifestStatus = hlsUrl ? await inspectManifest(hlsUrl) : null;
         result = {
           database: dbChannel,
           gcp: {
             location: LOCATION,
             channelId: gcpChannelId,
             inputId,
+            outputBucket: {
+              name: OUTPUT_BUCKET,
+              location: OUTPUT_BUCKET_LOCATION,
+              exists: outputBucketExists,
+            },
+            hlsUrl,
+            manifestStatus,
             channel: gcpChannel,
             input: gcpInput,
             operations: ops.slice(0, 20).map(summarizeOperation),
