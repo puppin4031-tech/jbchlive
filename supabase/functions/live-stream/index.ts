@@ -1427,6 +1427,7 @@ serve(async (req) => {
         let state = (dbCh.gcp_channel_state as string | null) ?? "UNKNOWN";
         let streamUrl = (dbCh.stream_url as string | null) ?? null;
         let manifestReady = false;
+        let manifestStatus: Awaited<ReturnType<typeof inspectManifest>> | null = null;
         const { gcpChannelId } = await resolveGcpIds(serviceClient, cid);
         const gcpCh = await getChannelGCP(gcpChannelId).catch((e) => {
           console.warn("getPublicLiveStatus GCP read failed", e);
@@ -1435,19 +1436,34 @@ serve(async (req) => {
         state = gcpCh?.streamingState || state;
 
         if (state === "STREAMING") {
-          streamUrl = streamUrl ?? await buildHlsHttpsUrl(gcpChannelId);
-          manifestReady = streamUrl ? await manifestExists(streamUrl) : false;
+          const resolved = await resolvePlayableManifest(gcpChannelId, streamUrl, { repairBucket: true });
+          streamUrl = resolved.streamUrl;
+          manifestReady = resolved.manifestReady;
+          manifestStatus = resolved.manifestStatus;
         }
 
         const dbState = (dbCh.gcp_channel_state as string | null) ?? "UNKNOWN";
         const terminalDbState = dbState === "STOPPED" || dbState === "FORCE_STOPPED" || dbState === "ERROR";
-        const shouldMarkLive = !dbCh.is_live && state === "STREAMING" && !!streamUrl && !terminalDbState;
-        const isEffectivelyLive = !!dbCh.is_live || shouldMarkLive;
-        if (isEffectivelyLive) {
+        const terminalGcpState = TERMINAL_GCP_STATES.has(state);
+        const shouldMarkLive = !dbCh.is_live && state === "STREAMING" && manifestReady && !!streamUrl && !terminalDbState;
+        const isEffectivelyLive = (!!dbCh.is_live && !terminalGcpState && !terminalDbState) || shouldMarkLive;
+        if (terminalGcpState || terminalDbState) {
+          await serviceClient
+            .from("channels")
+            .update({
+              is_live: false,
+              gcp_channel_state: state,
+              stream_url: null,
+            })
+            .eq("id", cid);
+        } else if (isEffectivelyLive) {
           const updatePayload: Record<string, unknown> = {
             gcp_channel_state: state,
             stream_url: streamUrl,
           };
+          if (state === "STREAMING" && !manifestReady && manifestStatus) {
+            updatePayload.gcp_last_error = `HLS manifest not ready: ${manifestStatus.reason}`.slice(0, 1000);
+          }
           if (shouldMarkLive) {
             updatePayload.is_live = true;
             updatePayload.live_started_at = new Date().toISOString();
@@ -1462,8 +1478,9 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           isLive: isEffectivelyLive,
           streamingState: state,
-          streamUrl: isEffectivelyLive ? streamUrl : null,
+          streamUrl: isEffectivelyLive && manifestReady ? streamUrl : null,
           manifestReady,
+          manifestStatus,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
