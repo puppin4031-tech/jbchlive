@@ -536,12 +536,38 @@ function gsToHttps(uri: string): string {
  * so returning the URL too early causes viewers to see a 404 in the player.
  */
 async function manifestExists(httpsUrl: string): Promise<boolean> {
+  const status = await inspectManifest(httpsUrl);
+  return status.exists;
+}
+
+async function inspectManifest(httpsUrl: string): Promise<{
+  exists: boolean;
+  status: number | null;
+  reason: string;
+  snippet?: string;
+}> {
   try {
     const bust = httpsUrl.includes("?") ? "&" : "?";
     const r = await fetch(`${httpsUrl}${bust}t=${Date.now()}`, { method: "HEAD" });
-    return r.ok;
-  } catch {
-    return false;
+    if (r.ok) return { exists: true, status: r.status, reason: "ready" };
+
+    let snippet = "";
+    try {
+      const bodyRes = await fetch(`${httpsUrl}${bust}debug=${Date.now()}`, { method: "GET" });
+      snippet = (await bodyRes.text()).slice(0, 500);
+    } catch {
+      // HEAD already told us the manifest is not ready; body is diagnostic-only.
+    }
+
+    if (snippet.includes("NoSuchBucket")) {
+      return { exists: false, status: r.status, reason: "NoSuchBucket", snippet };
+    }
+    if (snippet.includes("AccessDenied") || r.status === 403) {
+      return { exists: false, status: r.status, reason: "AccessDenied", snippet };
+    }
+    return { exists: false, status: r.status, reason: `HTTP_${r.status}`, snippet };
+  } catch (e) {
+    return { exists: false, status: null, reason: e instanceof Error ? e.message : String(e) };
   }
 }
 
