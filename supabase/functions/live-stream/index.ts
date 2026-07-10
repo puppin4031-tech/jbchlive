@@ -759,6 +759,21 @@ async function resolvePlayableManifest(
     }
   }
 
+  if (!manifestStatus.exists && manifestStatus.reason === "AccessDenied") {
+    const serviceStatus = await inspectManifestWithServiceAccount(candidateUrl);
+    if (serviceStatus.exists) {
+      const parsed = parseGcsHttpsUrl(candidateUrl);
+      const proxyUrl = parsed ? buildHlsProxyUrl(gcpChannelId.replace(/^ch-/, ""), parsed.objectPath) : null;
+      return {
+        streamUrl: proxyUrl,
+        candidateUrl,
+        manifestReady: !!proxyUrl,
+        manifestStatus: { ...serviceStatus, reason: "ready-via-backend-proxy" },
+      };
+    }
+    manifestStatus = serviceStatus;
+  }
+
   return {
     streamUrl: manifestStatus.exists ? candidateUrl : null,
     candidateUrl,
