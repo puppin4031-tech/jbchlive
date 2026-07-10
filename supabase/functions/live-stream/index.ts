@@ -1547,6 +1547,7 @@ serve(async (req) => {
           await provisionChannel(user.serviceClient, channelId);
         }
         const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
+        await ensureOutputBucketReady();
         result = await startChannelGCP(gcpChannelId);
         await user.serviceClient
           .from("channels")
