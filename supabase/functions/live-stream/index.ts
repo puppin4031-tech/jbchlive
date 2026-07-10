@@ -232,11 +232,59 @@ async function ensureOutputBucketReady(): Promise<{ bucket: string; created: boo
 async function assertOutputBucketReadyForPlayback(): Promise<{ bucket: string; created: boolean; publicRead: boolean; publicReadError?: string }> {
   const readiness = await ensureOutputBucketReady();
   if (!readiness.publicRead) {
-    throw new Error(
-      `HLS output bucket is not publicly readable: ${readiness.publicReadError || "public object viewer grant failed"}`,
+    console.warn(
+      `HLS output bucket is not publicly readable; playback will use proxy: ${readiness.publicReadError || "public object viewer grant failed"}`,
     );
   }
   return readiness;
+}
+
+function parseGcsHttpsUrl(httpsUrl: string): { bucket: string; objectPath: string } | null {
+  try {
+    const u = new URL(httpsUrl);
+    if (u.hostname !== "storage.googleapis.com") return null;
+    const parts = u.pathname.split("/").filter(Boolean);
+    const bucket = parts.shift();
+    if (!bucket || parts.length === 0) return null;
+    return { bucket, objectPath: parts.map(decodeURIComponent).join("/") };
+  } catch {
+    return null;
+  }
+}
+
+function liveStreamFunctionBaseUrl(): string {
+  return `${Deno.env.get("SUPABASE_URL")!}/functions/v1/live-stream`;
+}
+
+function buildHlsProxyUrl(channelUuid: string, objectPath: string): string {
+  return `${liveStreamFunctionBaseUrl()}/hls/${channelUuid}/${objectPath.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+async function inspectManifestWithServiceAccount(httpsUrl: string): Promise<{
+  exists: boolean;
+  status: number | null;
+  reason: string;
+  snippet?: string;
+}> {
+  const parsed = parseGcsHttpsUrl(httpsUrl);
+  if (!parsed) return { exists: false, status: null, reason: "Invalid GCS URL" };
+  try {
+    const token = await getAccessToken();
+    const bust = httpsUrl.includes("?") ? "&" : "?";
+    const r = await fetch(`${httpsUrl}${bust}authcheck=${Date.now()}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const snippet = (await r.clone().text().catch(() => "")).slice(0, 500);
+    if (r.ok) return { exists: true, status: r.status, reason: "ready-via-proxy", snippet };
+    if (snippet.includes("NoSuchBucket")) return { exists: false, status: r.status, reason: "NoSuchBucket", snippet };
+    if (snippet.includes("NoSuchKey") || snippet.includes("NoSuchObject") || r.status === 404) {
+      return { exists: false, status: r.status, reason: "ManifestNotWritten", snippet };
+    }
+    return { exists: false, status: r.status, reason: `AuthHTTP_${r.status}`, snippet };
+  } catch (e) {
+    return { exists: false, status: null, reason: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 type GcpOperation = {
