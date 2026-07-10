@@ -4,7 +4,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, range, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Expose-Headers": "content-length, content-range, accept-ranges, etag, last-modified",
 };
 
 const PROJECT_ID = Deno.env.get("GOOGLE_CLOUD_PROJECT_ID")!;
@@ -296,7 +297,7 @@ async function proxyHlsRequest(req: Request, channelUuid: string, objectPath: st
   }
 
   const token = await getAccessToken();
-  const headers: HeadersInit = { Authorization: `Bearer ${token}` };
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   const range = req.headers.get("range");
   if (range) headers.Range = range;
 
