@@ -249,7 +249,15 @@ async function ensurePublicObjectRead(
   }
 }
 
-async function ensureOutputBucketReady(): Promise<{ bucket: string; created: boolean; publicRead: boolean; publicReadError?: string }> {
+type BucketReadiness = {
+  bucket: string;
+  created: boolean;
+  publicRead: boolean;
+  publicReadError?: string;
+  orgPolicyBlocked?: boolean;
+};
+
+async function ensureOutputBucketReady(): Promise<BucketReadiness> {
   let created = false;
   if (!(await bucketExists(OUTPUT_BUCKET))) {
     await createOutputBucket(OUTPUT_BUCKET);
@@ -261,14 +269,17 @@ async function ensureOutputBucketReady(): Promise<{ bucket: string; created: boo
     created,
     publicRead: publicRead.publicRead,
     publicReadError: publicRead.error,
+    orgPolicyBlocked: publicRead.orgPolicyBlocked,
   };
 }
 
-async function assertOutputBucketReadyForPlayback(): Promise<{ bucket: string; created: boolean; publicRead: boolean; publicReadError?: string }> {
+async function assertOutputBucketReadyForPlayback(): Promise<BucketReadiness> {
   const readiness = await ensureOutputBucketReady();
   if (!readiness.publicRead) {
     console.warn(
-      `HLS output bucket is not publicly readable; playback will use proxy: ${readiness.publicReadError || "public object viewer grant failed"}`,
+      `HLS output bucket is not publicly readable; playback will use proxy${
+        readiness.orgPolicyBlocked ? " (org policy blocks allUsers — expected)" : ""
+      }: ${readiness.publicReadError || "public object viewer grant failed"}`,
     );
   }
   return readiness;
