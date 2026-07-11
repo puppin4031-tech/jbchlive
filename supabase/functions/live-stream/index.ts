@@ -1822,6 +1822,7 @@ serve(async (req) => {
             avg_watch_seconds: 0,
             low_viewer_since: null,
             broadcaster_last_seen_at: new Date().toISOString(),
+            gcp_last_error: null,
           })
           .eq("id", channelId);
 
