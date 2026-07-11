@@ -186,10 +186,37 @@ async function createOutputBucket(bucketName: string) {
   });
 }
 
-async function ensurePublicObjectRead(bucketName: string): Promise<{ publicRead: boolean; error?: string }> {
-  const policy = await gcsFetch(
-    `https://storage.googleapis.com/storage/v1/b/${bucketName}/iam?optionsRequestedPolicyVersion=3`,
-  ) as { bindings?: Array<{ role?: string; members?: string[] }>; etag?: string; version?: number };
+// True when the failure to grant allUsers stems from an org policy
+// (Domain Restricted Sharing) rather than a real misconfiguration.
+// In that case we silently fall back to the backend HLS proxy —
+// this is expected and must NOT be persisted as a broadcaster error.
+function isOrgPolicyBlockedPublicAccess(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return (
+    /\[412\]/.test(msg) ||
+    /conditionNotMet/i.test(msg) ||
+    /do not belong to a permitted customer/i.test(msg) ||
+    /domain restricted sharing/i.test(msg) ||
+    /allUsers/i.test(msg) && /policy/i.test(msg) && /denied|violat|not allowed/i.test(msg)
+  );
+}
+
+async function ensurePublicObjectRead(
+  bucketName: string,
+): Promise<{ publicRead: boolean; error?: string; orgPolicyBlocked?: boolean }> {
+  let policy: { bindings?: Array<{ role?: string; members?: string[] }>; etag?: string; version?: number };
+  try {
+    policy = await gcsFetch(
+      `https://storage.googleapis.com/storage/v1/b/${bucketName}/iam?optionsRequestedPolicyVersion=3`,
+    );
+  } catch (e) {
+    // If we can't even read the IAM policy, fall back to proxy playback silently.
+    return {
+      publicRead: false,
+      error: e instanceof Error ? e.message : String(e),
+      orgPolicyBlocked: isOrgPolicyBlockedPublicAccess(e),
+    };
+  }
 
   const bindings = Array.isArray(policy.bindings) ? policy.bindings : [];
   const viewerBinding = bindings.find((binding) => binding.role === "roles/storage.objectViewer");
@@ -208,8 +235,15 @@ async function ensurePublicObjectRead(bucketName: string): Promise<{ publicRead:
     });
     return { publicRead: true };
   } catch (e) {
+    const orgPolicyBlocked = isOrgPolicyBlockedPublicAccess(e);
+    if (orgPolicyBlocked) {
+      console.warn(
+        `[bucket ${bucketName}] Public allUsers grant blocked by organization policy — using backend proxy for HLS playback.`,
+      );
+    }
     return {
       publicRead: false,
+      orgPolicyBlocked,
       error: e instanceof Error ? e.message : String(e),
     };
   }
