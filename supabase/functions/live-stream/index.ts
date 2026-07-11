@@ -186,10 +186,37 @@ async function createOutputBucket(bucketName: string) {
   });
 }
 
-async function ensurePublicObjectRead(bucketName: string): Promise<{ publicRead: boolean; error?: string }> {
-  const policy = await gcsFetch(
-    `https://storage.googleapis.com/storage/v1/b/${bucketName}/iam?optionsRequestedPolicyVersion=3`,
-  ) as { bindings?: Array<{ role?: string; members?: string[] }>; etag?: string; version?: number };
+// True when the failure to grant allUsers stems from an org policy
+// (Domain Restricted Sharing) rather than a real misconfiguration.
+// In that case we silently fall back to the backend HLS proxy —
+// this is expected and must NOT be persisted as a broadcaster error.
+function isOrgPolicyBlockedPublicAccess(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return (
+    /\[412\]/.test(msg) ||
+    /conditionNotMet/i.test(msg) ||
+    /do not belong to a permitted customer/i.test(msg) ||
+    /domain restricted sharing/i.test(msg) ||
+    /allUsers/i.test(msg) && /policy/i.test(msg) && /denied|violat|not allowed/i.test(msg)
+  );
+}
+
+async function ensurePublicObjectRead(
+  bucketName: string,
+): Promise<{ publicRead: boolean; error?: string; orgPolicyBlocked?: boolean }> {
+  let policy: { bindings?: Array<{ role?: string; members?: string[] }>; etag?: string; version?: number };
+  try {
+    policy = await gcsFetch(
+      `https://storage.googleapis.com/storage/v1/b/${bucketName}/iam?optionsRequestedPolicyVersion=3`,
+    );
+  } catch (e) {
+    // If we can't even read the IAM policy, fall back to proxy playback silently.
+    return {
+      publicRead: false,
+      error: e instanceof Error ? e.message : String(e),
+      orgPolicyBlocked: isOrgPolicyBlockedPublicAccess(e),
+    };
+  }
 
   const bindings = Array.isArray(policy.bindings) ? policy.bindings : [];
   const viewerBinding = bindings.find((binding) => binding.role === "roles/storage.objectViewer");
@@ -208,14 +235,29 @@ async function ensurePublicObjectRead(bucketName: string): Promise<{ publicRead:
     });
     return { publicRead: true };
   } catch (e) {
+    const orgPolicyBlocked = isOrgPolicyBlockedPublicAccess(e);
+    if (orgPolicyBlocked) {
+      console.warn(
+        `[bucket ${bucketName}] Public allUsers grant blocked by organization policy — using backend proxy for HLS playback.`,
+      );
+    }
     return {
       publicRead: false,
+      orgPolicyBlocked,
       error: e instanceof Error ? e.message : String(e),
     };
   }
 }
 
-async function ensureOutputBucketReady(): Promise<{ bucket: string; created: boolean; publicRead: boolean; publicReadError?: string }> {
+type BucketReadiness = {
+  bucket: string;
+  created: boolean;
+  publicRead: boolean;
+  publicReadError?: string;
+  orgPolicyBlocked?: boolean;
+};
+
+async function ensureOutputBucketReady(): Promise<BucketReadiness> {
   let created = false;
   if (!(await bucketExists(OUTPUT_BUCKET))) {
     await createOutputBucket(OUTPUT_BUCKET);
@@ -227,14 +269,17 @@ async function ensureOutputBucketReady(): Promise<{ bucket: string; created: boo
     created,
     publicRead: publicRead.publicRead,
     publicReadError: publicRead.error,
+    orgPolicyBlocked: publicRead.orgPolicyBlocked,
   };
 }
 
-async function assertOutputBucketReadyForPlayback(): Promise<{ bucket: string; created: boolean; publicRead: boolean; publicReadError?: string }> {
+async function assertOutputBucketReadyForPlayback(): Promise<BucketReadiness> {
   const readiness = await ensureOutputBucketReady();
   if (!readiness.publicRead) {
     console.warn(
-      `HLS output bucket is not publicly readable; playback will use proxy: ${readiness.publicReadError || "public object viewer grant failed"}`,
+      `HLS output bucket is not publicly readable; playback will use proxy${
+        readiness.orgPolicyBlocked ? " (org policy blocks allUsers — expected)" : ""
+      }: ${readiness.publicReadError || "public object viewer grant failed"}`,
     );
   }
   return readiness;
@@ -1698,17 +1743,55 @@ serve(async (req) => {
         const bucket = await ensureOutputBucketReady();
         const currentUrl = await buildHlsHttpsUrl(gcpChannelId);
         const manifestStatus = currentUrl ? await inspectManifest(currentUrl) : null;
-        if (!bucket.publicRead || manifestStatus?.reason === "AccessDenied") {
+
+        // Determine if playback is actually broken:
+        //  - If allUsers grant is blocked by org policy, the backend HLS proxy
+        //    still serves viewers → NOT a broadcaster-facing error.
+        //  - Only persist gcp_last_error when neither public nor proxy paths
+        //    can serve the manifest.
+        let playbackBroken = false;
+        let errorMessage = "";
+        if (!bucket.publicRead && !bucket.orgPolicyBlocked) {
+          playbackBroken = true;
+          errorMessage = `HLS 출력 버킷 공개 권한 설정 실패: ${bucket.publicReadError || "unknown"}`;
+        } else if (manifestStatus?.reason === "NoSuchBucket") {
+          playbackBroken = true;
+          errorMessage = "HLS 출력 버킷이 없습니다.";
+        } else if (manifestStatus?.reason === "AccessDenied") {
+          // Verify service account can still read → proxy will work
+          const sa = currentUrl ? await inspectManifestWithServiceAccount(currentUrl) : { exists: false };
+          if (!sa.exists && manifestStatus?.status) {
+            playbackBroken = true;
+            errorMessage = "HLS 매니페스트에 서비스 계정도 접근할 수 없습니다.";
+          }
+        }
+
+        if (playbackBroken) {
           await user.serviceClient
             .from("channels")
-            .update({
-              gcp_last_error: `HLS output bucket access blocked: ${bucket.publicReadError || manifestStatus?.reason || "AccessDenied"}`.slice(0, 1000),
-            })
+            .update({ gcp_last_error: errorMessage.slice(0, 1000) })
             .eq("id", channelId);
+        } else {
+          // Clear any stale org-policy / access-blocked error from prior repairs
+          await user.serviceClient
+            .from("channels")
+            .update({ gcp_last_error: null })
+            .eq("id", channelId)
+            .like("gcp_last_error", "HLS output bucket access blocked%");
         }
-        result = { bucket, streamUrl: currentUrl, manifestStatus };
+        result = {
+          bucket,
+          streamUrl: currentUrl,
+          manifestStatus,
+          playbackBroken,
+          note: bucket.orgPolicyBlocked
+            ? "조직 정책으로 allUsers 공개가 차단되어 백엔드 프록시로 재생됩니다 (정상)."
+            : undefined,
+        };
         break;
       }
+
+
 
       case "startChannel": {
         if (!channelId) throw new Error("channelId required");
@@ -1739,6 +1822,7 @@ serve(async (req) => {
             avg_watch_seconds: 0,
             low_viewer_since: null,
             broadcaster_last_seen_at: new Date().toISOString(),
+            gcp_last_error: null,
           })
           .eq("id", channelId);
 
