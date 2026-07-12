@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import * as liveApi from '@/lib/liveStreamApi';
 import { Button } from '@/components/ui/button';
+import { visibleGcpError } from '@/lib/gcpErrorFilter';
 
 type Props = {
   channelId: string | null;
