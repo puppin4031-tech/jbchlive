@@ -87,9 +87,9 @@ const ChannelHealthPanel = () => {
                     <Badge variant="destructive">STARTING {ageMin}분 경과</Badge>
                   )}
                 </div>
-                {ch.gcp_last_error && (
+                {visibleGcpError(ch.gcp_last_error) && (
                   <p className="text-xs text-destructive bg-destructive/5 p-2 rounded border border-destructive/20 break-words">
-                    {ch.gcp_last_error}
+                    {visibleGcpError(ch.gcp_last_error)}
                   </p>
                 )}
                 <div className="flex justify-end">
