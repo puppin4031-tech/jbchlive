@@ -13,6 +13,7 @@ import { ImagePlus, Loader2, ArrowLeft, Copy, Check, ChevronDown, Radio, Eye, Ey
 import { toast } from 'sonner';
 import { parseRtmpUri } from '@/lib/liveStreamApi';
 import BroadcasterControlPanel from '@/components/broadcaster/BroadcasterControlPanel';
+import { visibleGcpError } from '@/lib/gcpErrorFilter';
 
 const ChannelSettingsPage = () => {
   const { channelId } = useParams();
