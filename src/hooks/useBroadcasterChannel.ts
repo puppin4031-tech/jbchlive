@@ -8,6 +8,7 @@ import {
   getStatus as apiGetStatus,
 } from '@/lib/liveStreamApi';
 import { toFriendlyError, validateBeforeStart, type FriendlyError } from '@/lib/liveStreamErrors';
+import { visibleGcpError } from '@/lib/gcpErrorFilter';
 import { toast } from 'sonner';
 
 export type BroadcastPhase =
