@@ -132,16 +132,12 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
               compact
             />
           )}
-          {(() => {
-            const visErr = visibleGcpError(channel.gcp_last_error);
-            if (!lastError && !(visErr && phase === 'error')) return null;
-            return (
-              <div className="flex gap-1 text-xs text-destructive">
-                <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
-                <span className="line-clamp-2">{lastError?.title ?? visErr}</span>
-              </div>
-            );
-          })()}
+          {(lastError || (visibleGcpError(channel.gcp_last_error) && phase === 'error')) && (
+            <div className="flex gap-1 text-xs text-destructive">
+              <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+              <span className="line-clamp-2">{lastError?.title ?? visibleGcpError(channel.gcp_last_error)}</span>
+            </div>
+          )}
           <div className="flex gap-2">
             {!channel.is_live ? (
               <Button
