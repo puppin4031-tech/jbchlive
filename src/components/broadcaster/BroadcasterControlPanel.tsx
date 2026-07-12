@@ -241,28 +241,21 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
           />
         )}
 
-        {(lastError || channel.gcp_last_error) && (
+        {(lastError || visibleGcpError(channel.gcp_last_error)) && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
             <div className="flex gap-2 items-start">
               <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-        {(() => {
-          const visErr = visibleGcpError(channel.gcp_last_error);
-          if (!lastError && !visErr) return null;
-          return (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
-          <div className="flex gap-2 items-start">
-            <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-            <div className="flex-1 space-y-1">
-              <p className="text-sm font-semibold text-destructive">
-                {lastError?.title ?? '송출 오류'}
-              </p>
-              <p className="text-xs text-foreground">
-                {lastError?.message ?? visErr}
-              </p>
-              {lastError?.hint && (
-                <p className="text-xs text-muted-foreground">{lastError.hint}</p>
-              )}
-            </div>
+              <div className="flex-1 space-y-1">
+                <p className="text-sm font-semibold text-destructive">
+                  {lastError?.title ?? '송출 오류'}
+                </p>
+                <p className="text-xs text-foreground">
+                  {lastError?.message ?? visibleGcpError(channel.gcp_last_error)}
+                </p>
+                {lastError?.hint && (
+                  <p className="text-xs text-muted-foreground">{lastError.hint}</p>
+                )}
+              </div>
               {lastError && (
                 <Button
                   size="sm"
