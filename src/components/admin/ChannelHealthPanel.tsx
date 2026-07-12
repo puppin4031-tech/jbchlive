@@ -41,7 +41,7 @@ const ChannelHealthPanel = () => {
   });
 
   const problems = channels.filter((ch) =>
-    ch.gcp_last_error ||
+    visibleGcpError(ch.gcp_last_error) ||
     ch.gcp_channel_state === 'ERROR' ||
     ch.gcp_channel_state === 'RECOVERING' ||
     isStuckStarting(ch)
