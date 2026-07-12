@@ -16,6 +16,7 @@ import * as liveApi from '@/lib/liveStreamApi';
 import ActivityTimeline from '@/components/admin/ActivityTimeline';
 import LiveNowPanel from '@/components/admin/LiveNowPanel';
 import ChannelHealthPanel from '@/components/admin/ChannelHealthPanel';
+import { visibleGcpError } from '@/lib/gcpErrorFilter';
 
 const AdminPage = () => {
   const { isAdmin, loading, user } = useAuth();
