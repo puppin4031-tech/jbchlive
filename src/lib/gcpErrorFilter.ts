@@ -9,6 +9,10 @@ const SUPPRESSED_PATTERNS = [
   /permitted customer/i,
   /conditionNotMet/i,
   /allowedPolicyMemberDomains/i,
+  /HLS manifest not ready/i,
+  /ManifestNotWritten/i,
+  /manifest.*not.*written/i,
+  /manifest.*not.*ready/i,
 ];
 
 export const isSuppressedGcpError = (msg: string | null | undefined): boolean => {
