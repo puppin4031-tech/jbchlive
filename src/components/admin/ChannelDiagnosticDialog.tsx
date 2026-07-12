@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import * as liveApi from '@/lib/liveStreamApi';
 import { Button } from '@/components/ui/button';
+import { visibleGcpError } from '@/lib/gcpErrorFilter';
 
 type Props = {
   channelId: string | null;
@@ -43,7 +44,7 @@ const interpretIssues = (d: Diag): { level: 'ok' | 'warn' | 'error'; message: st
   if (gcpInput?.error) {
     issues.push({ level: 'error', message: `GCP 입력(Input) 조회 실패: ${gcpInput.error} — 입력이 삭제되었거나 프로젝트가 잘못됐을 수 있습니다. [재프로비저닝] 필요.` });
   }
-  if (db.gcp_last_error) {
+  if (visibleGcpError(db.gcp_last_error as string)) {
     issues.push({ level: 'warn', message: `최근 저장된 오류: ${String(db.gcp_last_error)}` });
   }
   if (outputBucket?.exists === false) {

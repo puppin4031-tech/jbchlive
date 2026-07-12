@@ -13,6 +13,7 @@ import { ImagePlus, Loader2, ArrowLeft, Copy, Check, ChevronDown, Radio, Eye, Ey
 import { toast } from 'sonner';
 import { parseRtmpUri } from '@/lib/liveStreamApi';
 import BroadcasterControlPanel from '@/components/broadcaster/BroadcasterControlPanel';
+import { visibleGcpError } from '@/lib/gcpErrorFilter';
 
 const ChannelSettingsPage = () => {
   const { channelId } = useParams();
@@ -201,9 +202,9 @@ const ChannelSettingsPage = () => {
               <div className="text-2xl">⚙️</div>
               <p className="text-sm font-medium text-foreground">GCP 인프라 설정 대기 중</p>
               <p className="text-xs text-muted-foreground">관리자에게 GCP 재프로비저닝을 요청하세요.</p>
-              {channel.gcp_last_error && (
+              {visibleGcpError(channel.gcp_last_error) && (
                 <p className="text-xs text-destructive break-words pt-2 border-t border-border">
-                  ⚠️ {channel.gcp_last_error}
+                  ⚠️ {visibleGcpError(channel.gcp_last_error)}
                 </p>
               )}
             </div>

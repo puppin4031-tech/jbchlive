@@ -10,6 +10,7 @@ import StartLiveDialog from './StartLiveDialog';
 import StopLiveDialog from './StopLiveDialog';
 import KeepaliveDialog from './KeepaliveDialog';
 import DisconnectWarning from './DisconnectWarning';
+import { visibleGcpError } from '@/lib/gcpErrorFilter';
 
 
 
@@ -131,10 +132,10 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
               compact
             />
           )}
-          {(lastError || (channel.gcp_last_error && phase === 'error')) && (
+          {(lastError || (visibleGcpError(channel.gcp_last_error) && phase === 'error')) && (
             <div className="flex gap-1 text-xs text-destructive">
               <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
-              <span className="line-clamp-2">{lastError?.title ?? channel.gcp_last_error}</span>
+              <span className="line-clamp-2">{lastError?.title ?? visibleGcpError(channel.gcp_last_error)}</span>
             </div>
           )}
           <div className="flex gap-2">
@@ -236,7 +237,7 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
           />
         )}
 
-        {(lastError || channel.gcp_last_error) && (
+        {(lastError || visibleGcpError(channel.gcp_last_error)) && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
             <div className="flex gap-2 items-start">
               <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
@@ -245,7 +246,7 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
                   {lastError?.title ?? '송출 오류'}
                 </p>
                 <p className="text-xs text-foreground">
-                  {lastError?.message ?? channel.gcp_last_error}
+                  {lastError?.message ?? visibleGcpError(channel.gcp_last_error)}
                 </p>
                 {lastError?.hint && (
                   <p className="text-xs text-muted-foreground">{lastError.hint}</p>

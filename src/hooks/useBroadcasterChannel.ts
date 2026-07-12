@@ -8,6 +8,7 @@ import {
   getStatus as apiGetStatus,
 } from '@/lib/liveStreamApi';
 import { toFriendlyError, validateBeforeStart, type FriendlyError } from '@/lib/liveStreamErrors';
+import { visibleGcpError } from '@/lib/gcpErrorFilter';
 import { toast } from 'sonner';
 
 export type BroadcastPhase =
@@ -109,7 +110,7 @@ export const useBroadcasterChannel = () => {
   const phase: BroadcastPhase = useMemo(() => {
     if (!channel) return 'no-channel';
     if (!channel.is_approved) return 'pending-approval';
-    if (channel.gcp_last_error && !channel.is_live) return 'error';
+    if (visibleGcpError(channel.gcp_last_error) && !channel.is_live) return 'error';
     if (!channel.is_live) return 'offline';
     if (effectiveGcpState === 'STREAMING' || channel.stream_url) return 'streaming';
     if (effectiveGcpState === 'AWAITING_INPUT') return 'awaiting-input';

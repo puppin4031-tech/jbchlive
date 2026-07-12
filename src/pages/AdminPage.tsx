@@ -16,6 +16,7 @@ import * as liveApi from '@/lib/liveStreamApi';
 import ActivityTimeline from '@/components/admin/ActivityTimeline';
 import LiveNowPanel from '@/components/admin/LiveNowPanel';
 import ChannelHealthPanel from '@/components/admin/ChannelHealthPanel';
+import { visibleGcpError } from '@/lib/gcpErrorFilter';
 
 const AdminPage = () => {
   const { isAdmin, loading, user } = useAuth();
@@ -394,8 +395,8 @@ const AdminPage = () => {
                         ) : null}
                       </div>
                       <p className="text-xs text-muted-foreground truncate mt-1">{ch.stream_url || '스트림 URL 없음'}</p>
-                      {ch.gcp_last_error && (
-                        <p className="text-xs text-destructive mt-1 break-words">⚠️ GCP: {ch.gcp_last_error}</p>
+                      {visibleGcpError(ch.gcp_last_error) && (
+                        <p className="text-xs text-destructive mt-1 break-words">⚠️ GCP: {visibleGcpError(ch.gcp_last_error)}</p>
                       )}
                       {ch.is_suspended && ch.suspended_reason && (
                         <p className="text-xs text-destructive mt-1">사유: {ch.suspended_reason}</p>

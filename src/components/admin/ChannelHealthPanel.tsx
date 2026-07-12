@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, Stethoscope, RefreshCw } from 'lucide-react';
 import ChannelDiagnosticDialog from './ChannelDiagnosticDialog';
+import { visibleGcpError } from '@/lib/gcpErrorFilter';
 
 type ProblemChannel = {
   id: string;
@@ -40,7 +41,7 @@ const ChannelHealthPanel = () => {
   });
 
   const problems = channels.filter((ch) =>
-    ch.gcp_last_error ||
+    visibleGcpError(ch.gcp_last_error) ||
     ch.gcp_channel_state === 'ERROR' ||
     ch.gcp_channel_state === 'RECOVERING' ||
     isStuckStarting(ch)
@@ -86,9 +87,9 @@ const ChannelHealthPanel = () => {
                     <Badge variant="destructive">STARTING {ageMin}분 경과</Badge>
                   )}
                 </div>
-                {ch.gcp_last_error && (
+                {visibleGcpError(ch.gcp_last_error) && (
                   <p className="text-xs text-destructive bg-destructive/5 p-2 rounded border border-destructive/20 break-words">
-                    {ch.gcp_last_error}
+                    {visibleGcpError(ch.gcp_last_error)}
                   </p>
                 )}
                 <div className="flex justify-end">
