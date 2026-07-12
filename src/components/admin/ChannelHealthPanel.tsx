@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, Stethoscope, RefreshCw } from 'lucide-react';
 import ChannelDiagnosticDialog from './ChannelDiagnosticDialog';
+import { visibleGcpError } from '@/lib/gcpErrorFilter';
 
 type ProblemChannel = {
   id: string;
