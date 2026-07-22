@@ -212,7 +212,7 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
           <div className="flex gap-2">
             {!channel.is_live ? (
               <Button
-                onClick={handleStart}
+                onClick={handleStartClick}
                 disabled={startLive.isPending}
                 size="sm"
                 className="flex-1 h-10 font-semibold"
@@ -345,7 +345,7 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
 
         {!channel.is_live ? (
           <Button
-            onClick={handleStart}
+            onClick={handleStartClick}
             disabled={startLive.isPending}
             size="lg"
             className="w-full h-14 text-base font-bold gap-2"
