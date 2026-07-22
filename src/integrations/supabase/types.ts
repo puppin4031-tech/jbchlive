@@ -43,6 +43,47 @@ export type Database = {
           },
         ]
       }
+      channel_youtube_tokens: {
+        Row: {
+          access_token: string | null
+          access_token_expires_at: string | null
+          channel_id: string
+          connected_by: string | null
+          created_at: string
+          refresh_token: string
+          scope: string | null
+          updated_at: string
+        }
+        Insert: {
+          access_token?: string | null
+          access_token_expires_at?: string | null
+          channel_id: string
+          connected_by?: string | null
+          created_at?: string
+          refresh_token: string
+          scope?: string | null
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string | null
+          access_token_expires_at?: string | null
+          channel_id?: string
+          connected_by?: string | null
+          created_at?: string
+          refresh_token?: string
+          scope?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channel_youtube_tokens_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: true
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       channels: {
         Row: {
           auto_stop_disconnect_minutes: number
@@ -51,7 +92,12 @@ export type Database = {
           avg_watch_seconds: number
           broadcaster_last_seen_at: string | null
           created_at: string
+          current_broadcast_type:
+            | Database["public"]["Enums"]["broadcast_type"]
+            | null
           current_viewers: number
+          current_youtube_video_id: string | null
+          current_youtube_watch_url: string | null
           description: string | null
           gcp_channel_id: string | null
           gcp_channel_state: string | null
@@ -81,6 +127,12 @@ export type Database = {
           subscriber_count: number
           suspended_reason: string | null
           updated_at: string
+          youtube_channel_id: string | null
+          youtube_channel_title: string | null
+          youtube_connected: boolean
+          youtube_last_broadcast_id: string | null
+          youtube_last_video_id: string | null
+          youtube_last_watch_url: string | null
         }
         Insert: {
           auto_stop_disconnect_minutes?: number
@@ -89,7 +141,12 @@ export type Database = {
           avg_watch_seconds?: number
           broadcaster_last_seen_at?: string | null
           created_at?: string
+          current_broadcast_type?:
+            | Database["public"]["Enums"]["broadcast_type"]
+            | null
           current_viewers?: number
+          current_youtube_video_id?: string | null
+          current_youtube_watch_url?: string | null
           description?: string | null
           gcp_channel_id?: string | null
           gcp_channel_state?: string | null
@@ -119,6 +176,12 @@ export type Database = {
           subscriber_count?: number
           suspended_reason?: string | null
           updated_at?: string
+          youtube_channel_id?: string | null
+          youtube_channel_title?: string | null
+          youtube_connected?: boolean
+          youtube_last_broadcast_id?: string | null
+          youtube_last_video_id?: string | null
+          youtube_last_watch_url?: string | null
         }
         Update: {
           auto_stop_disconnect_minutes?: number
@@ -127,7 +190,12 @@ export type Database = {
           avg_watch_seconds?: number
           broadcaster_last_seen_at?: string | null
           created_at?: string
+          current_broadcast_type?:
+            | Database["public"]["Enums"]["broadcast_type"]
+            | null
           current_viewers?: number
+          current_youtube_video_id?: string | null
+          current_youtube_watch_url?: string | null
           description?: string | null
           gcp_channel_id?: string | null
           gcp_channel_state?: string | null
@@ -157,6 +225,12 @@ export type Database = {
           subscriber_count?: number
           suspended_reason?: string | null
           updated_at?: string
+          youtube_channel_id?: string | null
+          youtube_channel_title?: string | null
+          youtube_connected?: boolean
+          youtube_last_broadcast_id?: string | null
+          youtube_last_video_id?: string | null
+          youtube_last_watch_url?: string | null
         }
         Relationships: []
       }
@@ -187,6 +261,7 @@ export type Database = {
       live_sessions: {
         Row: {
           avg_viewers: number
+          broadcast_type: Database["public"]["Enums"]["broadcast_type"]
           channel_id: string
           created_at: string
           duration_seconds: number | null
@@ -196,9 +271,13 @@ export type Database = {
           peak_viewers: number
           started_at: string
           title: string | null
+          youtube_broadcast_id: string | null
+          youtube_video_id: string | null
+          youtube_watch_url: string | null
         }
         Insert: {
           avg_viewers?: number
+          broadcast_type?: Database["public"]["Enums"]["broadcast_type"]
           channel_id: string
           created_at?: string
           duration_seconds?: number | null
@@ -208,9 +287,13 @@ export type Database = {
           peak_viewers?: number
           started_at?: string
           title?: string | null
+          youtube_broadcast_id?: string | null
+          youtube_video_id?: string | null
+          youtube_watch_url?: string | null
         }
         Update: {
           avg_viewers?: number
+          broadcast_type?: Database["public"]["Enums"]["broadcast_type"]
           channel_id?: string
           created_at?: string
           duration_seconds?: number | null
@@ -220,6 +303,9 @@ export type Database = {
           peak_viewers?: number
           started_at?: string
           title?: string | null
+          youtube_broadcast_id?: string | null
+          youtube_video_id?: string | null
+          youtube_watch_url?: string | null
         }
         Relationships: [
           {
@@ -656,6 +742,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      broadcast_type: "sunday_sermon" | "gathering"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -784,6 +871,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      broadcast_type: ["sunday_sermon", "gathering"],
     },
   },
 } as const
