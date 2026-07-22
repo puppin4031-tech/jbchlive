@@ -1,72 +1,95 @@
-## 배경 확인
 
-요청 사항 중 상당 부분이 **이미 구현되어 있어** 재작업 대신 조정으로 처리하는 것이 안전합니다. Broadcaster Critical Path 규정에 따라 승인 필요.
+# 계획: 홈 히어로 제거 및 방송 유형 분기 (주일말씀=YouTube Live / 집회=GCP)
 
-### 이미 있는 것
-- **자동 종료 워치독** (`live-stream` edge function `autoStopIdleChannels` action, cron으로 주기 실행): RTMP idle / OBS 연결 끊김 / 장시간+저시청 keepalive 프롬프트 → grace 초과 시 자동 stop 이 모두 구현되어 있음.
-- **관리자 강제 종료**: `stopChannel` action의 `reason` 파라미터 (admin 전용) 이미 존재. 백엔드가 GCP stop → DB `is_live=false`로 덮어씀.
-- **시청자 실시간 집계**: `viewer_presence` 테이블 + Supabase Realtime Presence + `useViewerCount`/`useViewerHeartbeat` hooks가 이미 동작 중.
-- **인코딩 720p**: 직전 요청으로 이미 720p / 1000kbps / 30fps로 하드코딩됨.
+## 1. 홈(Index) 상단 히어로 배너 제거
 
-### 설계 충돌 (승인 전 결정 필요)
-요청 2번은 "sermons 테이블에 컬럼 추가"인데, **sermons는 VOD (녹화 설교) 테이블**이고 실시간 방송 상태는 `channels` 테이블에서 관리됩니다. 라이브 시청 지표는 `channels`에, 세션 종료 후 스냅샷은 이미 있는 `live_sessions`에 저장하는 것이 데이터 모델상 맞습니다. **`sermons`가 아닌 `channels`(라이브 진행 중)와 `live_sessions`(종료 후 집계)에 저장**하는 방향으로 진행하겠습니다.
+- `src/pages/Index.tsx` 최상단에 렌더되는 큰 배너/캐러셀 영역만 제거
+- 그 아래 카테고리 탭, 라이브 목록, 최신 말씀 등 기존 섹션은 그대로 유지
+- 상단 여백만 자연스럽게 정리
 
----
+## 2. 데이터 모델: broadcast_type
 
-## 변경 계획
+라이브 세션 단위로 유형 저장(사용자 선택안):
 
-### 1. 인코딩 스펙 조정 (1500kbps, 24fps)
-- `supabase/functions/live-stream/index.ts` `createChannel()`
-  - `bitrateBps: 1000000 → 1500000`
-  - `frameRate: 30 → 24`
-  - 해상도 1280x720 유지, 단일 mux/manifest 유지
-- 관리자 재프로비저닝 버튼으로 즉시 반영 (기존 로직 재사용).
+- 마이그레이션
+  - `CREATE TYPE public.broadcast_type AS ENUM ('sunday_sermon', 'gathering');`
+  - `live_sessions.broadcast_type broadcast_type NOT NULL DEFAULT 'gathering'`
+  - `channels`에 YouTube 연동 필드 추가:
+    - `youtube_connected boolean DEFAULT false`
+    - `youtube_channel_id text`
+    - `youtube_refresh_token text` (SECURITY DEFINER 함수 통해서만 읽기 — 클라이언트 노출 금지, RLS로 owner 조회 차단)
+    - `youtube_last_broadcast_id text`, `youtube_last_video_id text`
+  - `live_sessions`에 `youtube_video_id text`, `youtube_broadcast_id text`, `youtube_watch_url text` 추가
+- 방송 시작 시 유형과 관련 ID를 세션 row에 기록. 채널 카드/방송 기록/라이브 목록에는 배지("주일말씀"/"집회") 표시
 
-### 2. 라이브 시청 지표 컬럼 & 저장 (channels + live_sessions)
-- **마이그레이션** (`channels` 테이블):
-  - `current_viewers int not null default 0` — 워치독이 1분 주기로 갱신
-  - `peak_viewers int not null default 0` — max(current, peak)
-  - `avg_watch_seconds int not null default 0` — 세션 종료 시 계산해 반영
-- **`live_sessions`** (기존): 종료 시 `peak_viewers`, `avg_watch_seconds` 스냅샷 컬럼 추가 (없으면).
-- **집계 소스**: 이미 존재하는 `viewer_presence`(최근 2분 heartbeat) + `live_viewer_samples`(분 단위 이력).
-- **갱신 방식**:
-  - `autoStopIdleChannels` 워치독(현재 2분 cron)이 이미 채널별로 viewer count를 조회하므로, 그 값을 그대로 `channels.current_viewers`/`peak_viewers`에 UPDATE 하는 코드를 추가.
-  - 별도 잦은 cron 대신 기존 cron 파이프라인 확장 → 비용 절감.
-- **프론트엔드 라벨**: 라이브 페이지의 카운터 라벨을 영문("Current Viewers · Peak · Avg Watch Time")으로 표시 (라이브 시청자에게 노출되는 곳만).
+## 3. 방송 시작 UX
 
-### 3. 3-Layer 좀비 스트림 방어 강화
+`BroadcasterControlPanel` 상단 "라이브 시작" 버튼 → 유형 선택 다이얼로그:
 
-#### Layer 1 — Frontend Auto-Kill (신규, 안전 가드 포함)
-**주의**: OBS는 브라우저 독립적으로 GCP로 RTMP를 계속 밀 수 있기 때문에, 브라우저 닫힘만으로 즉시 GCP stop을 호출하면 실수로 방송이 끊길 수 있음. 아래처럼 완화:
+```text
+[ 주일말씀 (YouTube Live) ]   [ 집회 (자체 스트리밍) ]
+```
 
-- `BroadcasterControlPanel`이 라이브 중일 때만 `visibilitychange`/`pagehide` 이벤트에 `navigator.sendBeacon`으로 백엔드 `heartbeatBroadcaster` action 호출 → 마지막 브로드캐스터 heartbeat 시각을 `channels.broadcaster_last_seen_at`에 기록.
-- 별도 신규 훅 `useBroadcasterPresence.ts` (보호 파일 우회, 새 파일).
-- 워치독이 `broadcaster_last_seen_at` 이 3분 이상 없고 `stream_url` 도 없으면 자동 종료 (기존 disconnect 로직에 병합).
-- **즉시 kill 은 하지 않음** — 명시적 종료 버튼일 때만 즉시 GCP stop. 이유는 리스크 리포트에 기재.
+- 주일말씀 선택 시:
+  1. `youtube_connected=false`면 "YouTube 계정 연결" 버튼 표시 → OAuth 시작
+  2. 연결 완료 후 edge function `youtube-live` 호출로 broadcast+stream 생성
+  3. 결과로 받은 RTMP URL/Stream Key를 `StartLiveDialog`(YouTube 버전)에 표시 → OBS 설정 안내
+  4. OBS 송출 시작 감지되면 상태를 `live`로 transition
+- 집회 선택 시: 지금과 동일한 GCP Live Stream 파이프라인(변경 없음)
 
-#### Layer 2 — Admin Force Stop (이미 있음, UI만 보완)
-- 백엔드 흐름은 그대로 (`stopChannel` + `reason`, admin 전용).
-- `AdminPage`에 "라이브 중" 채널 리스트에서 강제 종료 버튼 노출 (없으면 추가), 확인 다이얼로그.
+## 4. YouTube Live Streaming API 자동 생성 (edge function)
 
-#### Layer 3 — Watchdog Cron 규정 반영
-현재 keepalive 프롬프트 기반 (5시간 이상 + 저시청 → 프롬프트 → grace). 요청 스펙에 맞춰 **정책 파라미터 값**을 조정 (스키마 아님):
-- `low_viewer_threshold` 기본 2 → 그대로
-- `auto_stop_max_minutes` 5시간 하드 캡: **5시간(300분) 초과 시 프롬프트 없이 즉시 종료** 로직 추가.
-- 저시청 지속시간 트래킹 컬럼 추가:
-  - `low_viewer_since timestamptz null` — 시청자 ≤ 2 상태 진입 시각. 워치독이 매번 계산.
-  - 지속 시간 ≥ 50분이면 즉시 종료 (프롬프트 스킵).
-- Cron 주기는 현재 2분 → **10분 스펙 반영을 위해 10분으로 변경**할지 검토. (2분이 반응성은 더 좋음. 사용자 요청은 "10분마다"이므로 10분으로 통일).
+새 edge function `supabase/functions/youtube-live/index.ts`:
 
-### 파일 변경 요약
-- 마이그레이션 1개 (channels 컬럼 4개 추가, live_sessions 컬럼 2개 추가)
-- `supabase/functions/live-stream/index.ts` — 인코딩 파라미터, 워치독 로직 확장, `heartbeatBroadcaster` action 추가
-- 신규: `src/hooks/useBroadcasterPresence.ts`
-- 수정: `BroadcasterControlPanel.tsx` (heartbeat 훅 mount), `AdminPage.tsx` (강제 종료 UI 보완), 라이브 페이지 지표 라벨 영문화
-- `src/lib/liveStreamApi.ts` — `heartbeatBroadcaster` 래퍼 추가
-- pg_cron 스케줄 주기 조정 (필요 시)
+- Actions:
+  - `oauth_start` — Google OAuth URL 생성 (scopes: `https://www.googleapis.com/auth/youtube.force-ssl`, `youtube.readonly`, `userinfo.email`)
+  - `oauth_callback` — code→refresh_token 교환, `channels.youtube_*` 저장
+  - `create_broadcast` — refresh_token으로 access_token 갱신 → `liveBroadcasts.insert` + `liveStreams.insert` + `liveBroadcasts.bind` → RTMP URL/키 + watch URL 반환
+  - `transition` — testing→live / live→complete
+  - `get_status` — 브로드캐스트 lifeCycleStatus 조회
+- Secrets 요청 필요:
+  - `YOUTUBE_OAUTH_CLIENT_ID`, `YOUTUBE_OAUTH_CLIENT_SECRET` (사용자가 Google Cloud Console에서 발급, add_secret으로 저장)
+  - Redirect URI: `<app_origin>/auth/youtube/callback`
+- 클라이언트는 `youtube_refresh_token`을 절대 읽지 못함(RLS로 SELECT 차단, edge function service role만 접근)
 
-## 확인 요청
+## 5. 시청자용 재생
 
-1. **컬럼 위치**: `sermons`가 아닌 `channels` + `live_sessions`에 저장 — OK?
-2. **Frontend Auto-Kill 완화**: 브라우저 닫힘 시 즉시 GCP stop 대신 heartbeat 기반 지연 종료 — OK? (OBS 단독 송출 시 오작동 방지 목적)
-3. **Cron 주기**: 현재 2분 → 요청대로 10분으로 변경 vs. 2분 유지 — 어느 쪽?
+- `LivePage`에서 세션 `broadcast_type`이 `sunday_sermon`이면 `VideoPlayer` 대신 `YouTubeEmbed`(iframe `https://www.youtube.com/embed/<video_id>?autoplay=1`) 렌더
+- 채팅/후원/시청자 카운트 등 기존 사이드 UI는 유지
+- `broadcast_type`이 `gathering`이면 지금의 HLS 플레이어 그대로
+
+## 6. 방송 종료
+
+- 주일말씀: `youtube-live/transition` 호출로 `complete` 처리 후 세션 종료. VOD는 YouTube에 자동 저장(별도 처리 없음, 기존 방침대로 자동 VOD 미저장)
+- 집회: 기존 GCP stop 로직 그대로
+
+## 7. 표시/필터
+
+- 채널 카드, 라이브 목록, 방송 기록: `broadcast_type` 배지
+- 관리자 페이지 채널 상태 표에도 유형 컬럼 추가
+
+## 기술 세부
+
+- YouTube Data API v3 엔드포인트:
+  - `POST /liveBroadcasts?part=snippet,status,contentDetails`
+  - `POST /liveStreams?part=snippet,cdn,contentDetails`
+  - `POST /liveBroadcasts/bind?part=id,contentDetails&id=<b>&streamId=<s>`
+  - `POST /liveBroadcasts/transition?part=status&broadcastStatus=live&id=<b>`
+- 토큰 갱신: `POST https://oauth2.googleapis.com/token` (`grant_type=refresh_token`)
+- 쿼터: 기본 10,000 units/일 — broadcast 생성 ~50 units, 여유 큼
+- `youtube_refresh_token`는 RLS 정책에서 컬럼 단위 노출 방지를 위해 `channels` SELECT 정책은 유지하되, 뷰(`public.channels_public`) 또는 명시적으로 클라이언트 SELECT 컬럼 리스트에서 제외하는 방식으로 처리
+
+## 사용자 필요 준비물
+
+주일말씀 기능이 실제 동작하려면:
+
+1. Google Cloud Console에서 OAuth Client ID(Web) 발급 → redirect URI 등록
+2. `YOUTUBE_OAUTH_CLIENT_ID`, `YOUTUBE_OAUTH_CLIENT_SECRET` 두 Secret 저장 (구현 후 add_secret으로 요청)
+3. 각 방송 채널 소유자가 최초 1회 자기 YouTube 계정 연결
+
+## 산출물
+
+- 마이그레이션 1건 (enum, 컬럼 추가, RLS 조정)
+- 새 edge function `youtube-live`
+- 신규 컴포넌트: `BroadcastTypeDialog`, `YouTubeConnectButton`, `YouTubeStartLiveDialog`, `YouTubeEmbed`
+- 수정: `Index.tsx`(히어로 제거), `BroadcasterControlPanel`, `useBroadcasterChannel`, `LivePage`, `ChannelLiveHistory`, 카드 컴포넌트에 배지
