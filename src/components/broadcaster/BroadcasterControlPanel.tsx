@@ -67,15 +67,6 @@ interface Props {
 }
 
 const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
-  const { channel, phase, gcpState, pollAttempts, startLive, stopLive, lastError, dismissError } = useBroadcasterChannel();
-  const [startDialogOpen, setStartDialogOpen] = useState(false);
-  const [stopDialogOpen, setStopDialogOpen] = useState(false);
-  const [now, setNow] = useState(Date.now());
-
-  const isLive = phase === 'streaming' || phase === 'awaiting-input' || phase === 'starting';
-
-  // Layer 1 zombie-stream defense: broadcaster browser heartbeat
-const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
   const queryClient = useQueryClient();
   const { channel, phase, gcpState, pollAttempts, startLive, stopLive, lastError, dismissError, refresh } = useBroadcasterChannel();
   const [startDialogOpen, setStartDialogOpen] = useState(false);
