@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import Header from '@/components/Header';
 import VideoPlayer from '@/components/VideoPlayer';
+import YouTubeEmbed from '@/components/YouTubeEmbed';
 import SermonCard from '@/components/SermonCard';
 import { supabase } from '@/integrations/supabase/client';
 import { useViewerCount } from '@/hooks/useViewerCount';
@@ -181,7 +182,12 @@ const LivePage = () => {
       <Header />
       <main className="container px-4 py-4 max-w-4xl mx-auto space-y-4">
         {/* Live or Offline Player Area */}
-        {canPlayLive && streamUrl ? (
+        {isLive && (channel as any).current_broadcast_type === 'sunday_sermon' && (channel as any).current_youtube_video_id ? (
+          <YouTubeEmbed
+            videoId={(channel as any).current_youtube_video_id}
+            title={`${channel.name} 주일말씀`}
+          />
+        ) : canPlayLive && streamUrl ? (
           <VideoPlayer
             src={streamUrl}
             autoPlay

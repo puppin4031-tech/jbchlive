@@ -169,42 +169,7 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <Header />
 
-      {/* Live Alert Banner */}
-      {liveAlert && (
-        <div className="fixed top-16 md:top-14 left-0 right-0 z-50 animate-in slide-in-from-top duration-300">
-          <Link
-            to={`/live/${liveAlert.id}`}
-            className="block"
-            onClick={() => setLiveAlert(null)}
-          >
-            <div className="bg-destructive text-destructive-foreground px-4 py-3 flex items-center gap-3 shadow-lg">
-              <span className="relative flex h-3 w-3 shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive-foreground opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive-foreground"></span>
-              </span>
-              {liveAlert.logoUrl && (
-                <img src={liveAlert.logoUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
-              )}
-              <span className="font-semibold text-sm md:text-base truncate">
-                🔴 {liveAlert.name} 라이브가 시작되었습니다!
-              </span>
-              <span className="ml-auto text-xs opacity-80 shrink-0">시청하기 →</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0 text-destructive-foreground hover:bg-destructive-foreground/20"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setLiveAlert(null);
-                }}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-          </Link>
-        </div>
-      )}
+      {/* Hero(Live Alert Banner) removed by request */}
 
       <main className="container px-4 py-4 max-w-5xl mx-auto space-y-6">
         {/* Permanent Church Live Links — always visible */}
