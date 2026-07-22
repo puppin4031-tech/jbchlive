@@ -75,7 +75,27 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
   const isLive = phase === 'streaming' || phase === 'awaiting-input' || phase === 'starting';
 
   // Layer 1 zombie-stream defense: broadcaster browser heartbeat
-  useBroadcasterPresence(channel?.id, isLive);
+const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
+  const queryClient = useQueryClient();
+  const { channel, phase, gcpState, pollAttempts, startLive, stopLive, lastError, dismissError, refresh } = useBroadcasterChannel();
+  const [startDialogOpen, setStartDialogOpen] = useState(false);
+  const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [typeDialogOpen, setTypeDialogOpen] = useState(false);
+  const [ytDialogOpen, setYtDialogOpen] = useState(false);
+  const [ytData, setYtData] = useState<CreateBroadcastResult | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  const isLive = phase === 'streaming' || phase === 'awaiting-input' || phase === 'starting';
+  const currentBroadcastType = (channel as any)?.current_broadcast_type as
+    | 'sunday_sermon'
+    | 'gathering'
+    | null
+    | undefined;
+  const isYoutubeLive = isLive && currentBroadcastType === 'sunday_sermon';
+  const youtubeConnected = !!(channel as any)?.youtube_connected;
+
+  // Layer 1 zombie-stream defense: broadcaster browser heartbeat
+  useBroadcasterPresence(channel?.id, isLive && !isYoutubeLive);
 
   useEffect(() => {
     if (!isLive) return;
@@ -83,13 +103,44 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
     return () => clearInterval(id);
   }, [isLive]);
 
+  const ytCreate = useMutation({
+    mutationFn: async () => {
+      if (!channel) throw new Error('채널이 없습니다');
+      return ytCreateBroadcast(channel.id, `${channel.name} 주일말씀`);
+    },
+    onSuccess: (data) => {
+      setYtData(data);
+      setYtDialogOpen(true);
+      refresh();
+      queryClient.invalidateQueries({ queryKey: ['live-channels'] });
+    },
+    onError: (e: Error) => toast.error('YouTube 라이브 생성 실패', { description: e.message }),
+  });
 
-  // Open dialog automatically when start is triggered & not yet ready
-  useEffect(() => {
-    if (phase === 'starting' || phase === 'awaiting-input') {
-      // Only auto-open if user just clicked start (we open manually below)
+  const ytStop = useMutation({
+    mutationFn: async () => {
+      if (!channel) throw new Error('채널이 없습니다');
+      return ytStopBroadcast(channel.id);
+    },
+    onSuccess: () => {
+      toast.success('YouTube 라이브가 종료되었습니다');
+      setStopDialogOpen(false);
+      refresh();
+      queryClient.invalidateQueries({ queryKey: ['live-channels'] });
+    },
+    onError: (e: Error) => toast.error('종료 실패', { description: e.message }),
+  });
+
+  const connectYoutube = async () => {
+    if (!channel) return;
+    try {
+      const redirectUri = `${window.location.origin}/auth/youtube/callback`;
+      const { authUrl } = await ytStartOAuth(channel.id, redirectUri);
+      window.location.href = authUrl;
+    } catch (e) {
+      toast.error('YouTube 연결 실패', { description: (e as Error).message });
     }
-  }, [phase]);
+  };
 
   if (!channel || phase === 'no-channel' || phase === 'pending-approval') {
     return null;
@@ -97,18 +148,37 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
 
   const display = phaseDisplay(phase, gcpState);
   const elapsed = isLive ? formatElapsed(channel.live_started_at, now) : null;
-  const canStop = phase === 'awaiting-input' || phase === 'streaming';
+  const canStop = isYoutubeLive || phase === 'awaiting-input' || phase === 'streaming';
 
-  const handleStart = () => {
-    startLive.mutate(undefined, {
-      onSuccess: () => setStartDialogOpen(true),
-    });
+  const handleStartClick = () => {
+    setTypeDialogOpen(true);
+  };
+
+  const handleTypeSelect = (type: 'sunday_sermon' | 'gathering') => {
+    setTypeDialogOpen(false);
+    if (type === 'sunday_sermon') {
+      if (!youtubeConnected) {
+        toast.info('먼저 YouTube 계정을 연결해 주세요.', {
+          action: { label: '연결하기', onClick: connectYoutube },
+        });
+        return;
+      }
+      ytCreate.mutate();
+    } else {
+      startLive.mutate(undefined, {
+        onSuccess: () => setStartDialogOpen(true),
+      });
+    }
   };
 
   const handleStop = () => {
-    stopLive.mutate(undefined, {
-      onSuccess: () => setStopDialogOpen(false),
-    });
+    if (isYoutubeLive) {
+      ytStop.mutate();
+    } else {
+      stopLive.mutate(undefined, {
+        onSuccess: () => setStopDialogOpen(false),
+      });
+    }
   };
 
   // ---------- Compact (floating dock) ----------
