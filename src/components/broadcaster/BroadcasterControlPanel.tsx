@@ -380,8 +380,37 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
         <p className="text-xs text-muted-foreground text-center">
           ⚠ 종료를 누르지 않으면 GCP 서버 비용이 계속 청구됩니다 (30분간 무송출 시 자동 종료).
         </p>
+
+        {/* YouTube connection status */}
+        <div className="pt-3 border-t border-border flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm">
+            <Youtube className="w-4 h-4 text-red-600" />
+            {youtubeConnected ? (
+              <span className="text-muted-foreground">
+                YouTube 연결됨
+                {(channel as any).youtube_channel_title && ` · ${(channel as any).youtube_channel_title}`}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">주일말씀 송출을 위해 YouTube 연결이 필요합니다</span>
+            )}
+          </div>
+          <Button size="sm" variant="outline" onClick={connectYoutube}>
+            {youtubeConnected ? '재연결' : 'YouTube 연결'}
+          </Button>
+        </div>
       </Card>
 
+      <BroadcastTypeDialog
+        open={typeDialogOpen}
+        onOpenChange={setTypeDialogOpen}
+        onSelect={handleTypeSelect}
+      />
+      <YouTubeStartLiveDialog
+        open={ytDialogOpen}
+        onOpenChange={setYtDialogOpen}
+        data={ytData}
+        isPending={ytCreate.isPending}
+      />
       <StartLiveDialog
         open={startDialogOpen}
         onOpenChange={setStartDialogOpen}
@@ -393,7 +422,7 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
         open={stopDialogOpen}
         onOpenChange={setStopDialogOpen}
         onConfirm={handleStop}
-        isPending={stopLive.isPending}
+        isPending={stopLive.isPending || ytStop.isPending}
       />
     </>
   );
