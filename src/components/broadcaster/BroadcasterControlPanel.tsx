@@ -255,6 +255,17 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
           </div>
         </Card>
 
+        <BroadcastTypeDialog
+          open={typeDialogOpen}
+          onOpenChange={setTypeDialogOpen}
+          onSelect={handleTypeSelect}
+        />
+        <YouTubeStartLiveDialog
+          open={ytDialogOpen}
+          onOpenChange={setYtDialogOpen}
+          data={ytData}
+          isPending={ytCreate.isPending}
+        />
         <StartLiveDialog
           open={startDialogOpen}
           onOpenChange={setStartDialogOpen}
@@ -266,7 +277,7 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
           open={stopDialogOpen}
           onOpenChange={setStopDialogOpen}
           onConfirm={handleStop}
-          isPending={stopLive.isPending}
+          isPending={stopLive.isPending || ytStop.isPending}
         />
       </>
     );
