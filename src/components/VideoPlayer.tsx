@@ -12,7 +12,7 @@ interface VideoPlayerProps {
 
 type VideoSource =
   | { type: 'youtube'; embedUrl: string }
-  | { type: 'google-drive'; embedUrl: string }
+  | { type: 'google-drive'; embedUrl: string; originalUrl: string }
   | { type: 'external-only'; url: string; label: string }
   | { type: 'direct'; url: string }
   | { type: 'none' };
@@ -29,7 +29,11 @@ function parseVideoSource(src?: string): VideoSource {
 
   const gdMatch = src.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
   if (gdMatch) {
-    return { type: 'google-drive', embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview` };
+    return {
+      type: 'google-drive',
+      embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview`,
+      originalUrl: `https://drive.google.com/file/d/${gdMatch[1]}/view`,
+    };
   }
 
   if (src.match(/gofile\.(me|io)\//)) {
