@@ -1,95 +1,65 @@
+## 원인
 
-# 계획: 홈 히어로 제거 및 방송 유형 분기 (주일말씀=YouTube Live / 집회=GCP)
+`src/components/VideoPlayer.tsx` 에서 모든 소스 타입을 동일하게 `aspect-video`(16:9) 컨테이너 안에 렌더링합니다. Google Drive의 `/preview` iframe은 자체 플레이어 UI(상단 툴바 + 하단 재생/일시정지/타임라인)를 iframe 내부에서 렌더링하는데, iframe 높이가 부족하면:
 
-## 1. 홈(Index) 상단 히어로 배너 제거
+- 상단 진행바만 보이고 하단 재생/일시정지 컨트롤은 잘림
+- 실제 영상은 letterbox 되어 어둡게 표시
 
-- `src/pages/Index.tsx` 최상단에 렌더되는 큰 배너/캐러셀 영역만 제거
-- 그 아래 카테고리 탭, 라이브 목록, 최신 말씀 등 기존 섹션은 그대로 유지
-- 상단 여백만 자연스럽게 정리
+첨부 스크린샷이 정확히 이 증상입니다(상단에 진행바+팝아웃 아이콘만 보이고 재생 버튼 없음).
 
-## 2. 데이터 모델: broadcast_type
+Native `<video>`/HLS/YouTube 임베드는 정상 동작하므로 **Google Drive 케이스에만 국한된 문제**입니다.
 
-라이브 세션 단위로 유형 저장(사용자 선택안):
+## 해결 방향
 
-- 마이그레이션
-  - `CREATE TYPE public.broadcast_type AS ENUM ('sunday_sermon', 'gathering');`
-  - `live_sessions.broadcast_type broadcast_type NOT NULL DEFAULT 'gathering'`
-  - `channels`에 YouTube 연동 필드 추가:
-    - `youtube_connected boolean DEFAULT false`
-    - `youtube_channel_id text`
-    - `youtube_refresh_token text` (SECURITY DEFINER 함수 통해서만 읽기 — 클라이언트 노출 금지, RLS로 owner 조회 차단)
-    - `youtube_last_broadcast_id text`, `youtube_last_video_id text`
-  - `live_sessions`에 `youtube_video_id text`, `youtube_broadcast_id text`, `youtube_watch_url text` 추가
-- 방송 시작 시 유형과 관련 ID를 세션 row에 기록. 채널 카드/방송 기록/라이브 목록에는 배지("주일말씀"/"집회") 표시
+`VideoPlayer` 안에서 Google Drive 소스일 때만 컨테이너 처리를 분리합니다.
 
-## 3. 방송 시작 UX
+1. **Google Drive 전용 wrapper 분리**
+   - 공통 `aspect-video` 컨테이너 대신 Drive iframe은 별도 wrapper로 감쌈
+   - Drive 플레이어 컨트롤 여유 공간을 확보하기 위해 `aspect-video` 대신 `aspect-[16/10]` 또는 영상 영역 아래 컨트롤 스트립용 여백을 두는 방식 사용
+   - 모바일에서 확실히 컨트롤이 노출되도록 최소 높이(`min-h-[260px]` 정도) 지정
 
-`BroadcasterControlPanel` 상단 "라이브 시작" 버튼 → 유형 선택 다이얼로그:
+2. **iframe 속성 보강**
+   - `allow="autoplay; encrypted-media; fullscreen; picture-in-picture"` (fullscreen 추가)
+   - `allowFullScreen` 유지
+   - `title` 을 원본 컨텐츠와 연결
 
-```text
-[ 주일말씀 (YouTube Live) ]   [ 집회 (자체 스트리밍) ]
-```
+3. **재생 실패/비공개 파일 대응 안내**
+   - 이번 리퀘스트 범위(비율/컨트롤 문제)에서 벗어나지 않도록 별도 안내 UI 추가는 하지 않음
+   - 대신 상단 우측에 "새 창에서 열기" 링크 하나만 노출(Drive의 팝아웃 아이콘이 잘리는 상황에서 유저의 fallback 제공)
 
-- 주일말씀 선택 시:
-  1. `youtube_connected=false`면 "YouTube 계정 연결" 버튼 표시 → OAuth 시작
-  2. 연결 완료 후 edge function `youtube-live` 호출로 broadcast+stream 생성
-  3. 결과로 받은 RTMP URL/Stream Key를 `StartLiveDialog`(YouTube 버전)에 표시 → OBS 설정 안내
-  4. OBS 송출 시작 감지되면 상태를 `live`로 transition
-- 집회 선택 시: 지금과 동일한 GCP Live Stream 파이프라인(변경 없음)
+## 기술 세부 (변경 파일)
 
-## 4. YouTube Live Streaming API 자동 생성 (edge function)
+**`src/components/VideoPlayer.tsx`** 만 수정:
 
-새 edge function `supabase/functions/youtube-live/index.ts`:
+- `isIframe` 분기 안에서 `source.type === 'google-drive'` 를 별도 브랜치로 분리
+- YouTube 임베드는 지금처럼 `aspect-video` 그대로 유지 (문제 없음)
+- Google Drive 브랜치:
+  ```
+  <div className="relative w-full aspect-[16/10] min-h-[260px] bg-black rounded-xl overflow-hidden">
+    <iframe
+      src={embedUrl}
+      className="absolute inset-0 w-full h-full border-none"
+      allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+      allowFullScreen
+    />
+    <a
+      href={originalDriveUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="absolute top-2 right-2 z-10 bg-black/60 text-white text-xs px-2 py-1 rounded"
+    >새 창에서 열기</a>
+  </div>
+  ```
+- `parseVideoSource` 반환 타입에 `originalUrl` 을 함께 담아 "새 창에서 열기" 링크가 원본 Drive URL을 가리키도록 함
 
-- Actions:
-  - `oauth_start` — Google OAuth URL 생성 (scopes: `https://www.googleapis.com/auth/youtube.force-ssl`, `youtube.readonly`, `userinfo.email`)
-  - `oauth_callback` — code→refresh_token 교환, `channels.youtube_*` 저장
-  - `create_broadcast` — refresh_token으로 access_token 갱신 → `liveBroadcasts.insert` + `liveStreams.insert` + `liveBroadcasts.bind` → RTMP URL/키 + watch URL 반환
-  - `transition` — testing→live / live→complete
-  - `get_status` — 브로드캐스트 lifeCycleStatus 조회
-- Secrets 요청 필요:
-  - `YOUTUBE_OAUTH_CLIENT_ID`, `YOUTUBE_OAUTH_CLIENT_SECRET` (사용자가 Google Cloud Console에서 발급, add_secret으로 저장)
-  - Redirect URI: `<app_origin>/auth/youtube/callback`
-- 클라이언트는 `youtube_refresh_token`을 절대 읽지 못함(RLS로 SELECT 차단, edge function service role만 접근)
+## 검증
 
-## 5. 시청자용 재생
+- 프리뷰에서 첨부된 VOD 페이지(`2026 청년찬양제`) 로드 → iframe 하단에 재생/일시정지·타임라인·볼륨·풀스크린 컨트롤이 완전히 노출되는지 확인
+- YouTube 임베드/HLS 라이브/직접 mp4 는 회귀 없이 기존대로 16:9 유지되는지 확인
+- 모바일(384px) 뷰포트에서 컨트롤 잘림 없는지 확인
 
-- `LivePage`에서 세션 `broadcast_type`이 `sunday_sermon`이면 `VideoPlayer` 대신 `YouTubeEmbed`(iframe `https://www.youtube.com/embed/<video_id>?autoplay=1`) 렌더
-- 채팅/후원/시청자 카운트 등 기존 사이드 UI는 유지
-- `broadcast_type`이 `gathering`이면 지금의 HLS 플레이어 그대로
+## 범위 밖 (건드리지 않음)
 
-## 6. 방송 종료
-
-- 주일말씀: `youtube-live/transition` 호출로 `complete` 처리 후 세션 종료. VOD는 YouTube에 자동 저장(별도 처리 없음, 기존 방침대로 자동 VOD 미저장)
-- 집회: 기존 GCP stop 로직 그대로
-
-## 7. 표시/필터
-
-- 채널 카드, 라이브 목록, 방송 기록: `broadcast_type` 배지
-- 관리자 페이지 채널 상태 표에도 유형 컬럼 추가
-
-## 기술 세부
-
-- YouTube Data API v3 엔드포인트:
-  - `POST /liveBroadcasts?part=snippet,status,contentDetails`
-  - `POST /liveStreams?part=snippet,cdn,contentDetails`
-  - `POST /liveBroadcasts/bind?part=id,contentDetails&id=<b>&streamId=<s>`
-  - `POST /liveBroadcasts/transition?part=status&broadcastStatus=live&id=<b>`
-- 토큰 갱신: `POST https://oauth2.googleapis.com/token` (`grant_type=refresh_token`)
-- 쿼터: 기본 10,000 units/일 — broadcast 생성 ~50 units, 여유 큼
-- `youtube_refresh_token`는 RLS 정책에서 컬럼 단위 노출 방지를 위해 `channels` SELECT 정책은 유지하되, 뷰(`public.channels_public`) 또는 명시적으로 클라이언트 SELECT 컬럼 리스트에서 제외하는 방식으로 처리
-
-## 사용자 필요 준비물
-
-주일말씀 기능이 실제 동작하려면:
-
-1. Google Cloud Console에서 OAuth Client ID(Web) 발급 → redirect URI 등록
-2. `YOUTUBE_OAUTH_CLIENT_ID`, `YOUTUBE_OAUTH_CLIENT_SECRET` 두 Secret 저장 (구현 후 add_secret으로 요청)
-3. 각 방송 채널 소유자가 최초 1회 자기 YouTube 계정 연결
-
-## 산출물
-
-- 마이그레이션 1건 (enum, 컬럼 추가, RLS 조정)
-- 새 edge function `youtube-live`
-- 신규 컴포넌트: `BroadcastTypeDialog`, `YouTubeConnectButton`, `YouTubeStartLiveDialog`, `YouTubeEmbed`
-- 수정: `Index.tsx`(히어로 제거), `BroadcasterControlPanel`, `useBroadcasterChannel`, `LivePage`, `ChannelLiveHistory`, 카드 컴포넌트에 배지
+- 백엔드/DB/edge function
+- YouTube / HLS / 직접 mp4 플레이어 로직
+- 업로드 시 Drive 공유 권한 검사 UX (별건)
