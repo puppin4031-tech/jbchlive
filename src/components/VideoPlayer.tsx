@@ -293,13 +293,33 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
     }
   };
 
-  const isIframe = source.type === 'youtube' || source.type === 'google-drive';
+  if (source.type === 'google-drive') {
+    return (
+      <div className="relative w-full aspect-[16/10] min-h-[260px] bg-black rounded-xl overflow-hidden">
+        <iframe
+          src={source.embedUrl}
+          className="absolute inset-0 w-full h-full border-none"
+          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+          allowFullScreen
+          title="Google Drive video"
+        />
+        <a
+          href={source.originalUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="absolute top-2 right-2 z-10 bg-black/60 hover:bg-black/80 text-white text-xs px-2 py-1 rounded inline-flex items-center gap-1"
+        >
+          <ExternalLink className="w-3 h-3" /> 새 창에서 열기
+        </a>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full aspect-video bg-foreground/5 rounded-xl overflow-hidden">
-      {isIframe ? (
+      {source.type === 'youtube' ? (
         <iframe
-          src={(source as { embedUrl: string }).embedUrl}
+          src={source.embedUrl}
           className="w-full h-full border-none"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
