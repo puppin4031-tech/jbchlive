@@ -1,7 +1,8 @@
 import { useEffect, useRef, useMemo, useState } from 'react';
 import Hls, { ErrorData } from 'hls.js';
-import { ExternalLink, Copy, AlertTriangle } from 'lucide-react';
+import { ExternalLink, Copy, AlertTriangle, PlayCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface VideoPlayerProps {
   src?: string;
