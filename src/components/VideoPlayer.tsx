@@ -1,8 +1,8 @@
 import { useEffect, useRef, useMemo, useState } from 'react';
 import Hls, { ErrorData } from 'hls.js';
-import { ExternalLink, Copy, AlertTriangle, PlayCircle } from 'lucide-react';
+import { ExternalLink, Copy, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 
 interface VideoPlayerProps {
   src?: string;
@@ -98,7 +98,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   const videoRef = useRef<HTMLVideoElement>(null);
   const source = useMemo(() => parseVideoSource(src), [src]);
   const [error, setError] = useState<HlsErrorInfo | null>(null);
-  const isMobile = useIsMobile();
+  
 
   // While the master manifest is 404-ing right after STREAMING starts, GCS
   // may still be writing the first playlist. We swallow the error and retry
@@ -296,34 +296,8 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   };
 
   if (source.type === 'google-drive') {
-    // Google Drive /preview iframe은 모바일 브라우저에서 안정적으로 재생되지 않음
-    // (Drive가 UA 감지 후 로그인/앱 열기 페이지로 리다이렉트 → iframe 빈 화면).
-    // 모바일에서는 새 탭으로 여는 큰 재생 카드로 폴백.
-    if (isMobile) {
-      return (
-        <div className="relative w-full aspect-video min-h-[240px] bg-black rounded-xl overflow-hidden">
-          {poster && (
-            <img
-              src={poster}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover opacity-60"
-            />
-          )}
-          <a
-            href={source.originalUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50 text-white p-6 text-center"
-          >
-            <PlayCircle className="w-16 h-16" strokeWidth={1.5} />
-            <span className="text-base font-semibold">구글 드라이브에서 재생</span>
-            <span className="text-xs text-white/80">모바일에서는 새 창에서 열립니다</span>
-          </a>
-        </div>
-      );
-    }
     return (
-      <div className="relative w-full aspect-video min-h-[240px] bg-black rounded-xl overflow-hidden">
+      <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden">
         <iframe
           src={source.embedUrl}
           className="absolute inset-0 w-full h-full border-none"
@@ -342,6 +316,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
       </div>
     );
   }
+
 
   return (
     <div className="relative w-full aspect-video bg-foreground/5 rounded-xl overflow-hidden">
