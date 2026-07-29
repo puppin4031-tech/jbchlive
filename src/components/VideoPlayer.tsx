@@ -295,7 +295,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
 
   if (source.type === 'google-drive') {
     return (
-      <div className="relative w-full aspect-[16/10] min-h-[260px] bg-black rounded-xl overflow-hidden">
+      <div className="relative w-full aspect-video min-h-[240px] bg-black rounded-xl overflow-hidden">
         <iframe
           src={source.embedUrl}
           className="absolute inset-0 w-full h-full border-none"
