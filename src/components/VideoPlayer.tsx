@@ -1,8 +1,7 @@
-import { useEffect, useRef, useMemo, useState } from 'react';
-import Hls, { ErrorData } from 'hls.js';
-import { ExternalLink, Copy, AlertTriangle } from 'lucide-react';
-import { toast } from 'sonner';
-
+import { useEffect, useRef, useMemo, useState } from "react";
+import Hls, { ErrorData } from "hls.js";
+import { ExternalLink, Copy, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 
 interface VideoPlayerProps {
   src?: string;
@@ -12,36 +11,34 @@ interface VideoPlayerProps {
 }
 
 type VideoSource =
-  | { type: 'youtube'; embedUrl: string }
-  | { type: 'google-drive'; embedUrl: string; originalUrl: string }
-  | { type: 'external-only'; url: string; label: string }
-  | { type: 'direct'; url: string }
-  | { type: 'none' };
+  | { type: "youtube"; embedUrl: string }
+  | { type: "google-drive"; embedUrl: string; originalUrl: string }
+  | { type: "external-only"; url: string; label: string }
+  | { type: "direct"; url: string }
+  | { type: "none" };
 
 function parseVideoSource(src?: string): VideoSource {
-  if (!src) return { type: 'none' };
+  if (!src) return { type: "none" };
 
-  const ytMatch = src.match(
-    /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
-  );
+  const ytMatch = src.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
   if (ytMatch) {
-    return { type: 'youtube', embedUrl: `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&rel=0` };
+    return { type: "youtube", embedUrl: `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&rel=0` };
   }
 
   const gdMatch = src.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
   if (gdMatch) {
     return {
-      type: 'google-drive',
+      type: "google-drive",
       embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview`,
       originalUrl: `https://drive.google.com/file/d/${gdMatch[1]}/view`,
     };
   }
 
   if (src.match(/gofile\.(me|io)\//)) {
-    return { type: 'external-only', url: src, label: 'GoFile에서 보기' };
+    return { type: "external-only", url: src, label: "GoFile에서 보기" };
   }
 
-  return { type: 'direct', url: src };
+  return { type: "direct", url: src };
 }
 
 interface HlsErrorInfo {
@@ -76,21 +73,21 @@ function getHlsErrorTarget(data: ErrorData) {
   switch (data.details) {
     case Hls.ErrorDetails.MANIFEST_LOAD_ERROR:
     case Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT:
-      return 'master-manifest';
+      return "master-manifest";
     case Hls.ErrorDetails.LEVEL_LOAD_ERROR:
     case Hls.ErrorDetails.LEVEL_LOAD_TIMEOUT:
-      return 'variant-playlist';
+      return "variant-playlist";
     case Hls.ErrorDetails.AUDIO_TRACK_LOAD_ERROR:
     case Hls.ErrorDetails.AUDIO_TRACK_LOAD_TIMEOUT:
-      return 'audio-playlist';
+      return "audio-playlist";
     case Hls.ErrorDetails.FRAG_LOAD_ERROR:
     case Hls.ErrorDetails.FRAG_LOAD_TIMEOUT:
-      return 'media-segment';
+      return "media-segment";
     case Hls.ErrorDetails.KEY_LOAD_ERROR:
     case Hls.ErrorDetails.KEY_LOAD_TIMEOUT:
-      return 'encryption-key';
+      return "encryption-key";
     default:
-      return 'unknown';
+      return "unknown";
   }
 }
 
@@ -98,7 +95,6 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   const videoRef = useRef<HTMLVideoElement>(null);
   const source = useMemo(() => parseVideoSource(src), [src]);
   const [error, setError] = useState<HlsErrorInfo | null>(null);
-  
 
   // While the master manifest is 404-ing right after STREAMING starts, GCS
   // may still be writing the first playlist. We swallow the error and retry
@@ -112,12 +108,12 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
     setError(null);
     setManifestRetrying(false);
     manifestRetriesRef.current = 0;
-    if (source.type !== 'direct') return;
+    if (source.type !== "direct") return;
     const video = videoRef.current;
     if (!video) return;
 
     const url = source.url;
-    if (url.includes('.m3u8') && Hls.isSupported()) {
+    if (url.includes(".m3u8") && Hls.isSupported()) {
       const hls = new Hls({
         // Aggressive load retries at the hls.js level too — helps when GCS
         // returns a transient 404 for the first segment.
@@ -133,7 +129,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
 
       const loadWithCacheBust = () => {
         // Cache-bust so intermediate CDN 404 isn't cached.
-        const sep = url.includes('?') ? '&' : '?';
+        const sep = url.includes("?") ? "&" : "?";
         hls.loadSource(`${url}${sep}t=${Date.now()}`);
       };
 
@@ -156,7 +152,6 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
         if (autoPlay) video.play().catch(() => {});
       });
 
-
       hls.on(Hls.Events.ERROR, async (_evt, data: ErrorData) => {
         if (!data.fatal) return;
 
@@ -177,7 +172,11 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
           // Ping parent so it can refresh channel/public status — the URL we
           // are hitting may belong to a previous GCP session (channel restart
           // rotates the timestamp folder) or the channel may already be offline.
-          try { onManifestMissing?.(); } catch { /* ignore */ }
+          try {
+            onManifestMissing?.();
+          } catch {
+            /* ignore */
+          }
           if (retryTimer) clearTimeout(retryTimer);
           retryTimer = setTimeout(() => {
             if (destroyed) return;
@@ -195,7 +194,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
         let responseSnippet: string | undefined;
         try {
           if (failedUrl) {
-            const r = await fetch(failedUrl, { method: 'GET' });
+            const r = await fetch(failedUrl, { method: "GET" });
             const text = await r.text();
             responseSnippet = text.slice(0, 500);
           }
@@ -203,45 +202,45 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
           // ignore
         }
 
-        let title = '스트림을 불러올 수 없습니다';
-        let reason = '알 수 없는 오류가 발생했습니다.';
+        let title = "스트림을 불러올 수 없습니다";
+        let reason = "알 수 없는 오류가 발생했습니다.";
 
-        if (responseSnippet?.includes('NoSuchBucket')) {
-          title = '스트리밍 저장소를 찾을 수 없음 (NoSuchBucket)';
-          reason = 'GCP 출력 버킷이 존재하지 않거나 권한이 없습니다. 관리자에게 문의해주세요.';
-        } else if (responseSnippet?.includes('AccessDenied') || httpStatus === 403) {
-          title = '스트리밍 접근 거부됨 (AccessDenied)';
-          reason = '버킷 공개 권한(allUsers: Storage Object Viewer) 설정이 필요합니다.';
+        if (responseSnippet?.includes("NoSuchBucket")) {
+          title = "스트리밍 저장소를 찾을 수 없음 (NoSuchBucket)";
+          reason = "GCP 출력 버킷이 존재하지 않거나 권한이 없습니다. 관리자에게 문의해주세요.";
+        } else if (responseSnippet?.includes("AccessDenied") || httpStatus === 403) {
+          title = "스트리밍 접근 거부됨 (AccessDenied)";
+          reason = "버킷 공개 권한(allUsers: Storage Object Viewer) 설정이 필요합니다.";
         } else if (
           data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
           data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT
         ) {
-          title = '매니페스트를 찾을 수 없음 (404)';
+          title = "매니페스트를 찾을 수 없음 (404)";
           reason = `${MANIFEST_MAX_RETRIES}회 재시도 후에도 HLS 매니페스트가 생성되지 않았습니다. 방송자 OBS 송출이 중단되었거나 GCP 파이프라인에 문제가 있을 수 있습니다.`;
         } else if (
           data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR ||
           data.details === Hls.ErrorDetails.LEVEL_LOAD_TIMEOUT
         ) {
-          title = httpStatus === 404 ? '하위 재생목록을 찾을 수 없음 (404)' : '하위 재생목록 로딩 실패';
-          reason = '최상위 manifest는 열렸지만 실제 영상 품질 재생목록(.m3u8)을 불러오지 못했습니다.';
+          title = httpStatus === 404 ? "하위 재생목록을 찾을 수 없음 (404)" : "하위 재생목록 로딩 실패";
+          reason = "최상위 manifest는 열렸지만 실제 영상 품질 재생목록(.m3u8)을 불러오지 못했습니다.";
         } else if (
           data.details === Hls.ErrorDetails.AUDIO_TRACK_LOAD_ERROR ||
           data.details === Hls.ErrorDetails.AUDIO_TRACK_LOAD_TIMEOUT
         ) {
-          title = httpStatus === 404 ? '오디오 재생목록을 찾을 수 없음 (404)' : '오디오 재생목록 로딩 실패';
-          reason = '영상은 열렸지만 오디오용 HLS 재생목록을 불러오지 못했습니다.';
+          title = httpStatus === 404 ? "오디오 재생목록을 찾을 수 없음 (404)" : "오디오 재생목록 로딩 실패";
+          reason = "영상은 열렸지만 오디오용 HLS 재생목록을 불러오지 못했습니다.";
         } else if (
           data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR ||
           data.details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT
         ) {
-          title = httpStatus === 404 ? '미디어 세그먼트를 찾을 수 없음 (404)' : '미디어 세그먼트 로딩 실패';
-          reason = 'manifest는 정상 응답했지만 실제 재생 데이터(ts/mp4 조각)를 불러오지 못했습니다.';
+          title = httpStatus === 404 ? "미디어 세그먼트를 찾을 수 없음 (404)" : "미디어 세그먼트 로딩 실패";
+          reason = "manifest는 정상 응답했지만 실제 재생 데이터(ts/mp4 조각)를 불러오지 못했습니다.";
         } else if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          title = '네트워크 오류';
-          reason = '스트리밍 서버에 연결하지 못했습니다.';
+          title = "네트워크 오류";
+          reason = "스트리밍 서버에 연결하지 못했습니다.";
         } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-          title = '미디어 디코딩 오류';
-          reason = '영상 디코딩 중 문제가 발생했습니다.';
+          title = "미디어 디코딩 오류";
+          reason = "영상 디코딩 중 문제가 발생했습니다.";
         }
 
         setManifestRetrying(false);
@@ -276,28 +275,28 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
       `Time: ${error.timestamp}`,
       `Title: ${error.title}`,
       `Reason: ${error.reason}`,
-      `Target: ${error.target ?? 'unknown'}`,
+      `Target: ${error.target ?? "unknown"}`,
       `Type: ${error.type}`,
       `Details: ${error.details}`,
-      `HTTP Status: ${error.httpStatus ?? 'N/A'}`,
-      `URL: ${error.url ?? 'N/A'}`,
-      `Source: ${src ?? 'N/A'}`,
+      `HTTP Status: ${error.httpStatus ?? "N/A"}`,
+      `URL: ${error.url ?? "N/A"}`,
+      `Source: ${src ?? "N/A"}`,
       `User-Agent: ${navigator.userAgent}`,
       `Response Snippet:`,
-      error.responseSnippet ?? '(none)',
-    ].join('\n');
+      error.responseSnippet ?? "(none)",
+    ].join("\n");
 
     try {
       await navigator.clipboard.writeText(debugText);
-      toast.success('디버그 정보가 복사되었습니다');
+      toast.success("디버그 정보가 복사되었습니다");
     } catch {
-      toast.error('복사에 실패했습니다');
+      toast.error("복사에 실패했습니다");
     }
   };
 
-  if (source.type === 'google-drive') {
+  if (source.type === "google-drive") {
     return (
-      <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden">
+      <div className="relative w-full aspect-[16/10] min-h-[350px] sm:min-h-[450px] bg-black rounded-xl overflow-hidden">
         <iframe
           src={source.embedUrl}
           className="absolute inset-0 w-full h-full border-none"
@@ -317,10 +316,9 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
     );
   }
 
-
   return (
     <div className="relative w-full aspect-video bg-foreground/5 rounded-xl overflow-hidden">
-      {source.type === 'youtube' ? (
+      {source.type === "youtube" ? (
         <iframe
           src={source.embedUrl}
           className="w-full h-full border-none"
@@ -328,7 +326,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
           allowFullScreen
           title="Video player"
         />
-      ) : source.type === 'external-only' ? (
+      ) : source.type === "external-only" ? (
         <div className="flex flex-col items-center justify-center h-full gap-4 bg-muted/50">
           <p className="text-muted-foreground text-sm">이 영상은 외부 사이트에서만 재생할 수 있습니다.</p>
           <a
@@ -341,7 +339,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
             {source.label}
           </a>
         </div>
-      ) : source.type === 'direct' ? (
+      ) : source.type === "direct" ? (
         <>
           <video
             ref={videoRef}
@@ -357,7 +355,9 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
                 <span className="relative inline-flex rounded-full h-4 w-4 bg-primary"></span>
               </span>
               <p className="text-sm text-white font-medium">방송 신호를 받아오는 중입니다…</p>
-              <p className="text-xs text-white/70">(재시도 {manifestRetriesRef.current}/{MANIFEST_MAX_RETRIES})</p>
+              <p className="text-xs text-white/70">
+                (재시도 {manifestRetriesRef.current}/{MANIFEST_MAX_RETRIES})
+              </p>
             </div>
           )}
           {error && (
@@ -372,15 +372,27 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
                 </div>
 
                 <div className="text-xs bg-muted/50 rounded-lg p-3 space-y-1 font-mono break-all max-h-40 overflow-auto">
-                  <div><span className="text-muted-foreground">type:</span> {error.type}</div>
-                  <div><span className="text-muted-foreground">details:</span> {error.details}</div>
+                  <div>
+                    <span className="text-muted-foreground">type:</span> {error.type}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">details:</span> {error.details}
+                  </div>
                   {error.target && (
-                    <div><span className="text-muted-foreground">target:</span> {error.target}</div>
+                    <div>
+                      <span className="text-muted-foreground">target:</span> {error.target}
+                    </div>
                   )}
                   {error.httpStatus !== undefined && (
-                    <div><span className="text-muted-foreground">http:</span> {error.httpStatus}</div>
+                    <div>
+                      <span className="text-muted-foreground">http:</span> {error.httpStatus}
+                    </div>
                   )}
-                  {error.url && <div><span className="text-muted-foreground">url:</span> {error.url}</div>}
+                  {error.url && (
+                    <div>
+                      <span className="text-muted-foreground">url:</span> {error.url}
+                    </div>
+                  )}
                   {error.responseSnippet && (
                     <div className="pt-1 border-t border-border/50">
                       <div className="text-muted-foreground">response:</div>
