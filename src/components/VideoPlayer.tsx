@@ -98,6 +98,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   const videoRef = useRef<HTMLVideoElement>(null);
   const source = useMemo(() => parseVideoSource(src), [src]);
   const [error, setError] = useState<HlsErrorInfo | null>(null);
+  const isMobile = useIsMobile();
 
   // While the master manifest is 404-ing right after STREAMING starts, GCS
   // may still be writing the first playlist. We swallow the error and retry
