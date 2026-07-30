@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import Header from '@/components/Header';
 import VideoPlayer from '@/components/VideoPlayer';
-import YouTubeEmbed from '@/components/YouTubeEmbed';
 import SermonCard from '@/components/SermonCard';
 import { supabase } from '@/integrations/supabase/client';
 import { useViewerCount } from '@/hooks/useViewerCount';
