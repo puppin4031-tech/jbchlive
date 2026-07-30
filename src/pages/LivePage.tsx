@@ -181,12 +181,7 @@ const LivePage = () => {
       <Header />
       <main className="container px-4 py-4 max-w-4xl mx-auto space-y-4">
         {/* Live or Offline Player Area */}
-        {isLive && (channel as any).current_broadcast_type === 'sunday_sermon' && (channel as any).current_youtube_video_id ? (
-          <YouTubeEmbed
-            videoId={(channel as any).current_youtube_video_id}
-            title={`${channel.name} 주일말씀`}
-          />
-        ) : canPlayLive && streamUrl ? (
+        {canPlayLive && streamUrl ? (
           <VideoPlayer
             src={streamUrl}
             autoPlay
