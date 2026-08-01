@@ -366,7 +366,10 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   }
 
   return (
-    <div className="relative w-full aspect-video bg-foreground/5 rounded-xl overflow-hidden">
+    <div
+      key={`vp-${orientationTick}`}
+      className="relative w-full max-w-full aspect-video bg-foreground/5 rounded-xl overflow-hidden"
+    >
       {source.type === "youtube" ? (
         <iframe
           src={source.embedUrl}
