@@ -2,6 +2,7 @@ import { useEffect, useRef, useMemo, useState } from "react";
 import Hls, { ErrorData } from "hls.js";
 import { ExternalLink, Copy, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface VideoPlayerProps {
   src?: string;
@@ -12,7 +13,7 @@ interface VideoPlayerProps {
 
 type VideoSource =
   | { type: "youtube"; embedUrl: string }
-  | { type: "google-drive"; embedUrl: string; originalUrl: string }
+  | { type: "google-drive"; fileId: string; embedUrl: string; directUrl: string; originalUrl: string }
   | { type: "external-only"; url: string; label: string }
   | { type: "direct"; url: string }
   | { type: "none" };
@@ -29,7 +30,9 @@ function parseVideoSource(src?: string): VideoSource {
   if (gdMatch) {
     return {
       type: "google-drive",
+      fileId: gdMatch[1],
       embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview`,
+      directUrl: `https://drive.google.com/uc?export=download&id=${gdMatch[1]}`,
       originalUrl: `https://drive.google.com/file/d/${gdMatch[1]}/view`,
     };
   }
@@ -95,6 +98,13 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   const videoRef = useRef<HTMLVideoElement>(null);
   const source = useMemo(() => parseVideoSource(src), [src]);
   const [error, setError] = useState<HlsErrorInfo | null>(null);
+  const isMobile = useIsMobile();
+  // Mobile: try the native <video> first (Drive /preview iframe is unreliable
+  // on mobile browsers). Fall back to the iframe when direct playback fails.
+  const [driveNativeFailed, setDriveNativeFailed] = useState(false);
+  useEffect(() => {
+    setDriveNativeFailed(false);
+  }, [src]);
 
   // While the master manifest is 404-ing right after STREAMING starts, GCS
   // may still be writing the first playlist. We swallow the error and retry
@@ -295,15 +305,33 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   };
 
   if (source.type === "google-drive") {
+    const useNative = isMobile && !driveNativeFailed;
     return (
-      <div className="relative w-full aspect-[16/10] min-h-[350px] sm:min-h-[450px] bg-black rounded-xl overflow-hidden">
-        <iframe
-          src={source.embedUrl}
-          className="absolute inset-0 w-full h-full border-none"
-          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-          allowFullScreen
-          title="Google Drive video"
-        />
+      <div
+        className={`relative w-full bg-black rounded-xl overflow-hidden ${
+          useNative ? "aspect-video" : "aspect-[16/10] min-h-[350px] sm:min-h-[450px]"
+        }`}
+      >
+        {useNative ? (
+          <video
+            key={source.directUrl}
+            src={source.directUrl}
+            poster={poster}
+            controls
+            playsInline
+            preload="metadata"
+            className="absolute inset-0 w-full h-full bg-black"
+            onError={() => setDriveNativeFailed(true)}
+          />
+        ) : (
+          <iframe
+            src={source.embedUrl}
+            className="absolute inset-0 w-full h-full border-none"
+            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+            allowFullScreen
+            title="Google Drive video"
+          />
+        )}
         <a
           href={source.originalUrl}
           target="_blank"
