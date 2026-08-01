@@ -106,22 +106,26 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
     setDriveNativeFailed(false);
   }, [src]);
 
-  // Recompute layout after rotation: mobile browsers report stale viewport
-  // metrics for a few frames after orientationchange, which leaves the player
-  // box at the old size. Bumping a key forces a re-measure.
+  // Recompute layout after rotation only (not on every visualViewport resize,
+  // which fires while the mobile address bar collapses during scroll).
   const [orientationTick, setOrientationTick] = useState(0);
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
     const onRotate = () => {
-      // Wait for the browser to settle its new viewport before re-rendering.
-      window.setTimeout(() => setOrientationTick((n) => n + 1), 150);
+      // Wait for the browser to settle its new viewport before re-measuring.
+      clearTimeout(timer);
+      timer = setTimeout(() => setOrientationTick((n) => n + 1), 200);
     };
     window.addEventListener("orientationchange", onRotate);
-    window.visualViewport?.addEventListener("resize", onRotate);
+    const mql = window.matchMedia("(orientation: portrait)");
+    mql.addEventListener("change", onRotate);
     return () => {
+      clearTimeout(timer);
       window.removeEventListener("orientationchange", onRotate);
-      window.visualViewport?.removeEventListener("resize", onRotate);
+      mql.removeEventListener("change", onRotate);
     };
   }, []);
+
 
 
   // While the master manifest is 404-ing right after STREAMING starts, GCS
