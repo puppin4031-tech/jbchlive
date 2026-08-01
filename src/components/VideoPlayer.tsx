@@ -106,6 +106,28 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
     setDriveNativeFailed(false);
   }, [src]);
 
+  // Recompute layout after rotation only (not on every visualViewport resize,
+  // which fires while the mobile address bar collapses during scroll).
+  const [orientationTick, setOrientationTick] = useState(0);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const onRotate = () => {
+      // Wait for the browser to settle its new viewport before re-measuring.
+      clearTimeout(timer);
+      timer = setTimeout(() => setOrientationTick((n) => n + 1), 200);
+    };
+    window.addEventListener("orientationchange", onRotate);
+    const mql = window.matchMedia("(orientation: portrait)");
+    mql.addEventListener("change", onRotate);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("orientationchange", onRotate);
+      mql.removeEventListener("change", onRotate);
+    };
+  }, []);
+
+
+
   // While the master manifest is 404-ing right after STREAMING starts, GCS
   // may still be writing the first playlist. We swallow the error and retry
   // silently for ~30s before surfacing the scary debug panel.
@@ -308,8 +330,9 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
     const useNative = isMobile && !driveNativeFailed;
     return (
       <div
-        className={`relative w-full bg-black rounded-xl overflow-hidden ${
-          useNative ? "aspect-video" : "aspect-[16/10] min-h-[350px] sm:min-h-[450px]"
+        data-orientation-tick={orientationTick}
+        className={`relative w-full max-w-full bg-black rounded-xl overflow-hidden ${
+          useNative ? "aspect-video" : "aspect-video sm:aspect-[16/10]"
         }`}
       >
         {useNative ? (
@@ -318,9 +341,10 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
             src={source.directUrl}
             poster={poster}
             controls
+            controlsList="nodownload"
             playsInline
             preload="metadata"
-            className="absolute inset-0 w-full h-full bg-black"
+            className="absolute inset-0 w-full h-full bg-black object-contain"
             onError={() => setDriveNativeFailed(true)}
           />
         ) : (
@@ -332,6 +356,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
             title="Google Drive video"
           />
         )}
+
         <a
           href={source.originalUrl}
           target="_blank"
@@ -345,7 +370,10 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   }
 
   return (
-    <div className="relative w-full aspect-video bg-foreground/5 rounded-xl overflow-hidden">
+    <div
+      data-orientation-tick={orientationTick}
+      className="relative w-full max-w-full aspect-video bg-foreground/5 rounded-xl overflow-hidden"
+    >
       {source.type === "youtube" ? (
         <iframe
           src={source.embedUrl}
@@ -374,7 +402,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
             poster={poster}
             controls
             playsInline
-            className="absolute inset-0 w-full h-full object-cover bg-black"
+            className="absolute inset-0 w-full h-full object-contain bg-black"
           />
           {manifestRetrying && !error && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 gap-3 p-6 text-center">

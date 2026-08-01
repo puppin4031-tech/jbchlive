@@ -54,9 +54,21 @@ All colors MUST be HSL.
 
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap');
 
+html {
+  /* Prevent iOS auto text inflation on rotation (landscape zoom bug) */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   font-family: 'Noto Sans KR', sans-serif;
   font-size: 1.4rem;
+  /* Never let a wide child (iframe/video) create horizontal scroll on mobile */
+  overflow-x: hidden;
+  /* Notch / rounded-corner safe areas, incl. landscape side cutouts */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 @media (min-width: 768px) {
@@ -73,4 +85,30 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+
+  img,
+  video,
+  iframe {
+    max-width: 100%;
+  }
 }
+
+@layer utilities {
+  /* Fixed / sticky bars should clear the home indicator and notch */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  /* dvh-based full height: stable while mobile browser chrome hides/shows */
+  .min-h-screen-dvh {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+}
+
