@@ -126,8 +126,6 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
     };
   }, []);
 
-
-
   // While the master manifest is 404-ing right after STREAMING starts, GCS
   // may still be writing the first playlist. We swallow the error and retry
   // silently for ~30s before surfacing the scary debug panel.
@@ -332,7 +330,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
       <div
         data-orientation-tick={orientationTick}
         className={`relative w-full max-w-full bg-black rounded-xl overflow-hidden ${
-          useNative ? "aspect-video" : "aspect-video sm:aspect-[16/10]"
+          useNative ? "aspect-video" : "aspect-video sm:aspect-[16/12]"
         }`}
       >
         {useNative ? (
