@@ -398,7 +398,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
             poster={poster}
             controls
             playsInline
-            className="absolute inset-0 w-full h-full object-cover bg-black"
+            className="absolute inset-0 w-full h-full object-contain bg-black"
           />
           {manifestRetrying && !error && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 gap-3 p-6 text-center">
