@@ -30,7 +30,9 @@ function parseVideoSource(src?: string): VideoSource {
   if (gdMatch) {
     return {
       type: "google-drive",
+      fileId: gdMatch[1],
       embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview`,
+      directUrl: `https://drive.google.com/uc?export=download&id=${gdMatch[1]}`,
       originalUrl: `https://drive.google.com/file/d/${gdMatch[1]}/view`,
     };
   }
