@@ -330,7 +330,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
       <div
         data-orientation-tick={orientationTick}
         className={`relative w-full max-w-full bg-black rounded-xl overflow-hidden ${
-          useNative ? "aspect-video" : "aspect-video sm:aspect-[16/12]"
+          useNative ? "aspect-video" : "aspect-video sm:aspect-[16/16]"
         }`}
       >
         {useNative ? (
