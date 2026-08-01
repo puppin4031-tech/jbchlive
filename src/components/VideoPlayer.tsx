@@ -13,7 +13,7 @@ interface VideoPlayerProps {
 
 type VideoSource =
   | { type: "youtube"; embedUrl: string }
-  | { type: "google-drive"; embedUrl: string; originalUrl: string }
+  | { type: "google-drive"; fileId: string; embedUrl: string; directUrl: string; originalUrl: string }
   | { type: "external-only"; url: string; label: string }
   | { type: "direct"; url: string }
   | { type: "none" };
