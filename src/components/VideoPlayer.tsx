@@ -367,7 +367,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
 
   return (
     <div
-      key={`vp-${orientationTick}`}
+      data-orientation-tick={orientationTick}
       className="relative w-full max-w-full aspect-video bg-foreground/5 rounded-xl overflow-hidden"
     >
       {source.type === "youtube" ? (
