@@ -305,15 +305,33 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   };
 
   if (source.type === "google-drive") {
+    const useNative = isMobile && !driveNativeFailed;
     return (
-      <div className="relative w-full aspect-[16/10] min-h-[350px] sm:min-h-[450px] bg-black rounded-xl overflow-hidden">
-        <iframe
-          src={source.embedUrl}
-          className="absolute inset-0 w-full h-full border-none"
-          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-          allowFullScreen
-          title="Google Drive video"
-        />
+      <div
+        className={`relative w-full bg-black rounded-xl overflow-hidden ${
+          useNative ? "aspect-video" : "aspect-[16/10] min-h-[350px] sm:min-h-[450px]"
+        }`}
+      >
+        {useNative ? (
+          <video
+            key={source.directUrl}
+            src={source.directUrl}
+            poster={poster}
+            controls
+            playsInline
+            preload="metadata"
+            className="absolute inset-0 w-full h-full bg-black"
+            onError={() => setDriveNativeFailed(true)}
+          />
+        ) : (
+          <iframe
+            src={source.embedUrl}
+            className="absolute inset-0 w-full h-full border-none"
+            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+            allowFullScreen
+            title="Google Drive video"
+          />
+        )}
         <a
           href={source.originalUrl}
           target="_blank"
