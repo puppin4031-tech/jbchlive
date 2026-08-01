@@ -106,6 +106,24 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
     setDriveNativeFailed(false);
   }, [src]);
 
+  // Recompute layout after rotation: mobile browsers report stale viewport
+  // metrics for a few frames after orientationchange, which leaves the player
+  // box at the old size. Bumping a key forces a re-measure.
+  const [orientationTick, setOrientationTick] = useState(0);
+  useEffect(() => {
+    const onRotate = () => {
+      // Wait for the browser to settle its new viewport before re-rendering.
+      window.setTimeout(() => setOrientationTick((n) => n + 1), 150);
+    };
+    window.addEventListener("orientationchange", onRotate);
+    window.visualViewport?.addEventListener("resize", onRotate);
+    return () => {
+      window.removeEventListener("orientationchange", onRotate);
+      window.visualViewport?.removeEventListener("resize", onRotate);
+    };
+  }, []);
+
+
   // While the master manifest is 404-ing right after STREAMING starts, GCS
   // may still be writing the first playlist. We swallow the error and retry
   // silently for ~30s before surfacing the scary debug panel.
