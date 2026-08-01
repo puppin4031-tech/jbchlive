@@ -326,8 +326,9 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
     const useNative = isMobile && !driveNativeFailed;
     return (
       <div
-        className={`relative w-full bg-black rounded-xl overflow-hidden ${
-          useNative ? "aspect-video" : "aspect-[16/10] min-h-[350px] sm:min-h-[450px]"
+        key={`gd-${orientationTick}`}
+        className={`relative w-full max-w-full bg-black rounded-xl overflow-hidden ${
+          useNative ? "aspect-video" : "aspect-video sm:aspect-[16/10]"
         }`}
       >
         {useNative ? (
@@ -336,9 +337,10 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
             src={source.directUrl}
             poster={poster}
             controls
+            controlsList="nodownload"
             playsInline
             preload="metadata"
-            className="absolute inset-0 w-full h-full bg-black"
+            className="absolute inset-0 w-full h-full bg-black object-contain"
             onError={() => setDriveNativeFailed(true)}
           />
         ) : (
@@ -350,6 +352,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
             title="Google Drive video"
           />
         )}
+
         <a
           href={source.originalUrl}
           target="_blank"
