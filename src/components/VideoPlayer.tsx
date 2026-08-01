@@ -326,7 +326,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
     const useNative = isMobile && !driveNativeFailed;
     return (
       <div
-        key={`gd-${orientationTick}`}
+        data-orientation-tick={orientationTick}
         className={`relative w-full max-w-full bg-black rounded-xl overflow-hidden ${
           useNative ? "aspect-video" : "aspect-video sm:aspect-[16/10]"
         }`}
