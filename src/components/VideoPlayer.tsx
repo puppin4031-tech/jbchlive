@@ -415,17 +415,17 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
             </div>
           )}
           {error && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/85 p-4 sm:p-6 overflow-auto">
-              <div className="max-w-lg w-full bg-background/95 rounded-xl p-5 sm:p-6 shadow-2xl border border-destructive/30">
-                <div className="flex items-start gap-3 mb-3">
-                  <AlertTriangle className="w-6 h-6 text-destructive flex-shrink-0 mt-0.5" />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/85 p-3 sm:p-4 overflow-auto">
+              <div className="max-w-md w-full bg-background/95 rounded-lg p-3 sm:p-4 shadow-2xl border border-destructive/30">
+                <div className="flex items-start gap-2 mb-2">
+                  <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-base sm:text-lg font-bold text-foreground">{error.title}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">{error.reason}</p>
+                    <h3 className="text-sm sm:text-base font-bold text-foreground">{error.title}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{error.reason}</p>
                   </div>
                 </div>
 
-                <div className="text-xs bg-muted/50 rounded-lg p-3 space-y-1 font-mono break-all max-h-40 overflow-auto">
+                <div className="text-[10px] bg-muted/50 rounded-md p-2 space-y-0.5 font-mono break-all max-h-32 overflow-auto">
                   <div>
                     <span className="text-muted-foreground">type:</span> {error.type}
                   </div>
@@ -457,9 +457,9 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
 
                 <button
                   onClick={handleCopyDebug}
-                  className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors text-sm"
+                  className="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors text-xs"
                 >
-                  <Copy className="w-4 h-4" />
+                  <Copy className="w-3 h-3" />
                   디버그 정보 복사
                 </button>
               </div>
