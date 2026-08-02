@@ -359,9 +359,9 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
           href={source.originalUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="absolute top-2 right-2 z-10 bg-black/60 hover:bg-black/80 text-white text-xs px-2 py-1 rounded inline-flex items-center gap-1"
+          className="absolute top-1.5 right-1.5 z-10 bg-black/60 hover:bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded inline-flex items-center gap-0.5"
         >
-          <ExternalLink className="w-3 h-3" /> 새 창에서 열기
+          <ExternalLink className="w-2.5 h-2.5" /> 새 창에서 열기
         </a>
       </div>
     );
