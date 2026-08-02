@@ -403,13 +403,13 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
             className="absolute inset-0 w-full h-full object-contain bg-black"
           />
           {manifestRetrying && !error && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 gap-3 p-6 text-center">
-              <span className="relative flex h-4 w-4">
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 gap-2 p-4 text-center">
+              <span className="relative flex h-3 w-3">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-4 w-4 bg-primary"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
               </span>
-              <p className="text-sm text-white font-medium">방송 신호를 받아오는 중입니다…</p>
-              <p className="text-xs text-white/70">
+              <p className="text-xs text-white font-medium">방송 신호를 받아오는 중입니다…</p>
+              <p className="text-[10px] text-white/70">
                 (재시도 {manifestRetriesRef.current}/{MANIFEST_MAX_RETRIES})
               </p>
             </div>
