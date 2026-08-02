@@ -335,17 +335,20 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
         }`}
       >
         {useNative ? (
-          <video
-            key={source.directUrl}
-            src={source.directUrl}
-            poster={poster}
-            controls
-            controlsList="nodownload"
-            playsInline
-            preload="metadata"
-            className="absolute inset-0 w-full h-full bg-black object-contain"
-            onError={() => setDriveNativeFailed(true)}
-          />
+          <>
+            <video
+              key={source.directUrl}
+              ref={driveVideoRef}
+              src={source.directUrl}
+              poster={poster}
+              controlsList="nodownload"
+              playsInline
+              preload="metadata"
+              className="absolute inset-0 w-full h-full bg-black object-contain"
+              onError={() => setDriveNativeFailed(true)}
+            />
+            <VideoControls videoRef={driveVideoRef} />
+          </>
         ) : (
           <iframe
             src={source.embedUrl}
