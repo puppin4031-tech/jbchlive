@@ -381,15 +381,15 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
           title="Video player"
         />
       ) : source.type === "external-only" ? (
-        <div className="flex flex-col items-center justify-center h-full gap-4 bg-muted/50">
-          <p className="text-muted-foreground text-sm">이 영상은 외부 사이트에서만 재생할 수 있습니다.</p>
+        <div className="flex flex-col items-center justify-center h-full gap-2.5 bg-muted/50">
+          <p className="text-muted-foreground text-xs">이 영상은 외부 사이트에서만 재생할 수 있습니다.</p>
           <a
             href={source.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors text-xs"
           >
-            <ExternalLink className="w-5 h-5" />
+            <ExternalLink className="w-3.5 h-3.5" />
             {source.label}
           </a>
         </div>
