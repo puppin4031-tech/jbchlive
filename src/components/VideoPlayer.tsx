@@ -3,6 +3,7 @@ import Hls, { ErrorData } from "hls.js";
 import { ExternalLink, Copy, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
+import VideoControls from "@/components/VideoControls";
 
 interface VideoPlayerProps {
   src?: string;
@@ -96,6 +97,7 @@ function getHlsErrorTarget(data: ErrorData) {
 
 const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const driveVideoRef = useRef<HTMLVideoElement>(null);
   const source = useMemo(() => parseVideoSource(src), [src]);
   const [error, setError] = useState<HlsErrorInfo | null>(null);
   const isMobile = useIsMobile();
@@ -334,17 +336,20 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
         }`}
       >
         {useNative ? (
-          <video
-            key={source.directUrl}
-            src={source.directUrl}
-            poster={poster}
-            controls
-            controlsList="nodownload"
-            playsInline
-            preload="metadata"
-            className="absolute inset-0 w-full h-full bg-black object-contain"
-            onError={() => setDriveNativeFailed(true)}
-          />
+          <>
+            <video
+              key={source.directUrl}
+              ref={driveVideoRef}
+              src={source.directUrl}
+              poster={poster}
+              controlsList="nodownload"
+              playsInline
+              preload="metadata"
+              className="absolute inset-0 w-full h-full bg-black object-contain"
+              onError={() => setDriveNativeFailed(true)}
+            />
+            <VideoControls videoRef={driveVideoRef} />
+          </>
         ) : (
           <iframe
             src={source.embedUrl}
@@ -398,10 +403,13 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
           <video
             ref={videoRef}
             poster={poster}
-            controls
+            controls={!isMobile}
             playsInline
             className="absolute inset-0 w-full h-full object-contain bg-black"
           />
+          {isMobile && !error && (
+            <VideoControls videoRef={videoRef} isLive={source.url.includes(".m3u8")} />
+          )}
           {manifestRetrying && !error && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 gap-2 p-4 text-center">
               <span className="relative flex h-3 w-3">
