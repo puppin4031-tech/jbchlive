@@ -3,7 +3,7 @@ import Hls, { ErrorData } from "hls.js";
 import { ExternalLink, Copy, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
-import VideoControls from "@/components/VideoControls";
+import CustomVideoPlayer from "@/components/CustomVideoPlayer";
 
 interface VideoPlayerProps {
   src?: string;
@@ -336,20 +336,14 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
         }`}
       >
         {useNative ? (
-          <>
-            <video
-              key={source.directUrl}
-              ref={driveVideoRef}
-              src={source.directUrl}
-              poster={poster}
-              controlsList="nodownload"
-              playsInline
-              preload="metadata"
-              className="absolute inset-0 w-full h-full bg-black object-contain"
-              onError={() => setDriveNativeFailed(true)}
-            />
-            <VideoControls videoRef={driveVideoRef} />
-          </>
+          <CustomVideoPlayer
+            key={source.directUrl}
+            videoRef={driveVideoRef}
+            src={source.directUrl}
+            poster={poster}
+            autoPlay={autoPlay}
+            onError={() => setDriveNativeFailed(true)}
+          />
         ) : (
           <iframe
             src={source.embedUrl}
@@ -400,16 +394,13 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
         </div>
       ) : source.type === "direct" ? (
         <>
-          <video
-            ref={videoRef}
+          <CustomVideoPlayer
+            videoRef={videoRef}
             poster={poster}
-            controls={!isMobile}
-            playsInline
-            className="absolute inset-0 w-full h-full object-contain bg-black"
+            autoPlay={autoPlay}
+            isLive={source.url.includes(".m3u8")}
           />
-          {isMobile && !error && (
-            <VideoControls videoRef={videoRef} isLive={source.url.includes(".m3u8")} />
-          )}
+
           {manifestRetrying && !error && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 gap-2 p-4 text-center">
               <span className="relative flex h-3 w-3">
