@@ -2,7 +2,7 @@ import { useEffect, useRef, useMemo, useState } from "react";
 import Hls, { ErrorData } from "hls.js";
 import { ExternalLink, Copy, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { useIsMobile } from "@/hooks/use-mobile";
+
 import CustomVideoPlayer from "@/components/CustomVideoPlayer";
 
 interface VideoPlayerProps {
@@ -14,10 +14,18 @@ interface VideoPlayerProps {
 
 type VideoSource =
   | { type: "youtube"; embedUrl: string }
-  | { type: "google-drive"; fileId: string; embedUrl: string; directUrl: string; originalUrl: string }
+  | {
+      type: "google-drive";
+      fileId: string;
+      embedUrl: string;
+      proxyUrl: string;
+      originalUrl: string;
+    }
   | { type: "external-only"; url: string; label: string }
   | { type: "direct"; url: string }
   | { type: "none" };
+
+const DRIVE_PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/drive-proxy`;
 
 function parseVideoSource(src?: string): VideoSource {
   if (!src) return { type: "none" };
@@ -27,13 +35,16 @@ function parseVideoSource(src?: string): VideoSource {
     return { type: "youtube", embedUrl: `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&rel=0` };
   }
 
-  const gdMatch = src.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+  const gdMatch =
+    src.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/) ||
+    src.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/) ||
+    src.match(/drive\.google\.com\/uc\?(?:.*&)?id=([a-zA-Z0-9_-]+)/);
   if (gdMatch) {
     return {
       type: "google-drive",
       fileId: gdMatch[1],
       embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview`,
-      directUrl: `https://drive.google.com/uc?export=download&id=${gdMatch[1]}`,
+      proxyUrl: `${DRIVE_PROXY_BASE}?id=${gdMatch[1]}`,
       originalUrl: `https://drive.google.com/file/d/${gdMatch[1]}/view`,
     };
   }
@@ -44,6 +55,7 @@ function parseVideoSource(src?: string): VideoSource {
 
   return { type: "direct", url: src };
 }
+
 
 interface HlsErrorInfo {
   title: string;
@@ -100,7 +112,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   const driveVideoRef = useRef<HTMLVideoElement>(null);
   const source = useMemo(() => parseVideoSource(src), [src]);
   const [error, setError] = useState<HlsErrorInfo | null>(null);
-  const isMobile = useIsMobile();
+  
   // Mobile: try the native <video> first (Drive /preview iframe is unreliable
   // on mobile browsers). Fall back to the iframe when direct playback fails.
   const [driveNativeFailed, setDriveNativeFailed] = useState(false);
@@ -327,32 +339,38 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   };
 
   if (source.type === "google-drive") {
-    const useNative = isMobile && !driveNativeFailed;
+    // Always prefer our own proxied stream so the custom control bar applies
+    // on every device. The Drive iframe is only a last-resort fallback.
+    const useNative = !driveNativeFailed;
     return (
       <div
         data-orientation-tick={orientationTick}
-        className={`relative w-full max-w-full bg-black rounded-xl overflow-hidden ${
-          useNative ? "aspect-video" : "aspect-video sm:aspect-[16/10]"
-        }`}
+        className="relative w-full max-w-full aspect-video bg-black rounded-xl overflow-hidden"
       >
         {useNative ? (
           <CustomVideoPlayer
-            key={source.directUrl}
+            key={source.proxyUrl}
             videoRef={driveVideoRef}
-            src={source.directUrl}
+            src={source.proxyUrl}
             poster={poster}
             autoPlay={autoPlay}
             onError={() => setDriveNativeFailed(true)}
           />
         ) : (
-          <iframe
-            src={source.embedUrl}
-            className="absolute inset-0 w-full h-full border-none"
-            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-            allowFullScreen
-            title="Google Drive video"
-          />
+          <>
+            <iframe
+              src={source.embedUrl}
+              className="absolute inset-0 w-full h-full border-none"
+              allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+              allowFullScreen
+              title="Google Drive video"
+            />
+            <span className="absolute bottom-1.5 left-1.5 z-10 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+              구글 기본 플레이어로 재생 중
+            </span>
+          </>
         )}
+
 
         <a
           href={source.originalUrl}
