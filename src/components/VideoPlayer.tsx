@@ -14,10 +14,18 @@ interface VideoPlayerProps {
 
 type VideoSource =
   | { type: "youtube"; embedUrl: string }
-  | { type: "google-drive"; fileId: string; embedUrl: string; directUrl: string; originalUrl: string }
+  | {
+      type: "google-drive";
+      fileId: string;
+      embedUrl: string;
+      proxyUrl: string;
+      originalUrl: string;
+    }
   | { type: "external-only"; url: string; label: string }
   | { type: "direct"; url: string }
   | { type: "none" };
+
+const DRIVE_PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/drive-proxy`;
 
 function parseVideoSource(src?: string): VideoSource {
   if (!src) return { type: "none" };
@@ -27,13 +35,16 @@ function parseVideoSource(src?: string): VideoSource {
     return { type: "youtube", embedUrl: `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&rel=0` };
   }
 
-  const gdMatch = src.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+  const gdMatch =
+    src.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/) ||
+    src.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/) ||
+    src.match(/drive\.google\.com\/uc\?(?:.*&)?id=([a-zA-Z0-9_-]+)/);
   if (gdMatch) {
     return {
       type: "google-drive",
       fileId: gdMatch[1],
       embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview`,
-      directUrl: `https://drive.google.com/uc?export=download&id=${gdMatch[1]}`,
+      proxyUrl: `${DRIVE_PROXY_BASE}?id=${gdMatch[1]}`,
       originalUrl: `https://drive.google.com/file/d/${gdMatch[1]}/view`,
     };
   }
@@ -44,6 +55,7 @@ function parseVideoSource(src?: string): VideoSource {
 
   return { type: "direct", url: src };
 }
+
 
 interface HlsErrorInfo {
   title: string;
