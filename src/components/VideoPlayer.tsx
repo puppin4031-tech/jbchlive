@@ -394,16 +394,13 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
         </div>
       ) : source.type === "direct" ? (
         <>
-          <video
-            ref={videoRef}
+          <CustomVideoPlayer
+            videoRef={videoRef}
             poster={poster}
-            controls={!isMobile}
-            playsInline
-            className="absolute inset-0 w-full h-full object-contain bg-black"
+            autoPlay={autoPlay}
+            isLive={source.url.includes(".m3u8")}
           />
-          {isMobile && !error && (
-            <VideoControls videoRef={videoRef} isLive={source.url.includes(".m3u8")} />
-          )}
+
           {manifestRetrying && !error && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 gap-2 p-4 text-center">
               <span className="relative flex h-3 w-3">
