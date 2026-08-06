@@ -23,6 +23,7 @@ import NotFound from "./pages/NotFound.tsx";
 import SupportPage from "./pages/SupportPage.tsx";
 import SupportTicketPage from "./pages/SupportTicketPage.tsx";
 import YouTubeCallbackPage from "./pages/YouTubeCallbackPage.tsx";
+import PricingPage from "./pages/PricingPage.tsx";
 import FloatingBroadcasterDock from "@/components/broadcaster/FloatingBroadcasterDock";
 import { useEffect } from "react";
 import { setupSecurityMonitoring } from "@/lib/security";
@@ -52,6 +53,7 @@ const App = () => (
               <Route path="/vod/:sermonId" element={<VodPage />} />
               <Route path="/channel/:channelId" element={<ChannelPage />} />
               <Route path="/search" element={<SearchPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/auth/youtube/callback" element={
                 <ProtectedRoute><YouTubeCallbackPage /></ProtectedRoute>
