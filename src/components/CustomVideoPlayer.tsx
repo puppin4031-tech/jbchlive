@@ -186,9 +186,8 @@ const CustomVideoPlayer = ({
         autoPlay={autoPlay}
         controls={false}
         playsInline
-        // @ts-expect-error -- legacy iOS/Android inline playback attributes
-        webkit-playsinline="true"
-        x5-playsinline="true"
+        {...({ "webkit-playsinline": "true", "x5-playsinline": "true" } as Record<string, string>)}
+
         preload="metadata"
         controlsList="nodownload"
         disablePictureInPicture
