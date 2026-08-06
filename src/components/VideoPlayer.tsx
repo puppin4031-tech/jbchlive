@@ -339,32 +339,38 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   };
 
   if (source.type === "google-drive") {
-    const useNative = isMobile && !driveNativeFailed;
+    // Always prefer our own proxied stream so the custom control bar applies
+    // on every device. The Drive iframe is only a last-resort fallback.
+    const useNative = !driveNativeFailed;
     return (
       <div
         data-orientation-tick={orientationTick}
-        className={`relative w-full max-w-full bg-black rounded-xl overflow-hidden ${
-          useNative ? "aspect-video" : "aspect-video sm:aspect-[16/10]"
-        }`}
+        className="relative w-full max-w-full aspect-video bg-black rounded-xl overflow-hidden"
       >
         {useNative ? (
           <CustomVideoPlayer
-            key={source.directUrl}
+            key={source.proxyUrl}
             videoRef={driveVideoRef}
-            src={source.directUrl}
+            src={source.proxyUrl}
             poster={poster}
             autoPlay={autoPlay}
             onError={() => setDriveNativeFailed(true)}
           />
         ) : (
-          <iframe
-            src={source.embedUrl}
-            className="absolute inset-0 w-full h-full border-none"
-            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-            allowFullScreen
-            title="Google Drive video"
-          />
+          <>
+            <iframe
+              src={source.embedUrl}
+              className="absolute inset-0 w-full h-full border-none"
+              allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+              allowFullScreen
+              title="Google Drive video"
+            />
+            <span className="absolute bottom-1.5 left-1.5 z-10 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+              구글 기본 플레이어로 재생 중
+            </span>
+          </>
         )}
+
 
         <a
           href={source.originalUrl}
