@@ -174,38 +174,43 @@ const CustomVideoPlayer = ({
       ref={containerRef}
       className={
         fullscreen
-          ? "fixed inset-0 z-50 bg-black flex items-center justify-center safe-x safe-bottom"
+          ? "fixed inset-0 z-[100] bg-black flex items-center justify-center safe-x safe-bottom"
           : `absolute inset-0 bg-black ${className}`
       }
       onMouseMove={showControls}
-      onTouchStart={showControls}
     >
       <video
         ref={videoRef}
         src={src}
         poster={poster}
         autoPlay={autoPlay}
+        controls={false}
         playsInline
+        // @ts-expect-error -- legacy iOS/Android inline playback attributes
+        webkit-playsinline="true"
+        x5-playsinline="true"
         preload="metadata"
         controlsList="nodownload"
+        disablePictureInPicture
         onError={onError}
-        className="absolute inset-0 w-full h-full object-contain bg-black"
+        className="absolute inset-0 z-0 w-full h-full object-contain bg-black"
       />
 
-      {/* Tap layer: reveals controls, or toggles playback while visible. */}
+      {/* Tap layer: toggles the control bar (mobile has no hover state). */}
       <button
         type="button"
-        aria-label={visible ? "재생/일시정지" : "컨트롤 표시"}
-        onClick={() => (visible ? togglePlay() : showControls())}
-        className="absolute inset-0 z-10 w-full h-full bg-transparent"
+        aria-label="재생 컨트롤 표시"
+        onClick={toggleControls}
+        className="absolute inset-0 z-10 w-full h-full bg-transparent pointer-events-auto"
       />
 
       {/* Control bar anchored to the container, not the video render box. */}
       <div
-        className={`absolute bottom-0 left-0 right-0 z-20 flex items-center gap-1 px-2 pb-1 pt-6 bg-gradient-to-t from-black/85 via-black/40 to-transparent transition-opacity duration-200 ${
-          visible ? "opacity-100" : "opacity-0 pointer-events-none"
+        className={`absolute bottom-0 left-0 right-0 z-50 flex items-center gap-1 px-2 pb-1 pt-6 bg-gradient-to-t from-black/85 via-black/40 to-transparent transition-opacity duration-200 ${
+          visible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
       >
+
         <button type="button" onClick={togglePlay} aria-label={playing ? "일시정지" : "재생"} className={buttonClass}>
           {playing ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
         </button>
