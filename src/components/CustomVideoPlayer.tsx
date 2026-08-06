@@ -187,11 +187,18 @@ const CustomVideoPlayer = ({
         controls={false}
         playsInline
         {...({ "webkit-playsinline": "true", "x5-playsinline": "true" } as Record<string, string>)}
-
         preload="metadata"
         controlsList="nodownload"
         disablePictureInPicture
-        onError={onError}
+        onError={(event) => {
+          // Ignore transient aborts (range request cancelled by the browser);
+          // only a real decode/network failure should trigger the fallback.
+          const media = event.currentTarget;
+          if (!media.error || media.error.code === MediaError.MEDIA_ERR_ABORTED) return;
+          console.warn("video error", media.error.code, media.error.message);
+          onError?.();
+        }}
+
         className="absolute inset-0 z-0 w-full h-full object-contain bg-black"
       />
 
