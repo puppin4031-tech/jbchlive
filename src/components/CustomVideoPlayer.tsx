@@ -59,6 +59,20 @@ const CustomVideoPlayer = ({
     }, HIDE_DELAY_MS);
   }, [videoRef]);
 
+  // Mobile has no hover: tapping the surface toggles the control bar.
+  const toggleControls = useCallback(() => {
+    if (visible) {
+      const video = videoRef.current;
+      if (video && !video.paused) {
+        if (hideTimer.current) clearTimeout(hideTimer.current);
+        setVisible(false);
+        return;
+      }
+    }
+    showControls();
+  }, [visible, videoRef, showControls]);
+
+
   useEffect(() => {
     showControls();
     return () => {
