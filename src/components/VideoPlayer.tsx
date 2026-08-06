@@ -112,7 +112,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   const driveVideoRef = useRef<HTMLVideoElement>(null);
   const source = useMemo(() => parseVideoSource(src), [src]);
   const [error, setError] = useState<HlsErrorInfo | null>(null);
-  const isMobile = useIsMobile();
+  
   // Mobile: try the native <video> first (Drive /preview iframe is unreliable
   // on mobile browsers). Fall back to the iframe when direct playback fails.
   const [driveNativeFailed, setDriveNativeFailed] = useState(false);
