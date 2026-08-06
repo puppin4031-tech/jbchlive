@@ -3,7 +3,7 @@ import Hls, { ErrorData } from "hls.js";
 import { ExternalLink, Copy, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
-import VideoControls from "@/components/VideoControls";
+import CustomVideoPlayer from "@/components/CustomVideoPlayer";
 
 interface VideoPlayerProps {
   src?: string;
