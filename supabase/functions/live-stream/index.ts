@@ -1500,7 +1500,7 @@ serve(async (req) => {
         const nowIso = new Date().toISOString();
         const { data: toStart } = await serviceClient
           .from("channels")
-          .select("id, name, gcp_input_uri, scheduled_start_at")
+          .select("id, name, gcp_input_id, scheduled_start_at")
           .eq("is_live", false)
           .eq("is_approved", true)
           .eq("is_suspended", false)
