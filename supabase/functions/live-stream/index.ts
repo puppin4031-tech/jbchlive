@@ -953,12 +953,19 @@ async function provisionChannel(
     await createChannel(newChannelId, newInputId, newOutputUri);
 
     // ---- Step 5: atomic DB update AFTER both GCP resources exist ----
+    // The RTMP ingest URI is a credential: it is stored in the owner-only
+    // channel_stream_keys table, never in the publicly readable channels row.
+    const { error: keyErr } = await serviceClient
+      .from("channel_stream_keys")
+      .upsert({ channel_id: channelUuid, stream_key: inputUri }, { onConflict: "channel_id" });
+    if (keyErr) throw new Error(`Stream key store failed: ${keyErr.message}`);
+
     const { error: dbErr } = await serviceClient
       .from("channels")
       .update({
         gcp_input_id: newInputId,
         gcp_channel_id: newChannelId,
-        gcp_input_uri: inputUri,
+        gcp_input_uri: null,
         gcp_output_uri: newOutputUri,
         gcp_provisioned_at: new Date().toISOString(),
         gcp_last_error: null,
@@ -966,6 +973,7 @@ async function provisionChannel(
       })
       .eq("id", channelUuid);
     if (dbErr) throw new Error(`DB update failed: ${dbErr.message}`);
+
 
     return {
       gcp_input_id: newInputId,
