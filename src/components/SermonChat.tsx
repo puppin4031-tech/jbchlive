@@ -33,6 +33,13 @@ const SermonChat = ({ sermon }: SermonChatProps) => {
     const text = input.trim();
     if (!text || isLoading) return;
 
+    // The AI endpoint requires a signed-in user (viewing stays public).
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      toast.error('AI 말씀 도우미는 로그인 후 이용할 수 있습니다.');
+      return;
+    }
+
     const userMsg: Msg = { role: 'user', content: text };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
@@ -44,8 +51,10 @@ const SermonChat = ({ sermon }: SermonChatProps) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${session.access_token}`,
         },
+
         body: JSON.stringify({
           messages: newMessages,
           sermonContext: {
