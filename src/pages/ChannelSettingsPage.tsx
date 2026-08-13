@@ -14,6 +14,8 @@ import { toast } from 'sonner';
 import { parseRtmpUri } from '@/lib/liveStreamApi';
 import BroadcasterControlPanel from '@/components/broadcaster/BroadcasterControlPanel';
 import { visibleGcpError } from '@/lib/gcpErrorFilter';
+import { useChannelRtmp } from '@/hooks/useChannelRtmp';
+
 
 const ChannelSettingsPage = () => {
   const { channelId } = useParams();
