@@ -58,9 +58,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase.from('profiles').select('display_name, avatar_url, church_name, position').eq('user_id', userId).single();
-    if (data) setProfile(data);
+    // Display fields live in `profiles`; PII (church/position) is in the
+    // self-only `profile_details` table.
+    const [{ data: base }, { data: details }] = await Promise.all([
+      supabase.from('profiles').select('display_name, avatar_url').eq('user_id', userId).maybeSingle(),
+      supabase.from('profile_details').select('church_name, position').eq('user_id', userId).maybeSingle(),
+    ]);
+    if (base || details) {
+      setProfile({
+        display_name: base?.display_name ?? null,
+        avatar_url: base?.avatar_url ?? null,
+        church_name: details?.church_name ?? null,
+        position: details?.position ?? null,
+      });
+    }
   };
+
 
   const checkAdmin = async (userId: string) => {
     // Use server-side function to verify role (not client-modifiable)
