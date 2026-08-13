@@ -124,7 +124,7 @@ const ChannelSettingsPage = () => {
   if (!user) return <Navigate to="/login" replace />;
   if (channel && !canEdit) return <Navigate to="/" replace />;
 
-  const rtmpInfo = parseRtmpUri(channel?.gcp_input_uri ?? null);
+  const rtmpInfo = parseRtmpUri(rtmpUri ?? null);
   const rtmpServer = rtmpInfo?.server || null;
   const streamKey = rtmpInfo?.streamKey || null;
   const maskedKey = streamKey
