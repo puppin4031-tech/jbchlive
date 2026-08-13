@@ -14,6 +14,8 @@ import { toast } from 'sonner';
 import { parseRtmpUri } from '@/lib/liveStreamApi';
 import BroadcasterControlPanel from '@/components/broadcaster/BroadcasterControlPanel';
 import { visibleGcpError } from '@/lib/gcpErrorFilter';
+import { useChannelRtmp } from '@/hooks/useChannelRtmp';
+
 
 const ChannelSettingsPage = () => {
   const { channelId } = useParams();
@@ -44,7 +46,11 @@ const ChannelSettingsPage = () => {
     enabled: !!channelId,
   });
 
+  // RTMP ingest URI is owner/admin-only and comes from a secured function.
+  const { data: rtmpUri } = useChannelRtmp(channelId);
+
   useEffect(() => {
+
     if (channel) {
       setName(channel.name);
       setDescription(channel.description || '');
@@ -124,7 +130,7 @@ const ChannelSettingsPage = () => {
   if (!user) return <Navigate to="/login" replace />;
   if (channel && !canEdit) return <Navigate to="/" replace />;
 
-  const rtmpInfo = parseRtmpUri(channel?.gcp_input_uri ?? null);
+  const rtmpInfo = parseRtmpUri(rtmpUri ?? null);
   const rtmpServer = rtmpInfo?.server || null;
   const streamKey = rtmpInfo?.streamKey || null;
   const maskedKey = streamKey

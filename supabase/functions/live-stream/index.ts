@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isAllowedOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -953,12 +954,19 @@ async function provisionChannel(
     await createChannel(newChannelId, newInputId, newOutputUri);
 
     // ---- Step 5: atomic DB update AFTER both GCP resources exist ----
+    // The RTMP ingest URI is a credential: it is stored in the owner-only
+    // channel_stream_keys table, never in the publicly readable channels row.
+    const { error: keyErr } = await serviceClient
+      .from("channel_stream_keys")
+      .upsert({ channel_id: channelUuid, stream_key: inputUri }, { onConflict: "channel_id" });
+    if (keyErr) throw new Error(`Stream key store failed: ${keyErr.message}`);
+
     const { error: dbErr } = await serviceClient
       .from("channels")
       .update({
         gcp_input_id: newInputId,
         gcp_channel_id: newChannelId,
-        gcp_input_uri: inputUri,
+        gcp_input_uri: null,
         gcp_output_uri: newOutputUri,
         gcp_provisioned_at: new Date().toISOString(),
         gcp_last_error: null,
@@ -966,6 +974,7 @@ async function provisionChannel(
       })
       .eq("id", channelUuid);
     if (dbErr) throw new Error(`DB update failed: ${dbErr.message}`);
+
 
     return {
       gcp_input_id: newInputId,
@@ -1175,6 +1184,14 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 serve(async (req) => {
+  // Block browser calls from origins outside our own apps.
+  const _origin = req.headers.get("origin");
+  if (_origin && !isAllowedOrigin(_origin)) {
+    return new Response(JSON.stringify({ error: "Origin not allowed" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -1492,7 +1509,7 @@ serve(async (req) => {
         const nowIso = new Date().toISOString();
         const { data: toStart } = await serviceClient
           .from("channels")
-          .select("id, name, gcp_input_uri, scheduled_start_at")
+          .select("id, name, gcp_input_id, scheduled_start_at")
           .eq("is_live", false)
           .eq("is_approved", true)
           .eq("is_suspended", false)
@@ -1508,7 +1525,7 @@ serve(async (req) => {
             .update({ scheduled_start_at: null })
             .eq("id", ch.id);
 
-          if (!ch.gcp_input_uri) {
+          if (!ch.gcp_input_id) {
             await serviceClient
               .from("channels")
               .update({ gcp_last_error: "예약 시작 실패: GCP 미프로비저닝" })
@@ -1798,10 +1815,11 @@ serve(async (req) => {
         // Auto-provision if not yet done
         const { data: ch } = await user.serviceClient
           .from("channels")
-          .select("gcp_input_uri")
+          .select("gcp_input_id")
           .eq("id", channelId)
           .single();
-        if (!ch?.gcp_input_uri) {
+        if (!ch?.gcp_input_id) {
+
           if (!user.isAdmin) {
             throw new Error("Channel not provisioned. Contact administrator.");
           }

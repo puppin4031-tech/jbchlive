@@ -1,4 +1,5 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+import { rateLimit, clientKey } from '../_shared/rateLimit.ts';
 
 // Streams a publicly shared Google Drive file through our own origin so the
 // browser can play it in a plain <video> tag (Drive's own /uc endpoint blocks
@@ -26,6 +27,27 @@ function isInterstitial(res: Response) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: baseHeaders });
+  }
+
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Public playback endpoint: open to everyone, but throttled per IP so it
+  // cannot be abused as a generic bandwidth proxy.
+  const { allowed, retryAfterSeconds } = rateLimit(clientKey(req, 'drive-proxy'), 120, 60 * 1000);
+  if (!allowed) {
+    return new Response(JSON.stringify({ error: 'Too many requests' }), {
+      status: 429,
+      headers: {
+        ...baseHeaders,
+        'Content-Type': 'application/json',
+        'Retry-After': String(retryAfterSeconds),
+      },
+    });
   }
 
   const url = new URL(req.url);

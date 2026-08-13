@@ -163,8 +163,8 @@ const ChannelDiagnosticDialog = ({ channelId, channelName, onClose }: Props) => 
                   <dd className="font-mono break-all">{data.gcp.channelId}</dd>
                   <dt className="text-muted-foreground">GCP Input ID</dt>
                   <dd className="font-mono break-all">{data.gcp.inputId}</dd>
-                  <dt className="text-muted-foreground">RTMP URI</dt>
-                  <dd className="font-mono break-all">{(db.gcp_input_uri as string) || '(없음)'}</dd>
+                  <dt className="text-muted-foreground">RTMP 등록</dt>
+                  <dd className="font-mono break-all">{db.gcp_input_id ? '보관됨 (채널 설정에서 확인)' : '(없음)'}</dd>
                   <dt className="text-muted-foreground">HLS URL</dt>
                   <dd className="font-mono break-all">{(data.gcp.hlsUrl as string) || (db.stream_url as string) || '(없음)'}</dd>
                   <dt className="text-muted-foreground">HLS 버킷</dt>

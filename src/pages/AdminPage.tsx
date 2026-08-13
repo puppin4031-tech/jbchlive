@@ -388,7 +388,7 @@ const AdminPage = () => {
                         )}
                         {ch.is_live && <Badge className="bg-live text-live-foreground text-xs">LIVE</Badge>}
                         {ch.is_suspended && <Badge variant="destructive" className="text-xs">정지됨</Badge>}
-                        {ch.gcp_input_uri ? (
+                        {ch.gcp_input_id ? (
                           <Badge variant="outline" className="text-xs">GCP ✓</Badge>
                         ) : ch.is_approved ? (
                           <Badge variant="destructive" className="text-xs">GCP 미설정</Badge>
