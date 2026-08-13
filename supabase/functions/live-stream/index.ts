@@ -1516,7 +1516,7 @@ serve(async (req) => {
             .update({ scheduled_start_at: null })
             .eq("id", ch.id);
 
-          if (!ch.gcp_input_uri) {
+          if (!ch.gcp_input_id) {
             await serviceClient
               .from("channels")
               .update({ gcp_last_error: "예약 시작 실패: GCP 미프로비저닝" })
