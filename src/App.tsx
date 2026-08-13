@@ -56,6 +56,7 @@ const App = () => (
               <Route path="/search" element={<SearchPage />} />
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
               <Route path="/auth/youtube/callback" element={
                 <ProtectedRoute><YouTubeCallbackPage /></ProtectedRoute>
               } />
