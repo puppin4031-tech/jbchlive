@@ -24,6 +24,7 @@ import SupportPage from "./pages/SupportPage.tsx";
 import SupportTicketPage from "./pages/SupportTicketPage.tsx";
 import YouTubeCallbackPage from "./pages/YouTubeCallbackPage.tsx";
 import PricingPage from "./pages/PricingPage.tsx";
+import OAuthConsent from "./pages/OAuthConsent.tsx";
 import FloatingBroadcasterDock from "@/components/broadcaster/FloatingBroadcasterDock";
 import { useEffect } from "react";
 import { setupSecurityMonitoring } from "@/lib/security";
@@ -55,6 +56,7 @@ const App = () => (
               <Route path="/search" element={<SearchPage />} />
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
               <Route path="/auth/youtube/callback" element={
                 <ProtectedRoute><YouTubeCallbackPage /></ProtectedRoute>
               } />

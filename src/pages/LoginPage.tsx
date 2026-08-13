@@ -1,21 +1,55 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { lovable } from '@/integrations/lovable/index';
 import { Radio } from 'lucide-react';
 
+const NEXT_KEY = 'post-login-next';
+
+/** Only same-origin relative paths are accepted as a post-login redirect. */
+const sanitizeNext = (value: string | null): string | null => {
+  if (!value) return null;
+  if (!value.startsWith('/') || value.startsWith('//')) return null;
+  return value;
+};
+
 const LoginPage = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const nextParam = sanitizeNext(params.get('next'));
 
   useEffect(() => {
-    if (!loading && user) navigate('/');
-  }, [user, loading, navigate]);
+    if (nextParam) {
+      try {
+        sessionStorage.setItem(NEXT_KEY, nextParam);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [nextParam]);
+
+  useEffect(() => {
+    if (loading || !user) return;
+    let stored: string | null = null;
+    try {
+      stored = sessionStorage.getItem(NEXT_KEY);
+      sessionStorage.removeItem(NEXT_KEY);
+    } catch {
+      /* ignore */
+    }
+    const target = nextParam ?? sanitizeNext(stored);
+    if (target) {
+      window.location.replace(target);
+      return;
+    }
+    navigate('/');
+  }, [user, loading, navigate, nextParam]);
 
   const handleGoogleLogin = async () => {
     const { error } = await lovable.auth.signInWithOAuth('google', {
-      redirect_uri: window.location.origin,
+      redirect_uri: `${window.location.origin}/login`,
     });
     if (error) console.error('Login error:', error);
   };
