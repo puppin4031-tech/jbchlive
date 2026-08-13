@@ -2,6 +2,7 @@
 // Actions: oauth_start, oauth_callback, status, create_broadcast, stop_broadcast, disconnect
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isAllowedOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -125,6 +126,14 @@ async function ytFetch(path: string, accessToken: string, init: RequestInit = {}
 }
 
 serve(async (req) => {
+  // Block browser calls from origins outside our own apps.
+  const _origin = req.headers.get("origin");
+  if (_origin && !isAllowedOrigin(_origin)) {
+    return new Response(JSON.stringify({ error: "Origin not allowed" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
     if (!CLIENT_ID || !CLIENT_SECRET) {
