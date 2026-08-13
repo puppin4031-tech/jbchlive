@@ -44,7 +44,11 @@ const ChannelSettingsPage = () => {
     enabled: !!channelId,
   });
 
+  // RTMP ingest URI is owner/admin-only and comes from a secured function.
+  const { data: rtmpUri } = useChannelRtmp(channelId);
+
   useEffect(() => {
+
     if (channel) {
       setName(channel.name);
       setDescription(channel.description || '');
