@@ -1806,10 +1806,11 @@ serve(async (req) => {
         // Auto-provision if not yet done
         const { data: ch } = await user.serviceClient
           .from("channels")
-          .select("gcp_input_uri")
+          .select("gcp_input_id")
           .eq("id", channelId)
           .single();
-        if (!ch?.gcp_input_uri) {
+        if (!ch?.gcp_input_id) {
+
           if (!user.isAdmin) {
             throw new Error("Channel not provisioned. Contact administrator.");
           }
