@@ -13,6 +13,7 @@ import StopLiveDialog from './StopLiveDialog';
 import KeepaliveDialog from './KeepaliveDialog';
 import DisconnectWarning from './DisconnectWarning';
 import { visibleGcpError } from '@/lib/gcpErrorFilter';
+import { useChannelRtmp } from '@/hooks/useChannelRtmp';
 
 interface PhaseDisplay {
   label: string;
@@ -59,6 +60,8 @@ interface Props {
 const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
   const queryClient = useQueryClient();
   const { channel, phase, gcpState, pollAttempts, startLive, stopLive, lastError, dismissError, refresh } = useBroadcasterChannel();
+  // RTMP ingest URI is fetched through an owner/admin-only function.
+  const { data: rtmpUri } = useChannelRtmp(channel?.id);
   const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -182,7 +185,7 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
           onOpenChange={setStartDialogOpen}
           gcpState={gcpState}
           pollAttempts={pollAttempts}
-          gcpInputUri={channel.gcp_input_uri}
+          gcpInputUri={rtmpUri ?? null}
         />
         <StopLiveDialog
           open={stopDialogOpen}
@@ -309,7 +312,7 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
         onOpenChange={setStartDialogOpen}
         gcpState={gcpState}
         pollAttempts={pollAttempts}
-        gcpInputUri={channel.gcp_input_uri}
+        gcpInputUri={rtmpUri ?? null}
       />
       <StopLiveDialog
         open={stopDialogOpen}
