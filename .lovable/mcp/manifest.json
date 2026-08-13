@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "sdk_version": "0.26.2",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://nhdopijdmrowknwqouxw.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "live-word-stream",
+      "version": "0.1.0",
+      "title": "Live Word Stream"
+    },
+    "tools": [
+      {
+        "name": "list_live_channels",
+        "title": "List live channels",
+        "description": "List church channels that are currently broadcasting live.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "search_sermons",
+        "title": "Search sermons",
+        "description": "Search sermon videos by keyword in title, preacher, or description.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Keyword to search for."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "description": "Max results (default 20)."
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_sermon",
+        "title": "Get sermon details",
+        "description": "Fetch full details for one sermon by its ID.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "sermon_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Sermon UUID."
+            }
+          },
+          "required": [
+            "sermon_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_my_sermon_notes",
+        "title": "List my sermon notes",
+        "description": "List the signed-in user's sermon notes, optionally filtered by sermon.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "sermon_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Only return notes for this sermon."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "save_sermon_note",
+        "title": "Save sermon note",
+        "description": "Create or update the signed-in user's note for a sermon.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "sermon_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Sermon UUID the note belongs to."
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Note text."
+            }
+          },
+          "required": [
+            "sermon_id",
+            "content"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
