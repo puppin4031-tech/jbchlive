@@ -147,10 +147,9 @@ ${contextInfo}
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
+    // Never surface internal error details to the client.
     console.error("sermon-chat error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: "AI 서비스 오류가 발생했습니다." }, 500);
   }
+
 });
