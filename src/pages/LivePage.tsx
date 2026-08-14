@@ -31,13 +31,11 @@ const LivePage = () => {
       return data;
     },
     enabled: !!channelId,
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
-    staleTime: 0,
-    // Safety net: even if realtime UPDATE events are dropped, re-poll every
-    // 10s so a channel that went offline/changed stream_url is picked up and
-    // the VideoPlayer unmounts instead of looping on a stale manifest URL.
-    refetchInterval: 10000,
+    refetchOnWindowFocus: false,
+    // Rely on cache + realtime channel UPDATE events instead of constant DB
+    // scans. Only poll (slowly) while the channel is actually live.
+    staleTime: 60_000,
+    refetchInterval: (query) => (query.state.data?.is_live ? 60_000 : false),
   });
 
   // Fetch current live sermon for this channel
@@ -56,9 +54,8 @@ const LivePage = () => {
       return data;
     },
     enabled: !!channelId && !!channel?.is_live,
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
-    staleTime: 0,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
   });
 
   // Fetch recent VODs

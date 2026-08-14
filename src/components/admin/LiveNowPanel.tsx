@@ -65,7 +65,8 @@ const LiveNowPanel = () => {
         .order('live_started_at', { ascending: true });
       return (data ?? []) as LiveChannel[];
     },
-    refetchInterval: 15000,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
   });
 
   const forceStop = useMutation({

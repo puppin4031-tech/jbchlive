@@ -23,9 +23,8 @@ const LiveListPage = () => {
       if (error) throw error;
         return (data || []).filter(isPlayableLiveChannel);
     },
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
-    staleTime: 0,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
   });
 
   // Realtime: refresh when any channel goes live/offline
