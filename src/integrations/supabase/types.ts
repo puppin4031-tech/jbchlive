@@ -712,16 +712,19 @@ export type Database = {
       viewer_presence: {
         Row: {
           channel_id: string
+          first_seen_at: string
           last_seen_at: string
           viewer_key: string
         }
         Insert: {
           channel_id: string
+          first_seen_at?: string
           last_seen_at?: string
           viewer_key: string
         }
         Update: {
           channel_id?: string
+          first_seen_at?: string
           last_seen_at?: string
           viewer_key?: string
         }

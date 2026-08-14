@@ -1,0 +1,1 @@
+ALTER TABLE public.viewer_presence ADD COLUMN IF NOT EXISTS first_seen_at timestamp with time zone NOT NULL DEFAULT now();
