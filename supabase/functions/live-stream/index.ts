@@ -2031,8 +2031,27 @@ serve(async (req) => {
       case "getStatus": {
         if (!channelId) throw new Error("channelId required");
         const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
-        const gcpCh = await getChannelGCP(gcpChannelId);
+        // Fail-fast: if GCP is unreachable/misconfigured, return the last known
+        // DB state immediately instead of retrying and re-booting this function.
+        const gcpCh = await getChannelGCP(gcpChannelId).catch((e) => {
+          console.error("getStatus: GCP unreachable", e);
+          return null;
+        });
+        if (!gcpCh) {
+          const { data: fallback } = await user.serviceClient
+            .from("channels")
+            .select("gcp_channel_state, stream_url")
+            .eq("id", channelId)
+            .maybeSingle();
+          result = {
+            streamingState: (fallback?.gcp_channel_state as string | null) ?? "UNKNOWN",
+            streamUrl: (fallback?.stream_url as string | null) ?? null,
+            gcpUnavailable: true,
+          };
+          break;
+        }
         const state = gcpCh.streamingState || "UNKNOWN";
+
         const ops = await listChannelOperations(gcpChannelId).catch((e) => {
           console.warn("listChannelOperations failed", e);
           return [] as GcpOperation[];
