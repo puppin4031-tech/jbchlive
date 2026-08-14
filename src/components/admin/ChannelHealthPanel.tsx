@@ -37,7 +37,8 @@ const ChannelHealthPanel = () => {
       if (error) throw error;
       return (data ?? []) as ProblemChannel[];
     },
-    refetchInterval: 30000,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
   });
 
   const problems = channels.filter((ch) =>

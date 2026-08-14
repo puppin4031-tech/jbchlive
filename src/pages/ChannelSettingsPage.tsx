@@ -44,6 +44,7 @@ const ChannelSettingsPage = () => {
       return data;
     },
     enabled: !!channelId,
+    staleTime: 60_000,
   });
 
   // RTMP ingest URI is owner/admin-only and comes from a secured function.

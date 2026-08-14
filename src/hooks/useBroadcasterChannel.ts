@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,6 +22,9 @@ export type BroadcastPhase =
   | 'error';
 
 const POLL_INTERVAL_MS = 5000;
+/** Hard fail-safe: stop polling after 36 attempts (~3 minutes). */
+const MAX_POLL_ATTEMPTS = 36;
+
 
 export const useBroadcasterChannel = () => {
   const { user } = useAuth();
@@ -30,6 +33,9 @@ export const useBroadcasterChannel = () => {
   const [pollAttempts, setPollAttempts] = useState(0);
   const [lastPolledAt, setLastPolledAt] = useState<Date | null>(null);
   const [lastError, setLastError] = useState<FriendlyError | null>(null);
+
+  const pollCountRef = useRef(0);
+  const [pollExhausted, setPollExhausted] = useState(false);
 
   const { data: channel, refetch } = useQuery({
     queryKey: ['my-channel', user?.id],
@@ -43,6 +49,7 @@ export const useBroadcasterChannel = () => {
       return data;
     },
     enabled: !!user,
+    staleTime: 60_000,
   });
 
   const channelId = channel?.id;
@@ -68,11 +75,19 @@ export const useBroadcasterChannel = () => {
 
   const effectiveGcpState = gcpState || channel?.gcp_channel_state || '';
 
+  // Reset the polling budget whenever a new live attempt begins.
+  useEffect(() => {
+    if (!channel?.is_live) {
+      pollCountRef.current = 0;
+      setPollExhausted(false);
+    }
+  }, [channel?.is_live]);
+
   // Status polling: while live but state isn't STREAMING with stream_url, OR STARTING phase
   useEffect(() => {
     if (!channelId) return;
     const isLive = !!channel?.is_live;
-    const needsPoll = isLive && (
+    const needsPoll = isLive && !pollExhausted && (
       !channel?.stream_url ||
       effectiveGcpState === 'STARTING' ||
       effectiveGcpState === 'PENDING' ||
@@ -82,12 +97,20 @@ export const useBroadcasterChannel = () => {
     if (!needsPoll) return;
 
     let cancelled = false;
+    let id: number | undefined;
     const poll = async () => {
+      if (pollCountRef.current >= MAX_POLL_ATTEMPTS) {
+        // Fail-safe: stop hitting the edge function after ~3 minutes.
+        if (id) window.clearInterval(id);
+        setPollExhausted(true);
+        return;
+      }
+      pollCountRef.current += 1;
       try {
         const res = await apiGetStatus(channelId);
         if (cancelled) return;
         setGcpState(res.streamingState || 'UNKNOWN');
-        setPollAttempts((n) => n + 1);
+        setPollAttempts(pollCountRef.current);
         setLastPolledAt(new Date());
         if (res.streamUrl && !channel?.stream_url) {
           refetch();
@@ -97,15 +120,20 @@ export const useBroadcasterChannel = () => {
         }
       } catch (e) {
         console.error('broadcaster polling error', e);
+        // Immediate exit on failure — never loop against a failing backend.
+        if (id) window.clearInterval(id);
+        setPollExhausted(true);
       }
     };
     poll();
-    const id = setInterval(poll, POLL_INTERVAL_MS);
+    id = window.setInterval(poll, POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      if (id) window.clearInterval(id);
     };
-  }, [channelId, channel?.is_live, channel?.stream_url, effectiveGcpState, refetch, queryClient]);
+  }, [channelId, channel?.is_live, channel?.stream_url, effectiveGcpState, pollExhausted, refetch, queryClient]);
+
+
 
   const phase: BroadcastPhase = useMemo(() => {
     if (!channel) return 'no-channel';
@@ -132,6 +160,8 @@ export const useBroadcasterChannel = () => {
     onSuccess: () => {
       setGcpState('STARTING');
       setPollAttempts(0);
+      pollCountRef.current = 0;
+      setPollExhausted(false);
       setLastError(null);
       refetch();
       queryClient.invalidateQueries({ queryKey: ['live-channels'] });
@@ -152,6 +182,8 @@ export const useBroadcasterChannel = () => {
     onSuccess: () => {
       toast.success('라이브가 종료되었습니다');
       setGcpState('');
+      pollCountRef.current = 0;
+      setPollExhausted(false);
       setLastError(null);
       refetch();
       queryClient.invalidateQueries({ queryKey: ['live-channels'] });

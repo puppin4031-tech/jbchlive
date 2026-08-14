@@ -29,6 +29,7 @@ const MyChannelPage = () => {
       return data;
     },
     enabled: !!user,
+    staleTime: 60_000,
   });
 
   const { data: sermons } = useQuery({

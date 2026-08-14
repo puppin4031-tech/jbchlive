@@ -72,9 +72,8 @@ const Index = () => {
       if (error) throw error;
       return data;
     },
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
-    staleTime: 0,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
   });
 
   // Fetch live sermons (for metadata)
@@ -89,9 +88,8 @@ const Index = () => {
       if (error) throw error;
       return data;
     },
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
-    staleTime: 0,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
   });
 
   // Fetch VOD sermons with channel info
@@ -142,9 +140,8 @@ const Index = () => {
       if (error) throw error;
       return data;
     },
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
-    staleTime: 0,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
   });
 
   const playableLiveChannels = (liveChannels || []).filter(isPlayableLiveChannel);

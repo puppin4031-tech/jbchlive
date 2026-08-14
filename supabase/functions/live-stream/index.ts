@@ -1615,14 +1615,66 @@ serve(async (req) => {
         // Per-viewer rate limit (4/min)
         checkRateLimit(viewerKey, "viewerHeartbeat");
 
+        // first_seen_at is intentionally omitted so it is only set on INSERT.
         await serviceClient.from("viewer_presence").upsert(
           { channel_id: cid, viewer_key: viewerKey, last_seen_at: new Date().toISOString() },
           { onConflict: "channel_id,viewer_key" },
         );
-        return new Response(JSON.stringify({ ok: true }), {
+
+        // === Live analytics sync (current / peak / average watch time) ===
+        let stats = { currentViewers: 0, peakViewers: 0, avgWatchSeconds: 0 };
+        try {
+          const { data: ch } = await serviceClient
+            .from("channels")
+            .select("is_live, peak_viewers")
+            .eq("id", cid)
+            .maybeSingle();
+
+          if (ch?.is_live) {
+            const activeCutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+            const { data: active } = await serviceClient
+              .from("viewer_presence")
+              .select("first_seen_at, last_seen_at")
+              .eq("channel_id", cid)
+              .gte("last_seen_at", activeCutoff);
+
+            const rows = (active ?? []) as { first_seen_at: string; last_seen_at: string }[];
+            const current = rows.length;
+            const peak = Math.max((ch.peak_viewers as number) ?? 0, current);
+            const avgWatch = current > 0
+              ? Math.round(
+                rows.reduce(
+                  (sum, r) =>
+                    sum +
+                    Math.max(
+                      0,
+                      (new Date(r.last_seen_at).getTime() - new Date(r.first_seen_at).getTime()) / 1000,
+                    ),
+                  0,
+                ) / current,
+              )
+              : 0;
+
+            await serviceClient
+              .from("channels")
+              .update({
+                current_viewers: current,
+                peak_viewers: peak,
+                avg_watch_seconds: avgWatch,
+              })
+              .eq("id", cid);
+
+            stats = { currentViewers: current, peakViewers: peak, avgWatchSeconds: avgWatch };
+          }
+        } catch (e) {
+          console.warn("viewer stats sync failed", e);
+        }
+
+        return new Response(JSON.stringify({ ok: true, ...stats }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
 
       if (action === "getPublicLiveStatus") {
         const { channelId: cid } = body as { channelId?: string };
@@ -1979,8 +2031,27 @@ serve(async (req) => {
       case "getStatus": {
         if (!channelId) throw new Error("channelId required");
         const { gcpChannelId } = await resolveGcpIds(user.serviceClient, channelId);
-        const gcpCh = await getChannelGCP(gcpChannelId);
+        // Fail-fast: if GCP is unreachable/misconfigured, return the last known
+        // DB state immediately instead of retrying and re-booting this function.
+        const gcpCh = await getChannelGCP(gcpChannelId).catch((e) => {
+          console.error("getStatus: GCP unreachable", e);
+          return null;
+        });
+        if (!gcpCh) {
+          const { data: fallback } = await user.serviceClient
+            .from("channels")
+            .select("gcp_channel_state, stream_url")
+            .eq("id", channelId)
+            .maybeSingle();
+          result = {
+            streamingState: (fallback?.gcp_channel_state as string | null) ?? "UNKNOWN",
+            streamUrl: (fallback?.stream_url as string | null) ?? null,
+            gcpUnavailable: true,
+          };
+          break;
+        }
         const state = gcpCh.streamingState || "UNKNOWN";
+
         const ops = await listChannelOperations(gcpChannelId).catch((e) => {
           console.warn("listChannelOperations failed", e);
           return [] as GcpOperation[];

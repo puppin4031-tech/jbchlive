@@ -18,16 +18,20 @@ function getOrCreateViewerKey(): string {
 }
 
 /**
- * Sends a viewer heartbeat to the live-stream edge function every 5 minutes
- * while a live stream is active. Used by the server to sample concurrent
- * viewer counts for channel history (live_sessions).
+ * Sends a viewer heartbeat to the live-stream edge function every 60 seconds
+ * while a live stream is active. The backend uses these beats to compute
+ * current viewers, peak viewers and average watch time.
+ *
+ * Only runs while `isLive === true` — no traffic when the stream is offline.
  */
 export const useViewerHeartbeat = (channelId: string | undefined, isLive: boolean) => {
   useEffect(() => {
     if (!channelId || !isLive) return;
     const viewerKey = getOrCreateViewerKey();
+    let stopped = false;
 
     const beat = () => {
+      if (stopped) return;
       supabase.functions
         .invoke('live-stream', {
           body: { action: 'viewerHeartbeat', channelId, viewerKey },
@@ -38,7 +42,11 @@ export const useViewerHeartbeat = (channelId: string | undefined, isLive: boolea
     };
 
     beat();
-    const id = setInterval(beat, 300_000);
-    return () => clearInterval(id);
+    const id = setInterval(beat, 60_000);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
   }, [channelId, isLive]);
 };
+
