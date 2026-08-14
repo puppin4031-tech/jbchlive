@@ -22,6 +22,9 @@ export type BroadcastPhase =
   | 'error';
 
 const POLL_INTERVAL_MS = 5000;
+/** Hard fail-safe: stop polling after 36 attempts (~3 minutes). */
+const MAX_POLL_ATTEMPTS = 36;
+
 
 export const useBroadcasterChannel = () => {
   const { user } = useAuth();
