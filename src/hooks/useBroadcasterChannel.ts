@@ -160,6 +160,8 @@ export const useBroadcasterChannel = () => {
     onSuccess: () => {
       setGcpState('STARTING');
       setPollAttempts(0);
+      pollCountRef.current = 0;
+      setPollExhausted(false);
       setLastError(null);
       refetch();
       queryClient.invalidateQueries({ queryKey: ['live-channels'] });
@@ -180,6 +182,8 @@ export const useBroadcasterChannel = () => {
     onSuccess: () => {
       toast.success('라이브가 종료되었습니다');
       setGcpState('');
+      pollCountRef.current = 0;
+      setPollExhausted(false);
       setLastError(null);
       refetch();
       queryClient.invalidateQueries({ queryKey: ['live-channels'] });
