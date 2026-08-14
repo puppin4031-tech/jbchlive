@@ -44,6 +44,7 @@ const ChannelPage = () => {
       return data;
     },
     enabled: !!channelId,
+    staleTime: 60_000,
   });
 
   const { data: sermons, isLoading: sermonsLoading } = useQuery({

@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Header from '@/components/Header';
 import VideoPlayer from '@/components/VideoPlayer';
 import SermonCard from '@/components/SermonCard';
@@ -13,6 +13,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { isPlayableLiveChannel, isPreparingLiveChannel } from '@/lib/livePlayback';
 import { getPublicLiveStatus } from '@/lib/liveStreamApi';
+
+const MAX_STATUS_POLLS = 36;
 
 const LivePage = () => {
   const { channelId } = useParams();
@@ -79,9 +81,20 @@ const LivePage = () => {
   const viewerCount = useViewerCount(channelId, !!channel?.is_live);
   useViewerHeartbeat(channelId, !!channel?.is_live);
 
+  const statusAttemptsRef = useRef(0);
+  const [statusPollExhausted, setStatusPollExhausted] = useState(false);
+
+  useEffect(() => {
+    if (!channel?.is_live) {
+      statusAttemptsRef.current = 0;
+      setStatusPollExhausted(false);
+    }
+  }, [channel?.is_live]);
+
   useQuery({
     queryKey: ['public-live-status', channelId],
     queryFn: async () => {
+      statusAttemptsRef.current += 1;
       const status = await getPublicLiveStatus(channelId!);
       if (status.streamUrl || status.streamingState) {
         queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
@@ -90,10 +103,22 @@ const LivePage = () => {
       }
       return status;
     },
-    enabled: !!channelId && !!channel?.is_live && (!channel?.stream_url || isPreparingLiveChannel(channel)),
-    refetchInterval: (query) => query.state.data?.streamUrl ? false : 5000,
-    refetchOnWindowFocus: true,
-    retry: 2,
+    enabled:
+      !!channelId &&
+      !!channel?.is_live &&
+      !statusPollExhausted &&
+      (!channel?.stream_url || isPreparingLiveChannel(channel)),
+    // Fail-safe: stop polling after 36 attempts (~3 minutes).
+    refetchInterval: (query) => {
+      if (query.state.data?.streamUrl) return false;
+      if (statusAttemptsRef.current >= MAX_STATUS_POLLS) {
+        setStatusPollExhausted(true);
+        return false;
+      }
+      return 5000;
+    },
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   // Update document title for sharing
