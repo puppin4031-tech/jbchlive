@@ -75,20 +75,8 @@ const Index = () => {
     };
   }, [queryClient]);
 
-  // Fetch live sermons (for metadata)
-  const { data: liveSermons } = useQuery({
-    queryKey: ['live-sermons-home'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('sermons')
-        .select(SERMON_FIELDS)
-        .eq('is_live', true)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-    staleTime: 60_000,
-  });
+
+
 
   // Fetch VOD sermons with channel info
   const { data: vodSermons, isLoading: vodsLoading } = useQuery({
