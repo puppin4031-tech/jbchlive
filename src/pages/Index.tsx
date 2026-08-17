@@ -21,8 +21,20 @@ const Index = () => {
   const queryClient = useQueryClient();
   const alertTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
-  // Realtime: listen for channels going live
+  // Realtime: listen for channels going live.
+  // Only react to real is_live transitions — viewer-count/stat updates on the
+  // same row must not trigger a full home refetch.
   useEffect(() => {
+    let invalidateTimer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleInvalidate = () => {
+      if (invalidateTimer) return;
+      invalidateTimer = setTimeout(() => {
+        invalidateTimer = undefined;
+        queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+        queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
+      }, 1000);
+    };
+
     const channel = supabase
       .channel('home-live-alerts')
       .on(
@@ -36,12 +48,9 @@ const Index = () => {
         (payload) => {
           const newRow = (payload.new ?? {}) as any;
           const oldRow = (payload.old ?? {}) as any;
-          // Always invalidate on any channel update — UI relies on fresh state
-          queryClient.invalidateQueries({ queryKey: ['live-channels'] });
-          queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
-          queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
-          // Show alert only on false/undefined → true transition
-          if (newRow.is_live === true && oldRow.is_live !== true) {
+          if (newRow.is_live === oldRow.is_live) return; // ignore stat-only updates
+          scheduleInvalidate();
+          if (newRow.is_live === true) {
             setLiveAlert({
               id: newRow.id,
               name: newRow.name,
@@ -56,25 +65,10 @@ const Index = () => {
 
     return () => {
       supabase.removeChannel(channel);
+      if (invalidateTimer) clearTimeout(invalidateTimer);
       if (alertTimeoutRef.current) clearTimeout(alertTimeoutRef.current);
     };
   }, [queryClient]);
-
-  // Fetch live channels
-  const { data: liveChannels } = useQuery({
-    queryKey: ['live-channels'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('channels')
-        .select('*')
-        .eq('is_live', true)
-        .eq('is_approved', true);
-      if (error) throw error;
-      return data;
-    },
-    refetchOnWindowFocus: false,
-    staleTime: 60_000,
-  });
 
   // Fetch live sermons (for metadata)
   const { data: liveSermons } = useQuery({
@@ -82,13 +76,12 @@ const Index = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('sermons')
-        .select('*, channels!inner(name, logo_url)')
+        .select(SERMON_FIELDS)
         .eq('is_live', true)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data;
     },
-    refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
 
@@ -98,7 +91,7 @@ const Index = () => {
     queryFn: async () => {
       let query = supabase
         .from('sermons')
-        .select('*, channels!inner(name, logo_url)')
+        .select(SERMON_FIELDS)
         .eq('is_live', false)
         .order('sermon_date', { ascending: false })
         .limit(12);
@@ -109,30 +102,17 @@ const Index = () => {
       if (error) throw error;
       return data;
     },
+    staleTime: 60_000,
   });
 
-  // Fetch approved channels
-  const { data: channels } = useQuery({
-    queryKey: ['channels-home'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('channels')
-        .select('*')
-        .eq('is_approved', true)
-        .order('subscriber_count', { ascending: false })
-        .limit(6);
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Fetch ALL approved channels for permanent live links strip
+  // Single channel fetch powers both the permanent link strip, the live strip
+  // and the channel grid (previously three separate requests).
   const { data: allChannels } = useQuery({
     queryKey: ['all-approved-channels'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('channels')
-        .select('id, name, logo_url, is_live')
+        .select('id, name, description, logo_url, is_live, subscriber_count, stream_url, gcp_channel_state')
         .eq('is_approved', true)
         .eq('is_suspended', false)
         .order('is_live', { ascending: false })
@@ -140,11 +120,15 @@ const Index = () => {
       if (error) throw error;
       return data;
     },
-    refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
 
-  const playableLiveChannels = (liveChannels || []).filter(isPlayableLiveChannel);
+  const channels = useMemo(() => (allChannels || []).slice(0, 6), [allChannels]);
+  const playableLiveChannels = useMemo(
+    () => (allChannels || []).filter((ch: any) => ch.is_live).filter(isPlayableLiveChannel),
+    [allChannels]
+  );
+
 
   const mapSermon = (s: any): SermonCardData => ({
     id: s.id,
