@@ -25,6 +25,11 @@ import SupportTicketPage from "./pages/SupportTicketPage.tsx";
 import YouTubeCallbackPage from "./pages/YouTubeCallbackPage.tsx";
 import PricingPage from "./pages/PricingPage.tsx";
 import OAuthConsent from "./pages/OAuthConsent.tsx";
+import CommunityPage from "./pages/CommunityPage.tsx";
+import CommunityCategoryPage from "./pages/CommunityCategoryPage.tsx";
+import CommunityPostPage from "./pages/CommunityPostPage.tsx";
+import CommunityWritePage from "./pages/CommunityWritePage.tsx";
+
 import FloatingBroadcasterDock from "@/components/broadcaster/FloatingBroadcasterDock";
 import { useEffect } from "react";
 import { setupSecurityMonitoring } from "@/lib/security";
