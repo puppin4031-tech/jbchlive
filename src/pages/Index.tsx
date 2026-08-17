@@ -35,7 +35,7 @@ const Index = () => {
       if (invalidateTimer) return;
       invalidateTimer = setTimeout(() => {
         invalidateTimer = undefined;
-        queryClient.invalidateQueries({ queryKey: ['live-sermons-home'] });
+        queryClient.invalidateQueries({ queryKey: ['vod-sermons-home'] });
         queryClient.invalidateQueries({ queryKey: ['all-approved-channels'] });
       }, 1000);
     };
