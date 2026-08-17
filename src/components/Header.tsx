@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, Radio, X, Heart, LogIn, LogOut, Shield, User, PlusCircle, Tv, MessageSquare, Bell } from 'lucide-react';
+import { Search, Radio, X, Heart, LogIn, LogOut, Shield, User, Users, PlusCircle, Tv, MessageSquare, Bell } from 'lucide-react';
 import logoImage from '@/assets/logo.png';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -56,12 +56,22 @@ const Header = () => {
             {searchOpen ? <X className="w-7 h-7" /> : <Search className="w-7 h-7" />}
           </Button>
 
+          {user && (
+            <Link to="/community" className="hidden sm:block">
+              <Button variant="ghost" className="text-base md:text-xs font-semibold h-12 md:h-8 px-4 md:px-3">
+                <Users className="w-5 h-5 md:w-3.5 md:h-3.5 mr-2 md:mr-1" />
+                커뮤니티
+              </Button>
+            </Link>
+          )}
+
           <Link to="/live">
             <Button className="bg-live text-live-foreground hover:bg-live/90 text-base md:text-xs font-semibold px-6 py-3 h-12 md:h-8 md:px-3">
               <Radio className="w-5 h-5 md:w-3.5 md:h-3.5 mr-2 md:mr-1" />
               LIVE
             </Button>
           </Link>
+
 
           {user && <NotificationBell />}
 
@@ -85,9 +95,13 @@ const Header = () => {
                 <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/subscriptions')}>
                   <Bell className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 구독
                 </DropdownMenuItem>
+                <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/community')}>
+                  <Users className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 커뮤니티
+                </DropdownMenuItem>
                 <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/favorites')}>
                   <Heart className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 즐겨찾기
                 </DropdownMenuItem>
+
                 <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/my-channel')}>
                   <Tv className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 내 채널
                 </DropdownMenuItem>

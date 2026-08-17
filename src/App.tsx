@@ -25,6 +25,11 @@ import SupportTicketPage from "./pages/SupportTicketPage.tsx";
 import YouTubeCallbackPage from "./pages/YouTubeCallbackPage.tsx";
 import PricingPage from "./pages/PricingPage.tsx";
 import OAuthConsent from "./pages/OAuthConsent.tsx";
+import CommunityPage from "./pages/CommunityPage.tsx";
+import CommunityCategoryPage from "./pages/CommunityCategoryPage.tsx";
+import CommunityPostPage from "./pages/CommunityPostPage.tsx";
+import CommunityWritePage from "./pages/CommunityWritePage.tsx";
+
 import FloatingBroadcasterDock from "@/components/broadcaster/FloatingBroadcasterDock";
 import { useEffect } from "react";
 import { setupSecurityMonitoring } from "@/lib/security";
@@ -82,9 +87,25 @@ const App = () => (
               <Route path="/my-channel" element={
                 <ProtectedRoute><MyChannelPage /></ProtectedRoute>
               } />
+              <Route path="/community" element={
+                <ProtectedRoute><CommunityPage /></ProtectedRoute>
+              } />
+              <Route path="/community/write" element={
+                <ProtectedRoute><CommunityWritePage /></ProtectedRoute>
+              } />
+              <Route path="/community/category/:slug" element={
+                <ProtectedRoute><CommunityCategoryPage /></ProtectedRoute>
+              } />
+              <Route path="/community/:postId" element={
+                <ProtectedRoute><CommunityPostPage /></ProtectedRoute>
+              } />
+              <Route path="/community/:postId/edit" element={
+                <ProtectedRoute><CommunityWritePage /></ProtectedRoute>
+              } />
               <Route path="/support" element={
                 <ProtectedRoute><SupportPage /></ProtectedRoute>
               } />
+
               <Route path="/support/:ticketId" element={
                 <ProtectedRoute><SupportTicketPage /></ProtectedRoute>
               } />
