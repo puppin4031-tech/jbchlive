@@ -41,6 +41,10 @@ const SermonCard = ({ sermon, compact = false }: SermonCardProps) => {
     const ytId = extractYouTubeId(sermon.videoUrl);
     if (ytId) thumbnail = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
   }
+  // Request card-sized Drive thumbnails instead of full-width originals.
+  if (thumbnail?.includes('drive.google.com/thumbnail')) {
+    thumbnail = thumbnail.replace(/sz=w\d+/, 'sz=w640');
+  }
 
   return (
     <div className="group block relative">
@@ -51,7 +55,9 @@ const SermonCard = ({ sermon, compact = false }: SermonCardProps) => {
             alt={sermon.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
+            decoding="async"
           />
+
           {sermon.isLive ? (
             <span className="absolute top-2 left-2 flex items-center gap-1 bg-live text-live-foreground text-base md:text-xs font-bold px-2.5 py-1 rounded-md">
               <Radio className="w-5 h-5 md:w-3 md:h-3 animate-pulse" /> LIVE
@@ -64,7 +70,7 @@ const SermonCard = ({ sermon, compact = false }: SermonCardProps) => {
         </div>
         <div className="mt-3 md:mt-2 flex gap-3 md:gap-2 pr-8">
           {sermon.channelLogoUrl && (
-            <img src={sermon.channelLogoUrl} alt={sermon.channelName || ''} className="w-12 h-12 md:w-8 md:h-8 rounded-full object-cover shrink-0 mt-0.5" />
+            <img src={sermon.channelLogoUrl} alt={sermon.channelName || ''} loading="lazy" decoding="async" className="w-12 h-12 md:w-8 md:h-8 rounded-full object-cover shrink-0 mt-0.5" />
           )}
           <div className="min-w-0">
             <h3 className="font-medium text-lg md:text-sm text-foreground line-clamp-2 leading-snug">{sermon.title}</h3>
