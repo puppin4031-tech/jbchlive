@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
@@ -14,6 +14,11 @@ import { isPlayableLiveChannel } from '@/lib/livePlayback';
 import defaultThumbnail from '@/assets/default-thumbnail.png';
 
 const categories = ['전체', '주일말씀', '수요말씀', '특별집회'];
+
+// Only the columns the home cards actually render.
+const SERMON_FIELDS =
+  'id, title, preacher, category, thumbnail_url, video_url, sermon_date, view_count, is_live, duration, channel_id, created_at, channels!inner(name, logo_url)';
+
 
 const Index = () => {
   const [activeCategory, setActiveCategory] = useState('전체');
