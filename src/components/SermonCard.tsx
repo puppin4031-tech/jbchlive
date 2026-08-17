@@ -41,10 +41,9 @@ const SermonCard = ({ sermon, compact = false }: SermonCardProps) => {
     const ytId = extractYouTubeId(sermon.videoUrl);
     if (ytId) thumbnail = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
   }
-  // Request card-sized Drive thumbnails instead of full-width originals.
-  if (thumbnail?.includes('drive.google.com/thumbnail')) {
-    thumbnail = thumbnail.replace(/sz=w\d+/, 'sz=w640');
-  }
+  // Drive thumbnails only serve reliably at their original size parameter,
+  // so keep the URL as-is.
+
 
   return (
     <div className="group block relative">
