@@ -1213,14 +1213,25 @@ serve(async (req) => {
     // === Cron-triggered actions ===
     if (CRON_ACTIONS.has(action)) {
       const cronSecret = req.headers.get("x-cron-secret");
-      const expected = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-      if (!cronSecret || cronSecret !== expected) {
-        throw new Error("Unauthorized");
-      }
       const serviceClient = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
       );
+      if (!cronSecret) throw new Error("Unauthorized");
+      const envSecrets = [
+        Deno.env.get("CRON_SECRET"),
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+      ].filter(Boolean) as string[];
+      let cronAuthorized = envSecrets.includes(cronSecret);
+      if (!cronAuthorized) {
+        // Vault-backed secret (pg_cron reads the same value from the vault)
+        const { data: ok } = await serviceClient.rpc("verify_cron_secret", {
+          _secret: cronSecret,
+        });
+        cronAuthorized = ok === true;
+      }
+      if (!cronAuthorized) throw new Error("Unauthorized");
+
 
       // Helper: stop a single channel (idempotent)
       const stopOne = async (channelId: string, reason?: string, endReason: string = "auto") => {
