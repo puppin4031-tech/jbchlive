@@ -1285,9 +1285,10 @@ serve(async (req) => {
           .eq("is_live", true);
 
         // Hard policy caps (Layer 3 watchdog): non-configurable per requirement
-        const HARD_MAX_MINUTES = 300;         // 5 hours absolute cap
-        const LOW_VIEWER_MAX_MINUTES = 50;    // <= threshold for 50 min → force stop
-        const HARD_LOW_VIEWER_THRESHOLD = 2;
+        const HARD_MAX_MINUTES = 180;         // 3 hours absolute cap
+        const LOW_VIEWER_MAX_MINUTES = 20;    // <= threshold for 20 min → force stop
+        const HARD_LOW_VIEWER_THRESHOLD = 1;
+
         const BROADCASTER_STALE_MINUTES = 3;  // Layer 1 heartbeat-based
 
         const stopped: string[] = [];
