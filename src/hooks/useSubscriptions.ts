@@ -41,9 +41,12 @@ export const useSubscriptions = () => {
     },
     onSuccess: (_data, channelId) => {
       queryClient.invalidateQueries({ queryKey: ['subscriptions', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['subscribed-channels'] });
+      queryClient.invalidateQueries({ queryKey: ['subscribed-sermons'] });
       queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
       queryClient.invalidateQueries({ queryKey: ['channels-home'] });
     },
+
   });
 
   return { subscriptions, isSubscribed, toggleSubscription };
