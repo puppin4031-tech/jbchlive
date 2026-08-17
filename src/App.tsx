@@ -87,9 +87,25 @@ const App = () => (
               <Route path="/my-channel" element={
                 <ProtectedRoute><MyChannelPage /></ProtectedRoute>
               } />
+              <Route path="/community" element={
+                <ProtectedRoute><CommunityPage /></ProtectedRoute>
+              } />
+              <Route path="/community/write" element={
+                <ProtectedRoute><CommunityWritePage /></ProtectedRoute>
+              } />
+              <Route path="/community/category/:slug" element={
+                <ProtectedRoute><CommunityCategoryPage /></ProtectedRoute>
+              } />
+              <Route path="/community/:postId" element={
+                <ProtectedRoute><CommunityPostPage /></ProtectedRoute>
+              } />
+              <Route path="/community/:postId/edit" element={
+                <ProtectedRoute><CommunityWritePage /></ProtectedRoute>
+              } />
               <Route path="/support" element={
                 <ProtectedRoute><SupportPage /></ProtectedRoute>
               } />
+
               <Route path="/support/:ticketId" element={
                 <ProtectedRoute><SupportTicketPage /></ProtectedRoute>
               } />
