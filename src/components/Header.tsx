@@ -95,9 +95,13 @@ const Header = () => {
                 <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/subscriptions')}>
                   <Bell className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 구독
                 </DropdownMenuItem>
+                <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/community')}>
+                  <Users className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 커뮤니티
+                </DropdownMenuItem>
                 <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/favorites')}>
                   <Heart className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 즐겨찾기
                 </DropdownMenuItem>
+
                 <DropdownMenuItem className="py-4 md:py-2 text-lg md:text-sm" onClick={() => navigate('/my-channel')}>
                   <Tv className="w-6 h-6 md:w-4 md:h-4 mr-4 md:mr-2" /> 내 채널
                 </DropdownMenuItem>
