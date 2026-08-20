@@ -1257,9 +1257,10 @@ serve(async (req) => {
           await stopChannelGCP(gcpChannelId);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          if (!msg.includes("FAILED_PRECONDITION") && !msg.includes("not running")) {
+          if (!force && !msg.includes("FAILED_PRECONDITION") && !msg.includes("not running")) {
             throw e;
           }
+          if (force) console.warn(`force stop GCP error for ${channelId}:`, msg);
         }
         await serviceClient
           .from("channels")
