@@ -87,9 +87,15 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
   const elapsed = isLive ? formatElapsed(channel.live_started_at, now) : null;
   const canStop = phase === 'awaiting-input' || phase === 'streaming';
 
-  const handleStartClick = () => {
+  const handleStartClick = () => setNoticeOpen(true);
+
+  const handleConfirmStart = () => {
     startLive.mutate(undefined, {
-      onSuccess: () => setStartDialogOpen(true),
+      onSuccess: () => {
+        setNoticeOpen(false);
+        setStartDialogOpen(true);
+      },
+      onError: () => setNoticeOpen(false),
     });
   };
 
