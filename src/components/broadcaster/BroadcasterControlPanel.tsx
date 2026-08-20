@@ -65,6 +65,7 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
   const { data: rtmpUri } = useChannelRtmp(channel?.id);
   const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [noticeOpen, setNoticeOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   const isLive = phase === 'streaming' || phase === 'awaiting-input' || phase === 'starting';
