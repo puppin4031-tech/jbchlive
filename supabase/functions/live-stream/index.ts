@@ -1315,9 +1315,39 @@ serve(async (req) => {
           const state = gcpCh?.streamingState;
 
           // STARTING is a valid GCP warm-up phase and can take several minutes.
-          // Never auto-stop it: a stop request during STARTING can interrupt the
-          // start LRO and leave the channel unable to accept OBS input.
+          // Skip it — a stop during STARTING can interrupt the start LRO.
+          // Exception: once past the 180-minute hard cap the channel is stuck,
+          // so force-stop it anyway (GCP best effort + DB always offline).
           if (state === "STARTING") {
+            if (elapsedMin >= HARD_MAX_MINUTES) {
+              try {
+                await stopOne(
+                  ch.id,
+                  `자동 종료: 최대 방송 시간 ${HARD_MAX_MINUTES}분 초과 (STARTING 고착)`,
+                  "auto_max_duration",
+                  true,
+                );
+                stopped.push(ch.id);
+              } catch (e) {
+                console.error("autoStop(hard-cap/STARTING) error for", ch.id, e);
+                // Last resort: force DB offline so billing/UI never stays live.
+                await serviceClient
+                  .from("channels")
+                  .update({
+                    is_live: false,
+                    gcp_channel_state: "STOPPED",
+                    stream_url: null,
+                    current_viewers: 0,
+                    low_viewer_since: null,
+                    broadcaster_last_seen_at: null,
+                    gcp_last_error: `자동 종료: 최대 방송 시간 ${HARD_MAX_MINUTES}분 초과 (STARTING 고착)`,
+                  })
+                  .eq("id", ch.id);
+                await closeLiveSession(serviceClient, ch.id, "auto_max_duration");
+                stopped.push(ch.id);
+              }
+              continue;
+            }
             await serviceClient
               .from("channels")
               .update({ gcp_channel_state: state })
