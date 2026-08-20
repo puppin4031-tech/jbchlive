@@ -1,3 +1,4 @@
+import Seo from '@/components/Seo';
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -46,6 +47,11 @@ const LiveListPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Seo
+        title="실시간 생방송"
+        description="지금 진행 중인 예배 실시간 생방송 목록입니다. 원하는 채널을 선택해 바로 시청하세요."
+        path="/live"
+      />
       <Header />
       <main className="container px-4 py-4 max-w-4xl mx-auto space-y-4">
         <div className="flex items-center gap-2">

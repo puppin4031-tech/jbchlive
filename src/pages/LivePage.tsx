@@ -1,3 +1,4 @@
+import Seo from '@/components/Seo';
 import { useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -200,6 +201,12 @@ const LivePage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Seo
+        title={channel ? `${channel.name} 실시간 생방송` : "실시간 생방송"}
+        description={channel?.description || `${channel?.name ?? ""} 채널의 실시간 예배 생방송입니다.`}
+        path={`/live/${channel?.id ?? ""}`}
+        image={channel?.logo_url || undefined}
+      />
       <Header />
       <main className="container px-4 py-4 max-w-4xl mx-auto space-y-4">
         {/* Live or Offline Player Area */}

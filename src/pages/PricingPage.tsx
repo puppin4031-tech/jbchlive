@@ -1,3 +1,4 @@
+import Seo from '@/components/Seo';
 import Header from '@/components/Header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,11 @@ const PricingPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Seo
+        title="요금제 안내"
+        description="교회 라이브 스트리밍 요금제 안내. 채널 규모에 맞는 방송 플랜을 확인해 보세요."
+        path="/pricing"
+      />
       <Header />
       <main className="container px-4 py-8 max-w-5xl mx-auto space-y-8">
         <header className="text-center space-y-3">

@@ -1,3 +1,4 @@
+import Seo from '@/components/Seo';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Megaphone, ChevronRight, Flame, Loader2 } from 'lucide-react';
@@ -51,6 +52,11 @@ const CommunityPage = () => {
 
   return (
     <div className="min-h-screen bg-background pb-28">
+      <Seo
+        title="커뮤니티"
+        description="공지사항, 미디어 나눔, 자유게시판 등 Live Word Mission 커뮤니티 공간입니다."
+        path="/community"
+      />
       <Header />
 
       <main className="container px-4 py-4 space-y-6">

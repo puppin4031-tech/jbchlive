@@ -1,3 +1,4 @@
+import Seo from '@/components/Seo';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -95,6 +96,21 @@ const VodPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Seo
+        title={sermon.title}
+        description={sermon.description || `${channel?.name ?? "Live Word Mission"}의 설교 영상 "${sermon.title}" 다시보기.`}
+        path={`/vod/${sermon.id}`}
+        image={sermon.thumbnail_url || undefined}
+        type="video.other"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "VideoObject",
+          name: sermon.title,
+          description: sermon.description || sermon.title,
+          thumbnailUrl: sermon.thumbnail_url || undefined,
+          uploadDate: sermon.sermon_date || sermon.created_at,
+        }}
+      />
       <Header />
       <main className="container px-4 py-4 max-w-4xl mx-auto space-y-4">
         <VideoPlayer src={sermon.video_url || ''} poster={sermon.thumbnail_url || undefined} />
