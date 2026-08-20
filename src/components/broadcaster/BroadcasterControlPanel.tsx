@@ -9,6 +9,7 @@ import { Play, Square, Loader2, Settings, AlertTriangle, Radio } from 'lucide-re
 import { useBroadcasterChannel, formatElapsed, type BroadcastPhase } from '@/hooks/useBroadcasterChannel';
 import { useBroadcasterPresence } from '@/hooks/useBroadcasterPresence';
 import StartLiveDialog from './StartLiveDialog';
+import StartLiveNoticeDialog from './StartLiveNoticeDialog';
 import StopLiveDialog from './StopLiveDialog';
 import KeepaliveDialog from './KeepaliveDialog';
 import DisconnectWarning from './DisconnectWarning';
@@ -64,6 +65,7 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
   const { data: rtmpUri } = useChannelRtmp(channel?.id);
   const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [noticeOpen, setNoticeOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   const isLive = phase === 'streaming' || phase === 'awaiting-input' || phase === 'starting';
@@ -85,9 +87,15 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
   const elapsed = isLive ? formatElapsed(channel.live_started_at, now) : null;
   const canStop = phase === 'awaiting-input' || phase === 'streaming';
 
-  const handleStartClick = () => {
+  const handleStartClick = () => setNoticeOpen(true);
+
+  const handleConfirmStart = () => {
     startLive.mutate(undefined, {
-      onSuccess: () => setStartDialogOpen(true),
+      onSuccess: () => {
+        setNoticeOpen(false);
+        setStartDialogOpen(true);
+      },
+      onError: () => setNoticeOpen(false),
     });
   };
 
@@ -180,6 +188,12 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
           </div>
         </Card>
 
+        <StartLiveNoticeDialog
+          open={noticeOpen}
+          onOpenChange={setNoticeOpen}
+          onConfirm={handleConfirmStart}
+          isPending={startLive.isPending}
+        />
         <StartLiveDialog
           open={startDialogOpen}
           onOpenChange={setStartDialogOpen}
@@ -307,6 +321,12 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
         </p>
       </Card>
 
+      <StartLiveNoticeDialog
+        open={noticeOpen}
+        onOpenChange={setNoticeOpen}
+        onConfirm={handleConfirmStart}
+        isPending={startLive.isPending}
+      />
       <StartLiveDialog
         open={startDialogOpen}
         onOpenChange={setStartDialogOpen}
