@@ -1,3 +1,4 @@
+import Seo from '@/components/Seo';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -107,6 +108,12 @@ const ChannelPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Seo
+        title={channel?.name || "채널"}
+        description={channel?.description || `${channel?.name ?? ""} 채널의 예배 생방송과 설교 영상 모음입니다.`}
+        path={`/channel/${channel?.id ?? ""}`}
+        image={channel?.logo_url || undefined}
+      />
       <Header />
       <main className="container px-4 py-4 max-w-4xl mx-auto space-y-5">
         {channel.is_suspended && (

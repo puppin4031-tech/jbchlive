@@ -1,3 +1,4 @@
+import Seo from '@/components/Seo';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -68,6 +69,12 @@ const SearchPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Seo
+        title="검색"
+        description="설교 영상과 채널을 검색해 보세요."
+        path="/search"
+        noindex
+      />
       <Header />
       <main className="container px-4 py-4 max-w-4xl mx-auto space-y-5">
         <div className="flex items-center gap-2 text-foreground">

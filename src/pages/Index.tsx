@@ -1,3 +1,4 @@
+import Seo from '@/components/Seo';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -141,6 +142,11 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Seo
+        title="Live Word Mission 실시간 생방송"
+        description="예수침례교회 실시간 예배 생방송과 설교 영상 다시보기. 언제 어디서나 말씀을 함께합니다."
+        path="/"
+      />
       <Header />
 
       {/* Hero(Live Alert Banner) removed by request */}

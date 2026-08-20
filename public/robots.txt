@@ -12,3 +12,11 @@ Allow: /
 
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /my-channel
+Disallow: /favorites
+Disallow: /subscriptions
+Disallow: /support
+Disallow: /login
+
+Sitemap: https://jbchlive.lovable.app/sitemap.xml

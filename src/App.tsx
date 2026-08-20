@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Suspense, lazy, useEffect } from "react";
+import { HelmetProvider } from "react-helmet-async";
 
 // Home stays eager (it is the entry point); everything else is code-split.
 import Index from "./pages/Index.tsx";
@@ -64,6 +65,7 @@ const SecurityInit = ({ children }: { children: React.ReactNode }) => {
 };
 
 const App = () => (
+  <HelmetProvider>
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
@@ -146,6 +148,7 @@ const App = () => (
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
+  </HelmetProvider>
 );
 
 export default App;
