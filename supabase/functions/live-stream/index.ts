@@ -1233,13 +1233,19 @@ serve(async (req) => {
       if (!cronAuthorized) throw new Error("Unauthorized");
 
 
-      // Helper: stop a single channel (idempotent)
-      const stopOne = async (channelId: string, reason?: string, endReason: string = "auto") => {
+      // Helper: stop a single channel (idempotent).
+      // `force` bypasses the STARTING/STOPPING guard (used by the 180-min hard cap).
+      const stopOne = async (
+        channelId: string,
+        reason?: string,
+        endReason: string = "auto",
+        force = false,
+      ) => {
         const { gcpChannelId } = await resolveGcpIds(serviceClient, channelId);
         const preState = await getChannelGCP(gcpChannelId)
           .then((c) => c.streamingState as string | undefined)
           .catch(() => undefined);
-        if (preState === "STARTING" || preState === "STOPPING") {
+        if (!force && (preState === "STARTING" || preState === "STOPPING")) {
           console.warn(`skip stopOne for ${channelId}: channel is ${preState}`);
           await serviceClient
             .from("channels")
