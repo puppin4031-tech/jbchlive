@@ -188,6 +188,12 @@ const BroadcasterControlPanel = ({ variant = 'inline' }: Props) => {
           </div>
         </Card>
 
+        <StartLiveNoticeDialog
+          open={noticeOpen}
+          onOpenChange={setNoticeOpen}
+          onConfirm={handleConfirmStart}
+          isPending={startLive.isPending}
+        />
         <StartLiveDialog
           open={startDialogOpen}
           onOpenChange={setStartDialogOpen}
