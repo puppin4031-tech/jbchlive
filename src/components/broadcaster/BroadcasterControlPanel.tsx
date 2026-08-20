@@ -9,6 +9,7 @@ import { Play, Square, Loader2, Settings, AlertTriangle, Radio } from 'lucide-re
 import { useBroadcasterChannel, formatElapsed, type BroadcastPhase } from '@/hooks/useBroadcasterChannel';
 import { useBroadcasterPresence } from '@/hooks/useBroadcasterPresence';
 import StartLiveDialog from './StartLiveDialog';
+import StartLiveNoticeDialog from './StartLiveNoticeDialog';
 import StopLiveDialog from './StopLiveDialog';
 import KeepaliveDialog from './KeepaliveDialog';
 import DisconnectWarning from './DisconnectWarning';
