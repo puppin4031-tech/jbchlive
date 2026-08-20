@@ -1389,6 +1389,7 @@ serve(async (req) => {
                 ch.id,
                 `자동 종료: 최대 방송 시간 ${HARD_MAX_MINUTES}분 초과`,
                 "auto_max_duration",
+                true,
               );
               stopped.push(ch.id);
             } catch (e) {
