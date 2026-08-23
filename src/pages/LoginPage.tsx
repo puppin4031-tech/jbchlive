@@ -50,6 +50,9 @@ const LoginPage = () => {
   const handleGoogleLogin = async () => {
     const { error } = await lovable.auth.signInWithOAuth('google', {
       redirect_uri: `${window.location.origin}/login`,
+      // Always show the Google account chooser instead of silently reusing
+      // the most recently signed-in account.
+      extraParams: { prompt: 'select_account' },
     });
     if (error) console.error('Login error:', error);
   };
