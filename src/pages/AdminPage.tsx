@@ -16,6 +16,7 @@ import * as liveApi from '@/lib/liveStreamApi';
 import ActivityTimeline from '@/components/admin/ActivityTimeline';
 import LiveNowPanel from '@/components/admin/LiveNowPanel';
 import ChannelHealthPanel from '@/components/admin/ChannelHealthPanel';
+import ChannelUsagePanel from '@/components/admin/ChannelUsagePanel';
 import { visibleGcpError } from '@/lib/gcpErrorFilter';
 
 const AdminPage = () => {
@@ -245,6 +246,7 @@ const AdminPage = () => {
               라이브 현황 {liveChannels > 0 && <Badge className="bg-live text-live-foreground ml-1 text-xs">{liveChannels}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="channels">전체 채널</TabsTrigger>
+            <TabsTrigger value="usage">사용량/비용</TabsTrigger>
             <TabsTrigger value="activity">활동 이력</TabsTrigger>
             <TabsTrigger value="new">새 채널</TabsTrigger>
           </TabsList>
@@ -254,6 +256,10 @@ const AdminPage = () => {
             <div className="border-t pt-6">
               <ChannelHealthPanel />
             </div>
+          </TabsContent>
+
+          <TabsContent value="usage" className="mt-4">
+            <ChannelUsagePanel />
           </TabsContent>
 
           <TabsContent value="activity" className="mt-4">
