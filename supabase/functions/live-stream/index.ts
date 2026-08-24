@@ -1147,11 +1147,14 @@ const RATE_LIMITS: Record<string, { max: number; windowSec: number }> = {
 };
 
 // Cron-triggered actions: bypass user auth, require x-cron-secret header
+// "tick" runs all four cron tasks in ONE invocation (cost optimization:
+// the pg_cron job only fires when live_tick_needed() returns true).
 const CRON_ACTIONS = new Set([
   "autoStopIdleChannels",
   "scheduledStartChannels",
   "scheduledStopChannels",
   "sampleLiveViewers",
+  "tick",
 ]);
 
 // Public actions: no auth required (used by all viewers, including anonymous)
@@ -1279,7 +1282,10 @@ serve(async (req) => {
       };
 
 
-      if (action === "autoStopIdleChannels") {
+      // Collected results when running as the combined "tick" action.
+      const tickResults: Record<string, unknown> = {};
+
+      if (action === "autoStopIdleChannels" || action === "tick") {
         // (A) Stop channels marked live with no RTMP input (AWAITING_INPUT) > auto_stop_idle_minutes.
         // (B) Long-running + low-viewer keepalive prompt + auto-stop on no response.
         // (C) OBS disconnect detection: once RTMP has streamed, dropping to AWAITING_INPUT
@@ -1549,13 +1555,18 @@ serve(async (req) => {
           }
         }
 
-        return new Response(JSON.stringify({ stopped, prompted, disconnected }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        const autoStopResult = { stopped, prompted, disconnected };
+        if (action === "tick") {
+          tickResults.autoStopIdleChannels = autoStopResult;
+        } else {
+          return new Response(JSON.stringify(autoStopResult), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
 
 
-      if (action === "scheduledStartChannels") {
+      if (action === "scheduledStartChannels" || action === "tick") {
         const nowIso = new Date().toISOString();
         const { data: toStart } = await serviceClient
           .from("channels")
@@ -1608,12 +1619,17 @@ serve(async (req) => {
             failed.push(ch.id);
           }
         }
-        return new Response(JSON.stringify({ started, failed }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        const schedStartResult = { started, failed };
+        if (action === "tick") {
+          tickResults.scheduledStartChannels = schedStartResult;
+        } else {
+          return new Response(JSON.stringify(schedStartResult), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
 
-      if (action === "scheduledStopChannels") {
+      if (action === "scheduledStopChannels" || action === "tick") {
         const nowIso = new Date().toISOString();
         const { data: toStop } = await serviceClient
           .from("channels")
@@ -1635,14 +1651,30 @@ serve(async (req) => {
             console.error("scheduledStop error for", ch.id, e);
           }
         }
-        return new Response(JSON.stringify({ stopped }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        const schedStopResult = { stopped };
+        if (action === "tick") {
+          tickResults.scheduledStopChannels = schedStopResult;
+        } else {
+          return new Response(JSON.stringify(schedStopResult), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
 
-      if (action === "sampleLiveViewers") {
+      if (action === "sampleLiveViewers" || action === "tick") {
         const sampled = await sampleViewerCounts(serviceClient);
-        return new Response(JSON.stringify({ sampled }), {
+        if (action === "tick") {
+          tickResults.sampleLiveViewers = { sampled };
+        } else {
+          return new Response(JSON.stringify({ sampled }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      // Combined cron entry point: all four tasks ran above, return summary.
+      if (action === "tick") {
+        return new Response(JSON.stringify({ ok: true, ...tickResults }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
