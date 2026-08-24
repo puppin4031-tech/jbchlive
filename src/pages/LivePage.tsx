@@ -109,14 +109,15 @@ const LivePage = () => {
       !!channel?.is_live &&
       !statusPollExhausted &&
       (!channel?.stream_url || isPreparingLiveChannel(channel)),
-    // Fail-safe: stop polling after 36 attempts (~3 minutes).
+    // Fail-safe: stop polling after 36 attempts (~18 minutes at 30s).
+    // Realtime channel UPDATE events are the primary signal; this is a backup.
     refetchInterval: (query) => {
       if (query.state.data?.streamUrl) return false;
       if (statusAttemptsRef.current >= MAX_STATUS_POLLS) {
         setStatusPollExhausted(true);
         return false;
       }
-      return 5000;
+      return 30000;
     },
     refetchOnWindowFocus: false,
     retry: false,
