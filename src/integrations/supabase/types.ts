@@ -933,6 +933,7 @@ export type Database = {
         Args: { _sermon_id: string; _user_id: string }
         Returns: boolean
       }
+      live_tick_needed: { Args: never; Returns: boolean }
       verify_cron_secret: { Args: { _secret: string }; Returns: boolean }
     }
     Enums: {

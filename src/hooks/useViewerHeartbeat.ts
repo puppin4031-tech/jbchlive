@@ -32,6 +32,9 @@ export const useViewerHeartbeat = (channelId: string | undefined, isLive: boolea
 
     const beat = () => {
       if (stopped) return;
+      // Skip network calls while the tab is in the background — hidden
+      // viewers shouldn't count as active presence anyway.
+      if (typeof document !== "undefined" && document.hidden) return;
       supabase.functions
         .invoke('live-stream', {
           body: { action: 'viewerHeartbeat', channelId, viewerKey },
