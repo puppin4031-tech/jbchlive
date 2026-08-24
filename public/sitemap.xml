@@ -25,4 +25,14 @@
     <changefreq>weekly</changefreq>
     <priority>0.4</priority>
   </url>
+  <url>
+    <loc>https://jbchlive.lovable.app/vod/decc39a7-fd5e-4759-8dc0-8957fd186bc7</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://jbchlive.lovable.app/vod/933c42c4-d586-49e2-8f62-3f09e5ae6486</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
 </urlset>
