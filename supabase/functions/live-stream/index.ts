@@ -1929,14 +1929,13 @@ serve(async (req) => {
         } else if (manifestStatus?.reason === "NoSuchBucket") {
           playbackBroken = true;
           errorMessage = "HLS 출력 버킷이 없습니다.";
-        } else if (manifestStatus?.reason === "AccessDenied") {
-          // Verify service account can still read → proxy will work
-          const sa = currentUrl ? await inspectManifestWithServiceAccount(currentUrl) : { exists: false };
-          if (!sa.exists && manifestStatus?.status) {
-            playbackBroken = true;
-            errorMessage = "HLS 매니페스트에 서비스 계정도 접근할 수 없습니다.";
-          }
+        } else if (manifestStatus?.reason === "AccessDenied" || manifestStatus?.reason === "BucketNotPublic") {
+          // Direct delivery: viewers fetch from GCS themselves, so a private
+          // bucket means playback is genuinely broken.
+          playbackBroken = true;
+          errorMessage = "HLS 출력 버킷이 공개되어 있지 않아 시청자가 영상을 받을 수 없습니다. 버킷 공개 읽기 권한(allUsers)을 허용해 주세요.";
         }
+
 
         if (playbackBroken) {
           await user.serviceClient
