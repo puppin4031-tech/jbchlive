@@ -299,6 +299,11 @@ function parseGcsHttpsUrl(httpsUrl: string): { bucket: string; objectPath: strin
   }
 }
 
+// Direct delivery is the default: HLS bytes must be served straight from
+// Google Cloud Storage to the browser. The backend proxy is an opt-in
+// emergency fallback only (set HLS_PROXY_ENABLED=true).
+const HLS_PROXY_ENABLED = (Deno.env.get("HLS_PROXY_ENABLED") ?? "false").toLowerCase() === "true";
+
 function liveStreamFunctionBaseUrl(): string {
   return `${Deno.env.get("SUPABASE_URL")!}/functions/v1/live-stream`;
 }
@@ -306,6 +311,7 @@ function liveStreamFunctionBaseUrl(): string {
 function buildHlsProxyUrl(channelUuid: string, objectPath: string): string {
   return `${liveStreamFunctionBaseUrl()}/hls/${channelUuid}/${objectPath.split("/").map(encodeURIComponent).join("/")}`;
 }
+
 
 async function inspectManifestWithServiceAccount(httpsUrl: string): Promise<{
   exists: boolean;
@@ -335,9 +341,13 @@ async function inspectManifestWithServiceAccount(httpsUrl: string): Promise<{
 }
 
 async function proxyHlsRequest(req: Request, channelUuid: string, objectPath: string): Promise<Response> {
+  if (!HLS_PROXY_ENABLED) {
+    return new Response("HLS proxy disabled (direct GCS delivery)", { status: 410, headers: corsHeaders });
+  }
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(channelUuid)) {
     return new Response("Invalid channel", { status: 400, headers: corsHeaders });
   }
+
   if (!objectPath || objectPath.includes("..") || !objectPath.startsWith(`${channelUuid}/`)) {
     return new Response("Invalid HLS path", { status: 400, headers: corsHeaders });
   }
@@ -808,7 +818,7 @@ async function resolvePlayableManifest(
 
   if (!manifestStatus.exists && manifestStatus.reason === "AccessDenied") {
     const serviceStatus = await inspectManifestWithServiceAccount(candidateUrl);
-    if (serviceStatus.exists) {
+    if (serviceStatus.exists && HLS_PROXY_ENABLED) {
       const parsed = parseGcsHttpsUrl(candidateUrl);
       const proxyChannelId = parsed?.objectPath.split("/")[0];
       const proxyUrl = parsed && proxyChannelId ? buildHlsProxyUrl(proxyChannelId, parsed.objectPath) : null;
@@ -819,8 +829,19 @@ async function resolvePlayableManifest(
         manifestStatus: { ...serviceStatus, reason: "ready-via-backend-proxy" },
       };
     }
-    manifestStatus = serviceStatus;
+    if (serviceStatus.exists) {
+      // Direct-delivery mode: the file exists but the bucket is not publicly
+      // readable. Do NOT proxy bytes through the backend (billed egress).
+      manifestStatus = {
+        ...serviceStatus,
+        exists: false,
+        reason: "BucketNotPublic",
+      };
+    } else {
+      manifestStatus = serviceStatus;
+    }
   }
+
 
   return {
     streamUrl: manifestStatus.exists ? candidateUrl : null,
@@ -1908,14 +1929,13 @@ serve(async (req) => {
         } else if (manifestStatus?.reason === "NoSuchBucket") {
           playbackBroken = true;
           errorMessage = "HLS 출력 버킷이 없습니다.";
-        } else if (manifestStatus?.reason === "AccessDenied") {
-          // Verify service account can still read → proxy will work
-          const sa = currentUrl ? await inspectManifestWithServiceAccount(currentUrl) : { exists: false };
-          if (!sa.exists && manifestStatus?.status) {
-            playbackBroken = true;
-            errorMessage = "HLS 매니페스트에 서비스 계정도 접근할 수 없습니다.";
-          }
+        } else if (manifestStatus?.reason === "AccessDenied" || manifestStatus?.reason === "BucketNotPublic") {
+          // Direct delivery: viewers fetch from GCS themselves, so a private
+          // bucket means playback is genuinely broken.
+          playbackBroken = true;
+          errorMessage = "HLS 출력 버킷이 공개되어 있지 않아 시청자가 영상을 받을 수 없습니다. 버킷 공개 읽기 권한(allUsers)을 허용해 주세요.";
         }
+
 
         if (playbackBroken) {
           await user.serviceClient

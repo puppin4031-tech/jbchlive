@@ -18,14 +18,12 @@ type VideoSource =
       type: "google-drive";
       fileId: string;
       embedUrl: string;
-      proxyUrl: string;
+      directUrl: string;
       originalUrl: string;
     }
   | { type: "external-only"; url: string; label: string }
   | { type: "direct"; url: string }
   | { type: "none" };
-
-const DRIVE_PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/drive-proxy`;
 
 function parseVideoSource(src?: string): VideoSource {
   if (!src) return { type: "none" };
@@ -44,7 +42,9 @@ function parseVideoSource(src?: string): VideoSource {
       type: "google-drive",
       fileId: gdMatch[1],
       embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview`,
-      proxyUrl: `${DRIVE_PROXY_BASE}?id=${gdMatch[1]}`,
+      // Served straight from Google — never through our backend, so video
+      // bytes are not billed as Cloud egress.
+      directUrl: `https://drive.usercontent.google.com/download?id=${gdMatch[1]}&export=download`,
       originalUrl: `https://drive.google.com/file/d/${gdMatch[1]}/view`,
     };
   }
@@ -55,6 +55,7 @@ function parseVideoSource(src?: string): VideoSource {
 
   return { type: "direct", url: src };
 }
+
 
 
 interface HlsErrorInfo {
@@ -349,9 +350,9 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
       >
         {useNative ? (
           <CustomVideoPlayer
-            key={source.proxyUrl}
+            key={source.directUrl}
             videoRef={driveVideoRef}
-            src={source.proxyUrl}
+            src={source.directUrl}
             poster={poster}
             autoPlay={autoPlay}
             onError={() => setDriveNativeFailed(true)}
