@@ -808,7 +808,7 @@ async function resolvePlayableManifest(
 
   if (!manifestStatus.exists && manifestStatus.reason === "AccessDenied") {
     const serviceStatus = await inspectManifestWithServiceAccount(candidateUrl);
-    if (serviceStatus.exists) {
+    if (serviceStatus.exists && HLS_PROXY_ENABLED) {
       const parsed = parseGcsHttpsUrl(candidateUrl);
       const proxyChannelId = parsed?.objectPath.split("/")[0];
       const proxyUrl = parsed && proxyChannelId ? buildHlsProxyUrl(proxyChannelId, parsed.objectPath) : null;
@@ -819,8 +819,19 @@ async function resolvePlayableManifest(
         manifestStatus: { ...serviceStatus, reason: "ready-via-backend-proxy" },
       };
     }
-    manifestStatus = serviceStatus;
+    if (serviceStatus.exists) {
+      // Direct-delivery mode: the file exists but the bucket is not publicly
+      // readable. Do NOT proxy bytes through the backend (billed egress).
+      manifestStatus = {
+        ...serviceStatus,
+        exists: false,
+        reason: "BucketNotPublic",
+      };
+    } else {
+      manifestStatus = serviceStatus;
+    }
   }
+
 
   return {
     streamUrl: manifestStatus.exists ? candidateUrl : null,
