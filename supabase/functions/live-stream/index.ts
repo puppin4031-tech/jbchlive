@@ -341,9 +341,13 @@ async function inspectManifestWithServiceAccount(httpsUrl: string): Promise<{
 }
 
 async function proxyHlsRequest(req: Request, channelUuid: string, objectPath: string): Promise<Response> {
+  if (!HLS_PROXY_ENABLED) {
+    return new Response("HLS proxy disabled (direct GCS delivery)", { status: 410, headers: corsHeaders });
+  }
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(channelUuid)) {
     return new Response("Invalid channel", { status: 400, headers: corsHeaders });
   }
+
   if (!objectPath || objectPath.includes("..") || !objectPath.startsWith(`${channelUuid}/`)) {
     return new Response("Invalid HLS path", { status: 400, headers: corsHeaders });
   }
