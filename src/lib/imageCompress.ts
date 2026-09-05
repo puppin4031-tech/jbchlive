@@ -37,7 +37,7 @@ export async function compressImage(file: File, opts: CompressOptions = {}): Pro
     maxWidth = 1280,
     maxHeight = 1280,
     targetBytes = 500 * 1024,
-    initialQuality = 0.82,
+    initialQuality = 0.7,
   } = opts;
 
   const img = await loadImage(file);
@@ -53,7 +53,7 @@ export async function compressImage(file: File, opts: CompressOptions = {}): Pro
   if (!ctx) throw new Error('Canvas 컨텍스트를 가져올 수 없습니다.');
   ctx.drawImage(img, 0, 0, width, height);
 
-  const qualities = [initialQuality, 0.7, 0.6, 0.5, 0.4];
+  const qualities = [initialQuality, 0.6, 0.5, 0.4];
   let last: Blob | null = null;
   for (const q of qualities) {
     const blob = await canvasToBlob(canvas, q);

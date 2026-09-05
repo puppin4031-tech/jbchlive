@@ -45,7 +45,9 @@ export function captureVideoThumbnails(videoUrl: string): Promise<string[]> {
     video.preload = 'auto';
 
     const captures: string[] = [];
-    const percentages = [0.01, 0.25, 0.5, 0.75];
+    // Fixed recommendation points: 3s, 50s, 5min, 20min
+    const FIXED_POINTS = [3, 50, 300, 1200];
+    let timePoints: number[] = [];
     let idx = 0;
 
     const capture = () => {
@@ -63,8 +65,8 @@ export function captureVideoThumbnails(videoUrl: string): Promise<string[]> {
       }
 
       idx++;
-      if (idx < percentages.length) {
-        video.currentTime = video.duration * percentages[idx];
+      if (idx < timePoints.length) {
+        video.currentTime = timePoints[idx];
       } else {
         video.remove();
         resolve(captures);
@@ -75,7 +77,9 @@ export function captureVideoThumbnails(videoUrl: string): Promise<string[]> {
 
     video.addEventListener('loadedmetadata', () => {
       if (video.duration && isFinite(video.duration)) {
-        video.currentTime = video.duration * percentages[0];
+        timePoints = FIXED_POINTS.filter((t) => t < video.duration);
+        if (timePoints.length === 0) timePoints = [video.duration * 0.1];
+        video.currentTime = timePoints[0];
       } else {
         video.remove();
         resolve([]);
