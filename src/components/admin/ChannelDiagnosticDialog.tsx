@@ -54,8 +54,9 @@ const interpretIssues = (d: Diag): { level: 'ok' | 'warn' | 'error'; message: st
     issues.push({ level: 'error', message: `HLS 출력 버킷 조회 실패: ${outputBucket.exists.error}` });
   }
   if (manifestStatus && !manifestStatus.exists) {
-    if (manifestStatus.reason === 'AccessDenied') {
-      issues.push({ level: 'error', message: 'HLS 매니페스트 접근 거부(403): 출력 버킷/객체가 시청자에게 공개되어 있지 않습니다.' });
+    if (manifestStatus.reason === 'AccessDenied' || manifestStatus.reason === 'BucketNotPublic') {
+      issues.push({ level: 'error', message: 'HLS 매니페스트가 시청자에게 공개되어 있지 않습니다. 영상은 구글 저장소에서 직접 전달되므로, 출력 버킷의 공개 읽기 권한(allUsers)이 필요합니다. 조직 정책(Domain Restricted Sharing)이 이를 막고 있다면 해당 정책을 해제해야 합니다.' });
+
     } else if (manifestStatus.reason === 'NoSuchBucket') {
       issues.push({ level: 'error', message: 'HLS 매니페스트 버킷 없음(404): 출력 버킷 생성 또는 GCP 출력 경로 설정이 필요합니다.' });
     } else {
