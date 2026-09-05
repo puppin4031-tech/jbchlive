@@ -350,9 +350,9 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
       >
         {useNative ? (
           <CustomVideoPlayer
-            key={source.proxyUrl}
+            key={source.directUrl}
             videoRef={driveVideoRef}
-            src={source.proxyUrl}
+            src={source.directUrl}
             poster={poster}
             autoPlay={autoPlay}
             onError={() => setDriveNativeFailed(true)}
