@@ -77,7 +77,9 @@ export function captureVideoThumbnails(videoUrl: string): Promise<string[]> {
 
     video.addEventListener('loadedmetadata', () => {
       if (video.duration && isFinite(video.duration)) {
-        video.currentTime = video.duration * percentages[0];
+        timePoints = FIXED_POINTS.filter((t) => t < video.duration);
+        if (timePoints.length === 0) timePoints = [video.duration * 0.1];
+        video.currentTime = timePoints[0];
       } else {
         video.remove();
         resolve([]);
