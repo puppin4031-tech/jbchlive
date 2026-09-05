@@ -299,6 +299,11 @@ function parseGcsHttpsUrl(httpsUrl: string): { bucket: string; objectPath: strin
   }
 }
 
+// Direct delivery is the default: HLS bytes must be served straight from
+// Google Cloud Storage to the browser. The backend proxy is an opt-in
+// emergency fallback only (set HLS_PROXY_ENABLED=true).
+const HLS_PROXY_ENABLED = (Deno.env.get("HLS_PROXY_ENABLED") ?? "false").toLowerCase() === "true";
+
 function liveStreamFunctionBaseUrl(): string {
   return `${Deno.env.get("SUPABASE_URL")!}/functions/v1/live-stream`;
 }
@@ -306,6 +311,7 @@ function liveStreamFunctionBaseUrl(): string {
 function buildHlsProxyUrl(channelUuid: string, objectPath: string): string {
   return `${liveStreamFunctionBaseUrl()}/hls/${channelUuid}/${objectPath.split("/").map(encodeURIComponent).join("/")}`;
 }
+
 
 async function inspectManifestWithServiceAccount(httpsUrl: string): Promise<{
   exists: boolean;
