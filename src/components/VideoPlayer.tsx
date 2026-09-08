@@ -110,16 +110,8 @@ function getHlsErrorTarget(data: ErrorData) {
 
 const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const driveVideoRef = useRef<HTMLVideoElement>(null);
   const source = useMemo(() => parseVideoSource(src), [src]);
   const [error, setError] = useState<HlsErrorInfo | null>(null);
-  
-  // Mobile: try the native <video> first (Drive /preview iframe is unreliable
-  // on mobile browsers). Fall back to the iframe when direct playback fails.
-  const [driveNativeFailed, setDriveNativeFailed] = useState(false);
-  useEffect(() => {
-    setDriveNativeFailed(false);
-  }, [src]);
 
   // Recompute layout after rotation only (not on every visualViewport resize,
   // which fires while the mobile address bar collapses during scroll).
@@ -340,38 +332,26 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   };
 
   if (source.type === "google-drive") {
-    // Always prefer our own proxied stream so the custom control bar applies
-    // on every device. The Drive iframe is only a last-resort fallback.
-    const useNative = !driveNativeFailed;
+    // Drive's `usercontent.google.com/download` endpoint does NOT return video
+    // bytes for normal sermon-sized files: it answers with an HTML "Virus scan
+    // warning" page and sets `cross-origin-resource-policy: same-site`, so a
+    // native <video> can never play it. The official `/preview` iframe is the
+    // only embed Google supports, and it streams straight from Google (no
+    // Cloud egress on our side). Use it everywhere.
     return (
       <div
         data-orientation-tick={orientationTick}
         className="relative w-full max-w-full aspect-video bg-black rounded-xl overflow-hidden"
       >
-        {useNative ? (
-          <CustomVideoPlayer
-            key={source.directUrl}
-            videoRef={driveVideoRef}
-            src={source.directUrl}
-            poster={poster}
-            autoPlay={autoPlay}
-            onError={() => setDriveNativeFailed(true)}
-          />
-        ) : (
-          <>
-            <iframe
-              src={source.embedUrl}
-              className="absolute inset-0 w-full h-full border-none"
-              allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-              allowFullScreen
-              title="Google Drive video"
-            />
-            <span className="absolute bottom-1.5 left-1.5 z-10 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
-              구글 기본 플레이어로 재생 중
-            </span>
-          </>
-        )}
-
+        <iframe
+          key={source.embedUrl}
+          src={source.embedUrl}
+          className="absolute inset-0 w-full h-full border-none"
+          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+          allowFullScreen
+          referrerPolicy="no-referrer-when-downgrade"
+          title="Google Drive video"
+        />
 
         <a
           href={source.originalUrl}
