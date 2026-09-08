@@ -110,16 +110,8 @@ function getHlsErrorTarget(data: ErrorData) {
 
 const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const driveVideoRef = useRef<HTMLVideoElement>(null);
   const source = useMemo(() => parseVideoSource(src), [src]);
   const [error, setError] = useState<HlsErrorInfo | null>(null);
-  
-  // Mobile: try the native <video> first (Drive /preview iframe is unreliable
-  // on mobile browsers). Fall back to the iframe when direct playback fails.
-  const [driveNativeFailed, setDriveNativeFailed] = useState(false);
-  useEffect(() => {
-    setDriveNativeFailed(false);
-  }, [src]);
 
   // Recompute layout after rotation only (not on every visualViewport resize,
   // which fires while the mobile address bar collapses during scroll).
