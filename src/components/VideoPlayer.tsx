@@ -1,6 +1,6 @@
 import { useEffect, useRef, useMemo, useState } from "react";
 import Hls, { ErrorData } from "hls.js";
-import { ExternalLink, Copy, AlertTriangle } from "lucide-react";
+import { ExternalLink, Copy, AlertTriangle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import CustomVideoPlayer from "@/components/CustomVideoPlayer";
@@ -414,52 +414,71 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
           )}
           {error && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/85 p-3 sm:p-4 overflow-auto">
-              <div className="max-w-md w-full bg-background/95 rounded-lg p-3 sm:p-4 shadow-2xl border border-destructive/30">
-                <div className="flex items-start gap-2 mb-2">
-                  <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+              <div className="max-w-md w-full bg-background/95 rounded-lg p-4 shadow-2xl border border-border">
+                <div className="flex items-start gap-2 mb-3">
+                  <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm sm:text-base font-bold text-foreground">{error.title}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">{error.reason}</p>
+                    <h3 className="text-base sm:text-lg font-bold text-foreground">
+                      영상을 불러오지 못했습니다
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                      잠시 연결이 끊겼거나 방송 준비 중일 수 있습니다.
+                      <br />
+                      아래 버튼을 눌러 새로고침해 주세요.
+                    </p>
                   </div>
-                </div>
-
-                <div className="text-[10px] bg-muted/50 rounded-md p-2 space-y-0.5 font-mono break-all max-h-32 overflow-auto">
-                  <div>
-                    <span className="text-muted-foreground">type:</span> {error.type}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">details:</span> {error.details}
-                  </div>
-                  {error.target && (
-                    <div>
-                      <span className="text-muted-foreground">target:</span> {error.target}
-                    </div>
-                  )}
-                  {error.httpStatus !== undefined && (
-                    <div>
-                      <span className="text-muted-foreground">http:</span> {error.httpStatus}
-                    </div>
-                  )}
-                  {error.url && (
-                    <div>
-                      <span className="text-muted-foreground">url:</span> {error.url}
-                    </div>
-                  )}
-                  {error.responseSnippet && (
-                    <div className="pt-1 border-t border-border/50">
-                      <div className="text-muted-foreground">response:</div>
-                      <pre className="whitespace-pre-wrap">{error.responseSnippet.slice(0, 200)}</pre>
-                    </div>
-                  )}
                 </div>
 
                 <button
-                  onClick={handleCopyDebug}
-                  className="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors text-xs"
+                  onClick={() => window.location.reload()}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-md bg-primary text-primary-foreground font-bold hover:bg-primary/90 transition-colors text-base"
                 >
-                  <Copy className="w-3 h-3" />
-                  디버그 정보 복사
+                  <RefreshCw className="w-4 h-4" />
+                  새로고침
                 </button>
+
+                <details className="mt-3 group">
+                  <summary className="text-xs text-muted-foreground cursor-pointer select-none">
+                    기술 정보 보기
+                  </summary>
+                  <div className="mt-2 text-[10px] bg-muted/50 rounded-md p-2 space-y-0.5 font-mono break-all max-h-32 overflow-auto">
+                    <div>{error.title}</div>
+                    <div>
+                      <span className="text-muted-foreground">type:</span> {error.type}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">details:</span> {error.details}
+                    </div>
+                    {error.target && (
+                      <div>
+                        <span className="text-muted-foreground">target:</span> {error.target}
+                      </div>
+                    )}
+                    {error.httpStatus !== undefined && (
+                      <div>
+                        <span className="text-muted-foreground">http:</span> {error.httpStatus}
+                      </div>
+                    )}
+                    {error.url && (
+                      <div>
+                        <span className="text-muted-foreground">url:</span> {error.url}
+                      </div>
+                    )}
+                    {error.responseSnippet && (
+                      <div className="pt-1 border-t border-border/50">
+                        <div className="text-muted-foreground">response:</div>
+                        <pre className="whitespace-pre-wrap">{error.responseSnippet.slice(0, 200)}</pre>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleCopyDebug}
+                    className="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-muted text-foreground font-medium hover:bg-muted/80 transition-colors text-xs"
+                  >
+                    <Copy className="w-3 h-3" />
+                    디버그 정보 복사
+                  </button>
+                </details>
               </div>
             </div>
           )}
