@@ -433,7 +433,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
           />
 
           {manifestRetrying && !error && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 gap-2 p-4 text-center">
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/70 gap-2 p-4 text-center">
               <span className="relative flex h-3 w-3">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
@@ -445,7 +445,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
             </div>
           )}
           {error && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/85 p-3 sm:p-4 overflow-auto">
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-4 overflow-auto">
               <div className="max-w-md w-full bg-background/95 rounded-lg p-4 shadow-2xl border border-border">
                 <div className="flex items-start gap-2 mb-3">
                   <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
@@ -516,8 +516,8 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
           )}
         </>
       ) : (
-        <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-          영상을 불러오는 중...
+        <div className="flex items-center justify-center h-full bg-black p-6 text-center text-white text-sm">
+          등록된 영상 주소가 없습니다. 채널 관리자에게 문의해 주세요.
         </div>
       )}
     </div>
