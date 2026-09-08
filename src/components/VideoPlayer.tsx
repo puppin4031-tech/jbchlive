@@ -126,7 +126,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
     if (source.type !== "google-drive") return;
     setDriveLoading(true);
     setDriveLoadSlow(false);
-    const timer = window.setTimeout(() => setDriveLoadSlow(true), 12_000);
+    const timer = window.setTimeout(() => setDriveLoadSlow(true), 6_000);
     return () => window.clearTimeout(timer);
   }, [source]);
 
@@ -388,8 +388,9 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
             <ExternalLink className="h-4 w-4" /> 새 창에서 재생
           </a>
           {driveLoadSlow && (
-            <div className="max-w-[250px] rounded-md bg-background/95 p-3 text-xs text-foreground shadow-xl">
-              브라우저의 외부 콘텐츠 차단으로 재생이 늦어지고 있습니다. 위 버튼으로 열어 주세요.
+            <div className="max-w-[260px] rounded-md bg-background/95 p-3 text-xs leading-relaxed text-foreground shadow-xl">
+              영상이 바로 뜨지 않으면 브라우저가 외부 영상(구글) 표시를 막고 있는 것입니다. 위의 “새 창에서 재생”을
+              누르시면 바로 보실 수 있습니다.
             </div>
           )}
         </div>
