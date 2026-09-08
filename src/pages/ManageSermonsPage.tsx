@@ -504,8 +504,8 @@ const ManageSermonsPage = () => {
               </div>
               <div>
                 <Label>영상 URL</Label>
-                <Input value={form.video_url} onChange={e => setForm(f => ({ ...f, video_url: e.target.value }))} placeholder="https://storage.googleapis.com/... 또는 NAS URL" maxLength={2000} />
-                <p className="text-xs text-muted-foreground mt-1">GCS, NAS, 자체 서버 등 외부 영상 URL을 입력하세요 (HLS, MP4 지원)</p>
+                <Input value={form.video_url} onChange={e => setForm(f => ({ ...f, video_url: e.target.value }))} placeholder="Google Drive 공유 링크 또는 영상 URL" maxLength={2000} />
+                <p className="text-xs text-muted-foreground mt-1">Google Drive는 파일의 일반 액세스를 반드시 “링크가 있는 모든 사용자”로 설정해 주세요. GCS, NAS, HLS, MP4 주소도 지원합니다.</p>
               </div>
               <div>
                 <Label>썸네일</Label>

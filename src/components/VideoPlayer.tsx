@@ -1,6 +1,6 @@
 import { useEffect, useRef, useMemo, useState } from "react";
 import Hls, { ErrorData } from "hls.js";
-import { ExternalLink, Copy, AlertTriangle, RefreshCw } from "lucide-react";
+import { ExternalLink, Copy, AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import CustomVideoPlayer from "@/components/CustomVideoPlayer";
@@ -38,14 +38,21 @@ function parseVideoSource(src?: string): VideoSource {
     src.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/) ||
     src.match(/drive\.google\.com\/uc\?(?:.*&)?id=([a-zA-Z0-9_-]+)/);
   if (gdMatch) {
+    let resourceKey = "";
+    try {
+      resourceKey = new URL(src).searchParams.get("resourcekey") || "";
+    } catch {
+      // The Drive pattern already matched; continue without an optional key.
+    }
+    const resourceKeyQuery = resourceKey ? `?resourcekey=${encodeURIComponent(resourceKey)}` : "";
     return {
       type: "google-drive",
       fileId: gdMatch[1],
-      embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview`,
+      embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview${resourceKeyQuery}`,
       // Served straight from Google — never through our backend, so video
       // bytes are not billed as Cloud egress.
       directUrl: `https://drive.usercontent.google.com/download?id=${gdMatch[1]}&export=download`,
-      originalUrl: `https://drive.google.com/file/d/${gdMatch[1]}/view`,
+      originalUrl: `https://drive.google.com/file/d/${gdMatch[1]}/view${resourceKeyQuery}`,
     };
   }
 
@@ -112,6 +119,16 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
   const videoRef = useRef<HTMLVideoElement>(null);
   const source = useMemo(() => parseVideoSource(src), [src]);
   const [error, setError] = useState<HlsErrorInfo | null>(null);
+  const [driveLoading, setDriveLoading] = useState(true);
+  const [driveLoadSlow, setDriveLoadSlow] = useState(false);
+
+  useEffect(() => {
+    if (source.type !== "google-drive") return;
+    setDriveLoading(true);
+    setDriveLoadSlow(false);
+    const timer = window.setTimeout(() => setDriveLoadSlow(true), 12_000);
+    return () => window.clearTimeout(timer);
+  }, [source]);
 
   // Recompute layout after rotation only (not on every visualViewport resize,
   // which fires while the mobile address bar collapses during scroll).
@@ -351,16 +368,31 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
           allowFullScreen
           referrerPolicy="no-referrer-when-downgrade"
           title="Google Drive video"
+          onLoad={() => setDriveLoading(false)}
         />
-
-        <a
-          href={source.originalUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute top-1.5 right-1.5 z-10 bg-black/60 hover:bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded inline-flex items-center gap-0.5"
-        >
-          <ExternalLink className="w-2.5 h-2.5" /> 새 창에서 열기
-        </a>
+        {driveLoading && (
+          <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-black text-white">
+            <div className="text-center">
+              <Loader2 className="mx-auto h-7 w-7 animate-spin" />
+              <p className="mt-2 text-sm">Google Drive 영상을 불러오는 중입니다</p>
+            </div>
+          </div>
+        )}
+        <div className="pointer-events-none absolute right-2 top-2 z-50 flex flex-col items-end gap-2">
+          <a
+            href={source.originalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pointer-events-auto inline-flex min-h-11 items-center gap-1.5 rounded-md bg-black/80 px-3 py-2 text-sm font-semibold text-white shadow-lg hover:bg-black"
+          >
+            <ExternalLink className="h-4 w-4" /> 새 창에서 재생
+          </a>
+          {driveLoadSlow && (
+            <div className="max-w-[250px] rounded-md bg-background/95 p-3 text-xs text-foreground shadow-xl">
+              브라우저의 외부 콘텐츠 차단으로 재생이 늦어지고 있습니다. 위 버튼으로 열어 주세요.
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -401,7 +433,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
           />
 
           {manifestRetrying && !error && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 gap-2 p-4 text-center">
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/70 gap-2 p-4 text-center">
               <span className="relative flex h-3 w-3">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
@@ -413,7 +445,7 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
             </div>
           )}
           {error && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/85 p-3 sm:p-4 overflow-auto">
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-4 overflow-auto">
               <div className="max-w-md w-full bg-background/95 rounded-lg p-4 shadow-2xl border border-border">
                 <div className="flex items-start gap-2 mb-3">
                   <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
@@ -484,8 +516,8 @@ const VideoPlayer = ({ src, poster, autoPlay = false, onManifestMissing }: Video
           )}
         </>
       ) : (
-        <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-          영상을 불러오는 중...
+        <div className="flex items-center justify-center h-full bg-black p-6 text-center text-white text-sm">
+          등록된 영상 주소가 없습니다. 채널 관리자에게 문의해 주세요.
         </div>
       )}
     </div>

@@ -55,6 +55,10 @@ const SermonCard = ({ sermon, compact = false }: SermonCardProps) => {
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
             decoding="async"
+            onError={(event) => {
+              const image = event.currentTarget;
+              if (image.src !== defaultThumbnail) image.src = defaultThumbnail;
+            }}
           />
 
           {sermon.isLive ? (
