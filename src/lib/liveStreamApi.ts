@@ -57,6 +57,9 @@ export type ChannelDiagnostic = {
       name: string;
       location: string;
       exists: boolean | { error?: string };
+      publicRead?: boolean;
+      corsConfigured?: boolean;
+      corsError?: string;
     };
     hlsUrl?: string | null;
     manifestStatus?: {

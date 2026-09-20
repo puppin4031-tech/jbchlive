@@ -53,6 +53,9 @@ const interpretIssues = (d: Diag): { level: 'ok' | 'warn' | 'error'; message: st
   if (typeof outputBucket?.exists === 'object' && outputBucket.exists?.error) {
     issues.push({ level: 'error', message: `HLS 출력 버킷 조회 실패: ${outputBucket.exists.error}` });
   }
+  if (outputBucket?.corsConfigured === false) {
+    issues.push({ level: 'error', message: `HLS 브라우저 접근(CORS) 설정 오류: ${outputBucket.corsError || '필수 허용 설정이 없습니다.'}` });
+  }
   if (manifestStatus && !manifestStatus.exists) {
     if (manifestStatus.reason === 'AccessDenied' || manifestStatus.reason === 'BucketNotPublic') {
       issues.push({ level: 'error', message: 'HLS 매니페스트가 시청자에게 공개되어 있지 않습니다. 영상은 구글 저장소에서 직접 전달되므로, 출력 버킷의 공개 읽기 권한(allUsers)이 필요합니다. 조직 정책(Domain Restricted Sharing)이 이를 막고 있다면 해당 정책을 해제해야 합니다.' });
@@ -171,6 +174,16 @@ const ChannelDiagnosticDialog = ({ channelId, channelName, onClose }: Props) => 
                   <dt className="text-muted-foreground">HLS 버킷</dt>
                   <dd className="font-mono break-all">
                     {data.gcp.outputBucket?.name || '(없음)'} · exists: {JSON.stringify(data.gcp.outputBucket?.exists ?? null)}
+                  </dd>
+                  <dt className="text-muted-foreground">공개 접근</dt>
+                  <dd>{data.gcp.outputBucket?.publicRead === true ? '정상' : data.gcp.outputBucket?.publicRead === false ? '차단됨' : '미확인'}</dd>
+                  <dt className="text-muted-foreground">브라우저 접근(CORS)</dt>
+                  <dd>
+                    {data.gcp.outputBucket?.corsConfigured === true
+                      ? '정상'
+                      : data.gcp.outputBucket?.corsConfigured === false
+                      ? `오류${data.gcp.outputBucket.corsError ? `: ${data.gcp.outputBucket.corsError}` : ''}`
+                      : '미확인'}
                   </dd>
                   <dt className="text-muted-foreground">매니페스트</dt>
                   <dd className="font-mono break-all">
