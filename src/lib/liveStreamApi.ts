@@ -58,6 +58,7 @@ export type ChannelDiagnostic = {
       location: string;
       exists: boolean | { error?: string };
       publicRead?: boolean;
+      publicReadError?: string;
       corsConfigured?: boolean;
       corsError?: string;
     };

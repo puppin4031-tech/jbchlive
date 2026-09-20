@@ -53,6 +53,9 @@ const interpretIssues = (d: Diag): { level: 'ok' | 'warn' | 'error'; message: st
   if (typeof outputBucket?.exists === 'object' && outputBucket.exists?.error) {
     issues.push({ level: 'error', message: `HLS 출력 버킷 조회 실패: ${outputBucket.exists.error}` });
   }
+  if (outputBucket?.publicRead === false) {
+    issues.push({ level: 'error', message: `HLS 공개 접근 오류: ${outputBucket.publicReadError || '전체 시청자 읽기 권한이 없습니다.'}` });
+  }
   if (outputBucket?.corsConfigured === false) {
     issues.push({ level: 'error', message: `HLS 브라우저 접근(CORS) 설정 오류: ${outputBucket.corsError || '필수 허용 설정이 없습니다.'}` });
   }
@@ -176,7 +179,13 @@ const ChannelDiagnosticDialog = ({ channelId, channelName, onClose }: Props) => 
                     {data.gcp.outputBucket?.name || '(없음)'} · exists: {JSON.stringify(data.gcp.outputBucket?.exists ?? null)}
                   </dd>
                   <dt className="text-muted-foreground">공개 접근</dt>
-                  <dd>{data.gcp.outputBucket?.publicRead === true ? '정상' : data.gcp.outputBucket?.publicRead === false ? '차단됨' : '미확인'}</dd>
+                  <dd>
+                    {data.gcp.outputBucket?.publicRead === true
+                      ? '정상'
+                      : data.gcp.outputBucket?.publicRead === false
+                      ? `차단됨${data.gcp.outputBucket.publicReadError ? `: ${data.gcp.outputBucket.publicReadError}` : ''}`
+                      : '미확인'}
+                  </dd>
                   <dt className="text-muted-foreground">브라우저 접근(CORS)</dt>
                   <dd>
                     {data.gcp.outputBucket?.corsConfigured === true
