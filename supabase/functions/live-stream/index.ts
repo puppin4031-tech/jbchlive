@@ -250,6 +250,22 @@ async function ensurePublicObjectRead(
   }
 }
 
+async function inspectPublicObjectRead(
+  bucketName: string,
+): Promise<{ publicRead: boolean; error?: string }> {
+  try {
+    const policy = await gcsFetch(
+      `https://storage.googleapis.com/storage/v1/b/${bucketName}/iam?optionsRequestedPolicyVersion=3`,
+    ) as { bindings?: Array<{ role?: string; members?: string[] }> };
+    const publicRead = (policy.bindings ?? []).some((binding) =>
+      binding.role === "roles/storage.objectViewer" && binding.members?.includes("allUsers")
+    );
+    return { publicRead };
+  } catch (e) {
+    return { publicRead: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 type BucketReadiness = {
   bucket: string;
   created: boolean;
@@ -318,6 +334,19 @@ async function ensureHlsCors(
       { method: "PATCH", body: JSON.stringify({ cors }) },
     ) as { cors?: GcsCorsRule[] };
     return { configured: hasRequiredHlsCors(updated.cors) };
+  } catch (e) {
+    return { configured: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+async function inspectHlsCors(
+  bucketName: string,
+): Promise<{ configured: boolean; error?: string }> {
+  try {
+    const bucket = await gcsFetch(
+      `https://storage.googleapis.com/storage/v1/b/${bucketName}?fields=cors`,
+    ) as { cors?: GcsCorsRule[] };
+    return { configured: hasRequiredHlsCors(bucket.cors) };
   } catch (e) {
     return { configured: false, error: e instanceof Error ? e.message : String(e) };
   }
@@ -2411,9 +2440,10 @@ serve(async (req) => {
         const hlsUrl = (gcpChannel as { output?: { uri?: string }; manifests?: Array<{ fileName?: string }> })?.output?.uri
           ? gsToHttps(`${(gcpChannel as { output: { uri: string } }).output.uri.endsWith("/") ? (gcpChannel as { output: { uri: string } }).output.uri : `${(gcpChannel as { output: { uri: string } }).output.uri}/`}${(gcpChannel as { manifests?: Array<{ fileName?: string }> }).manifests?.[0]?.fileName ?? "manifest.m3u8"}`)
           : null;
-        const [manifestStatus, corsStatus] = await Promise.all([
+        const [manifestStatus, publicReadStatus, corsStatus] = await Promise.all([
           hlsUrl ? inspectManifest(hlsUrl) : Promise.resolve(null),
-          ensureHlsCors(OUTPUT_BUCKET),
+          inspectPublicObjectRead(OUTPUT_BUCKET),
+          inspectHlsCors(OUTPUT_BUCKET),
         ]);
         result = {
           database: dbChannel,
@@ -2425,7 +2455,8 @@ serve(async (req) => {
               name: OUTPUT_BUCKET,
               location: OUTPUT_BUCKET_LOCATION,
               exists: outputBucketExists,
-              publicRead: manifestStatus?.status !== 403,
+              publicRead: publicReadStatus.publicRead,
+              publicReadError: publicReadStatus.error,
               corsConfigured: corsStatus.configured,
               corsError: corsStatus.error,
             },
