@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFavorites } from '@/hooks/useFavorites';
+import { useSermonViewCount } from '@/hooks/useSermonViewCount';
 
 const VodPage = () => {
   const { sermonId } = useParams();
@@ -34,6 +35,8 @@ const VodPage = () => {
     },
     enabled: !!sermonId,
   });
+
+  const viewCount = useSermonViewCount(sermon?.id, sermon?.view_count);
 
   const { data: channel } = useQuery({
     queryKey: ['channel', sermon?.channel_id],
@@ -113,7 +116,7 @@ const VodPage = () => {
       />
       <Header />
       <main className="container px-4 py-4 max-w-4xl mx-auto space-y-4">
-        <VideoPlayer src={sermon.video_url || ''} poster={sermon.thumbnail_url || undefined} />
+        <VideoPlayer src={sermon.video_url || ''} />
 
         <div className="flex items-start justify-between gap-3">
           <div className="flex gap-3">
@@ -131,7 +134,7 @@ const VodPage = () => {
                 {sermon.preacher && ` · ${sermon.preacher}`}
               </p>
               <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1"><Eye className="w-3 h-3" /> {sermon.view_count.toLocaleString()}회</span>
+                <span className="flex items-center gap-1"><Eye className="w-3 h-3" /> {(viewCount ?? sermon.view_count).toLocaleString()}회</span>
                 <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {sermon.sermon_date?.slice(0, 10)}</span>
                 <span className="bg-accent text-accent-foreground px-2 py-0.5 rounded-full">{sermon.category}</span>
               </div>

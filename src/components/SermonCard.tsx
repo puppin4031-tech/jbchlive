@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import ReportDialog from '@/components/ReportDialog';
+import GeneratedThumbnail from '@/components/GeneratedThumbnail';
 
 export interface SermonCardData {
   id: string;
@@ -49,17 +50,21 @@ const SermonCard = ({ sermon, compact = false }: SermonCardProps) => {
     <div className="group block relative">
       <Link to={link} className="block">
         <div className="relative aspect-video rounded-xl overflow-hidden bg-muted">
-          <img
-            src={thumbnail || defaultThumbnail}
-            alt={sermon.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            loading="lazy"
-            decoding="async"
-            onError={(event) => {
-              const image = event.currentTarget;
-              if (image.src !== defaultThumbnail) image.src = defaultThumbnail;
-            }}
-          />
+          {sermon.isLive ? (
+            <img
+              src={thumbnail || defaultThumbnail}
+              alt={sermon.title}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              decoding="async"
+              onError={(event) => {
+                const image = event.currentTarget;
+                if (image.src !== defaultThumbnail) image.src = defaultThumbnail;
+              }}
+            />
+          ) : (
+            <GeneratedThumbnail title={sermon.title} preacher={sermon.preacher} category={sermon.category} />
+          )}
 
           {sermon.isLive ? (
             <span className="absolute top-2 left-2 flex items-center gap-1 bg-live text-live-foreground text-base md:text-xs font-bold px-2.5 py-1 rounded-md">

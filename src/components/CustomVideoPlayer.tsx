@@ -212,7 +212,7 @@ const CustomVideoPlayer = ({
 
       {/* Control bar anchored to the container, not the video render box. */}
       <div
-        className={`absolute bottom-0 left-0 right-0 z-50 flex items-center gap-1 px-2 pb-1 pt-6 bg-gradient-to-t from-black/85 via-black/40 to-transparent transition-opacity duration-200 ${
+        className={`absolute bottom-0 left-0 right-0 z-50 flex flex-wrap items-center gap-x-1 px-2 pb-1 pt-6 bg-gradient-to-t from-black/85 via-black/40 to-transparent transition-opacity duration-200 ${
           visible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
       >
@@ -228,8 +228,8 @@ const CustomVideoPlayer = ({
           </span>
         ) : (
           <>
-            <span className="text-[11px] tabular-nums text-white/80 flex-shrink-0">{formatTime(current)}</span>
-            <div className="flex-1 flex items-center min-h-[44px] px-1">
+            <div className="order-first basis-full flex items-center min-h-[28px] px-1 sm:order-none sm:basis-auto sm:flex-1 sm:min-h-[44px]"
+              onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
               <input
                 type="range"
                 min={0}
@@ -238,7 +238,7 @@ const CustomVideoPlayer = ({
                 value={current}
                 onChange={onSeek}
                 aria-label="재생 위치"
-                className="w-full h-1 appearance-none rounded-full bg-white/30 cursor-pointer
+                className="w-full h-1.5 touch-none appearance-none rounded-full bg-white/30 cursor-pointer
                   [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5
                   [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full
                   [&::-webkit-slider-thumb]:bg-white"
@@ -247,7 +247,7 @@ const CustomVideoPlayer = ({
                 }}
               />
             </div>
-            <span className="text-[11px] tabular-nums text-white/80 flex-shrink-0">{formatTime(duration)}</span>
+            <span className="flex-1 sm:flex-none text-[11px] tabular-nums text-white/80 whitespace-nowrap">{formatTime(current)} / {formatTime(duration)}</span>
           </>
         )}
 

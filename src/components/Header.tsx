@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import NotificationBell from '@/components/NotificationBell';
+import ChromeNotice from '@/components/ChromeNotice';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +32,7 @@ const Header = () => {
 
   return (
     <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
+      <ChromeNotice />
        <div className="container flex items-center justify-between h-[4.5rem] md:h-14 px-4">
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <img src={logoImage} alt="Live Word Mission" className="w-12 h-12 md:w-8 md:h-8 object-contain" />

@@ -925,6 +925,7 @@ export type Database = {
         Args: { _post_id: string }
         Returns: undefined
       }
+      increment_sermon_view: { Args: { _sermon_id: string }; Returns: number }
       is_sermon_channel_owner: {
         Args: { _sermon_id: string; _user_id: string }
         Returns: boolean
