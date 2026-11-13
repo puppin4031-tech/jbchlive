@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, RotateCcw, RotateCw, Settings } from "lucide-react";
+
+const SKIP_SECONDS = 30;
+const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 2];
 
 interface CustomVideoPlayerProps {
   /** Ref forwarded to the underlying <video> so the parent can attach hls.js. */
@@ -49,6 +52,8 @@ const CustomVideoPlayer = ({
   const [duration, setDuration] = useState(0);
   const [visible, setVisible] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
+  const [rate, setRate] = useState(1);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const showControls = useCallback(() => {
     setVisible(true);
@@ -150,6 +155,22 @@ const CustomVideoPlayer = ({
     video.muted = !video.muted;
   };
 
+  const skip = (delta: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    showControls();
+    const max = Number.isFinite(video.duration) ? video.duration : Infinity;
+    video.currentTime = Math.min(Math.max(0, video.currentTime + delta), max);
+  };
+
+  const changeRate = (next: number) => {
+    const video = videoRef.current;
+    if (video) video.playbackRate = next;
+    setRate(next);
+    setMenuOpen(false);
+    showControls();
+  };
+
   const toggleFullscreen = () => {
     showControls();
     setFullscreen((v) => !v);
@@ -167,7 +188,7 @@ const CustomVideoPlayer = ({
   const progress = duration > 0 ? (current / duration) * 100 : 0;
 
   const buttonClass =
-    "flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-white/90 hover:text-white active:text-white";
+    "flex-shrink-0 min-w-[40px] min-h-[44px] flex items-center justify-center text-white/90 hover:text-white active:text-white";
 
   return (
     <div
@@ -212,14 +233,27 @@ const CustomVideoPlayer = ({
 
       {/* Control bar anchored to the container, not the video render box. */}
       <div
-        className={`absolute bottom-0 left-0 right-0 z-50 flex flex-wrap items-center gap-x-1 px-2 pb-1 pt-6 bg-gradient-to-t from-black/85 via-black/40 to-transparent transition-opacity duration-200 ${
+        className={`absolute bottom-0 left-0 right-0 z-50 flex flex-nowrap items-center gap-x-0.5 px-1 pb-1 pt-6 bg-gradient-to-t from-black/85 via-black/40 to-transparent transition-opacity duration-200 ${
           visible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
       >
 
+        {!isLive && (
+          <button type="button" onClick={() => skip(-SKIP_SECONDS)} aria-label="30초 뒤로" className={`${buttonClass} relative`}>
+            <RotateCcw className="w-6 h-6" />
+            <span className="absolute text-[8px] font-bold">30</span>
+          </button>
+        )}
         <button type="button" onClick={togglePlay} aria-label={playing ? "일시정지" : "재생"} className={buttonClass}>
           {playing ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
         </button>
+
+        {!isLive && (
+          <button type="button" onClick={() => skip(SKIP_SECONDS)} aria-label="30초 앞으로" className={`${buttonClass} relative`}>
+            <RotateCw className="w-6 h-6" />
+            <span className="absolute text-[8px] font-bold">30</span>
+          </button>
+        )}
 
         {isLive ? (
           <span className="flex flex-1 items-center gap-1.5 text-xs font-semibold text-white">
@@ -228,7 +262,7 @@ const CustomVideoPlayer = ({
           </span>
         ) : (
           <>
-            <div className="order-first basis-full flex items-center min-h-[28px] px-1 sm:order-none sm:basis-auto sm:flex-1 sm:min-h-[44px]"
+            <div className="flex-1 min-w-0 flex items-center min-h-[44px] px-1"
               onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
               <input
                 type="range"
@@ -247,13 +281,31 @@ const CustomVideoPlayer = ({
                 }}
               />
             </div>
-            <span className="flex-1 sm:flex-none text-[11px] tabular-nums text-white/80 whitespace-nowrap">{formatTime(current)} / {formatTime(duration)}</span>
+            <span className="hidden sm:inline text-[11px] tabular-nums text-white/80 whitespace-nowrap">{formatTime(current)} / {formatTime(duration)}</span>
           </>
         )}
 
         <button type="button" onClick={toggleMute} aria-label={muted ? "음소거 해제" : "음소거"} className={buttonClass}>
           {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
         </button>
+
+        {!isLive && (
+          <div className="relative flex-shrink-0">
+            <button type="button" onClick={() => { setMenuOpen((v) => !v); showControls(); }} aria-label="재생 속도 설정" className={buttonClass}>
+              <Settings className="w-5 h-5" />
+            </button>
+            {menuOpen && (
+              <div className="absolute bottom-full right-0 mb-1 rounded-md bg-black/90 py-1 min-w-[72px]">
+                {PLAYBACK_RATES.map((r) => (
+                  <button key={r} type="button" onClick={() => changeRate(r)}
+                    className={`block w-full px-3 py-2 text-left text-sm ${r === rate ? "text-primary font-bold" : "text-white"}`}>
+                    {r}x
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <button
           type="button"
